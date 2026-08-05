@@ -497,6 +497,322 @@ def validate_articles() -> dict[str, Any]:
         ),
     }
 
+# STEP 8. history.parquet 핵심 데이터 검증
+def validate_history(
+        split_name: str,
+        file_path: Path,
+)-> dict[str, Any]:
+    """
+    검사 대상 컬럼
+    ----------------
+    1. user_id
+    2. article_id_fixed
+    3. impression_time_fixed
+    
+    검사 항목 (-> X는 이후 해당하는 행은 제거한다는 의미)
+    ----------------
+    1. user_id가 null인 행 수 (-> X)
+    2. user_id가 중복된 행 수  (-> X)
+    3. history 리스트 자체가 null인 행 수 (-> X)
+    4. 기사 ID 목록과 시간 목록의 길이가 다른 행 수 (-> X)
+    5. 기사 ID 목록 내부에 null이 있는 행 수 (-> X)
+    6. 시간 목록 내부에 null이 있는 행 수 (-> X)
+    7. history가 시간 오름차순이 아닌 행 수 
+
+    처리 원칙
+    ----------------
+    article_id_fixed와 impression_time_fixed를 같은 위치끼리 묶은 뒤
+    두 리스트를 함께 시간순으로 정렬
+
+    상태 기준 
+    ----------------
+    FAIL : 파일이 없거나 필수 컬럼 누락된 경우
+    WARNING : 제외 또는 재정렬이 필요한 history 행 있는 경우
+    PASS : 핵심 문제가 발견되지 않은 경우 
+    """
+
+    # STEP 8-1. 현재 검사할 데이터셋 이름 만들기
+    # split_name이 train이면 train_history, validation이면 validation_history가 됨
+    # 이 이름은 REQUIRED_COLUMNS의 key와 동일
+    dataset_name = f"{split_name}_history"
+
+    # STEP 8-2. 기존 기본 구조 검사 실행 
+    basic_result = validate_parquet_file(
+        dataset_name=dataset_name,
+        file_path=file_path,
+    )
+
+    # STEP 8-3. 기본 구조 검사 실패 시 함수 종료 
+    if basic_result["status"] != "PASS":
+        return {
+            # 현재 검사한 split
+            "split": split_name,
+
+            # 현재 검사한 파일 경로
+            "file_path": str(file_path),
+
+            # 상세 검사를 수행할 수 없으므로 FAIL
+            "status": "FAIL",
+
+            # 기본 검사에서 발생한 문제를 함께 반환한다.
+            "basic_validation": basic_result,
+        }
+
+    # STEP 8-4. history 검증에 필요한 컬럼만 읽기 
+    history = pl.read_parquet(
+        file_path,
+        columns=[
+            "user_id",
+            "article_id_fixed",
+            "impression_time_fixed",
+        ],
+    )
+
+    # STEP 8-5. user_id가 null인 행 수 계산
+    # user_id가 null이면 해당 history를 어떤 사용자에게 연결? 모름 
+    user_id_null_count = (
+        history
+        .select(
+            pl.col("user_id")
+            .is_null()
+            .sum()
+            .alias("count")
+        )
+        .item()
+    )
+
+    # STEP 8-6. 중복 user_id 찾기 
+    # history.parquet은 기본적으로 사용자당 한 행이어야함.  
+    duplicated_user_rows = (
+        history
+        .filter(
+            pl.col("user_id").is_not_null()
+            &
+            pl.col("user_id").is_duplicated()
+        )
+    )
+    # 중복 user_id에 포함된 전체 행 수 계산 
+    user_id_duplicate_row_count = duplicated_user_rows.height # height : 행 몇개 ? 
+
+    # 중복 user_id를 파이썬 set으로 만듦
+    # 이후 각 history 행을 검사하며 현재 사용자가 중복 사용자에 해당하는지 chk
+    duplicated_user_ids = set(
+        duplicated_user_rows
+        .get_column("user_id")
+        .to_list()
+    )
+
+    # STEP 8-7. history 행별 검사 결과 카운터 생성 
+
+    # article_id_fixed 또는 impression_time_fixed
+    # 리스트 자체가 null인 행 수
+    null_history_list_row_count = 0
+
+    # article_id_fixed와 impression_time_fixed의
+    # 리스트 길이가 다른 행 수
+    history_length_mismatch_row_count = 0
+
+    # article_id_fixed 리스트 내부에
+    # null article_id가 들어 있는 행 수
+    null_article_element_row_count = 0
+
+    # impression_time_fixed 리스트 내부에
+    # null 시간이 들어 있는 행 수
+    null_time_element_row_count = 0
+
+    # impression_time_fixed가 시간 오름차순이 아닌 행 수
+    unsorted_history_row_count = 0
+
+    # 이후 build_sequences.py에서
+    # 제외해야 할 history 행 수
+    # 한 행에 문제가 여러 개 있어도 한 번만 계산한다.
+    exclusion_candidate_row_count = 0
+
+    # 데이터는 사용할 수 있지만
+    # article_id와 시간을 함께 정렬해야 하는 행 수
+    reorder_candidate_row_count = 0
+
+    # STEP 8-8. 사용자 history를 한 행씩 검사
+    # iter_rows(named=True)를 사용하면 각 행을 다음 형태의 python 딕셔너리로 가져올 수 ㅇ
+    #
+    # {
+    #     "user_id": 123,
+    #     "article_id_fixed": [...],
+    #     "impression_time_fixed": [...]
+    # }   
+
+    for row in history.iter_rows(named=True): # 딕셔너리로 가져옴 
+        # 현재 행의 사용자 ID 가져옴
+        user_id = row["user_id"]
+
+        # 현재 사용자의 과거 기사 ID 리스트 가져옴
+        article_ids = row["article_id_fixed"]
+
+        # 각 과거 기사에 대응하는 시간 리스트 가져옴
+        impression_times = row["impression_time_fixed"]
+
+        # 현재 행을 이후 단계에서 제외해야 하는지 기록
+        should_exclude_row = False # 문제 없다고 초기화 
+
+        # STEP 8-9. 문제 확인
+        # 1. user_id가 null이면 사용자와 history를 연결할 수 없음
+        if user_id is None:
+            should_exclude_row = True
+
+        # 2. 같은 user_id가 여러 history에 존재하는 경우
+        if user_id in duplicated_user_ids:
+            should_exclude_row = True 
+
+        # 3. 기사 리스트나 시간 리스트 자체가 null인 경우
+        if article_ids is None or impression_times is None:
+            null_history_list_row_count += 1
+            should_exclude_row = True 
+
+        # 리스트가 null이면 아래의 길이와 내부 값 검사 불가하기에 skip
+        else:
+            # 3-1. 두 리스트의 길이 일치 여부 확인
+            if len(article_ids) != len(impression_times):
+                history_length_mismatch_row_count += 1
+                should_exclude_row = True
+
+            # 3-2. 기사 ID 리스트 내부 null 검사
+            # 두 리스트의 길이가 같을 때만 내부 값과 시간 순서 추가 검사
+            else:
+                has_null_article = any(
+                    article_id is None 
+                    for article_id in article_ids
+                )
+
+                # null article_id가 발견된 행 수 기록
+                if has_null_article:
+                    null_article_element_row_count += 1
+                    should_exclude_row = True
+
+                # 3-3. 시간 리스트 내부 null 검사 
+                # impression_time_fixed 안에 null 시간이 하나라도 존재 ? 
+                has_null_time = any(
+                    impression_time is None
+                    for impression_time in impression_times
+                )
+
+                # null 시간이 발견된 행 수 기록
+                if has_null_time:
+                    null_time_element_row_count += 1
+                    should_exclude_row = True
+
+                # STEP 8-10. history 시간 오름차순 검사
+                # 기사 ID와 시간이 모두 정상인 경우
+                if not has_null_article and not has_null_time:
+                    # 현재 시간과 바로 다음 시간을 차례로 비교
+                    # 같은 시각의 history는 허용
+                    # 예:
+                    # [10:00, 11:00, 11:00, 13:00] -> 정상
+                    # [10:00, 13:00, 12:00]        -> 비정상
+
+                    is_time_sorted = all(
+                        impression_times[index]
+                        <= impression_times[index + 1]
+                        for index in range(
+                            len(impression_times) - 1
+                        )
+                    )
+
+                    # 특별 케이스 : 
+                    # 시간이 오름차순이 아니라면 해당 행은 삭제하지 않고 재정렬 후보로 기록
+                    if not is_time_sorted:
+                        unsorted_history_row_count += 1
+                        reorder_candidate_row_count += 1
+
+
+        # 한 행에 여러 문제가 동시에 존재하더라도 
+        # exclusion_candidate_row_count에는 한 번만 추가
+        if should_exclude_row:
+            exclusion_candidate_row_count += 1
+
+        # STEP 8-11. 경고 존재 여부 확인
+        # 제외 대상이나 재정렬 대상이 하나라도 있는 경우
+        # history 데이터 후처리 필요 
+        has_warning = (exclusion_candidate_row_count > 0 or reorder_candidate_row_count > 0)
+
+
+        # STEP 8-12. 최종 검증 상태 결정 
+        # 제외 또는 재정렬 후보가 있으면 WARNING이다.
+        if has_warning:
+            status = "WARNING"
+
+        # 모든 핵심 문제가 0이면 PASS다.
+        else:
+            status = "PASS"
+
+        # STEP 8-13. history 검증 결과 반환 
+        return {
+        # train 또는 validation 구분
+        "split": split_name,
+
+        # 검사한 history.parquet 경로
+        "file_path": str(file_path),
+
+        # history 데이터의 최종 검증 상태
+        "status": status,
+
+        # 전체 history 행 수
+        "row_count": history.height,
+
+        # user_id가 null인 행 수
+        "user_id_null_count": int(
+            user_id_null_count
+        ),
+
+        # 중복 user_id 그룹에 포함된 전체 행 수
+        "user_id_duplicate_row_count": int(
+            user_id_duplicate_row_count
+        ),
+
+        # 기사 또는 시간 리스트 자체가 null인 행 수
+        "null_history_list_row_count": int(
+            null_history_list_row_count
+        ),
+
+        # 기사 리스트와 시간 리스트 길이가 다른 행 수
+        "history_length_mismatch_row_count": int(
+            history_length_mismatch_row_count
+        ),
+
+        # 기사 ID 리스트 내부에 null이 있는 행 수
+        "null_article_element_row_count": int(
+            null_article_element_row_count
+        ),
+
+        # 시간 리스트 내부에 null이 있는 행 수
+        "null_time_element_row_count": int(
+            null_time_element_row_count
+        ),
+
+        # 시간 오름차순이 아닌 history 행 수
+        "unsorted_history_row_count": int(
+            unsorted_history_row_count
+        ),
+
+        # 이후 build_sequences.py에서 제외할 후보 행 수
+        #
+        # 여러 문제가 겹쳐도 행 단위로 한 번만 집계한다.
+        "exclusion_candidate_row_count": int(
+            exclusion_candidate_row_count
+        ),
+
+        # 제외하지 않고 기사와 시간을 함께 정렬할 후보 행 수
+        "reorder_candidate_row_count": int(
+            reorder_candidate_row_count
+        ),
+    }        
+
+
+        
+                
+
+
+
+
 
 
 
