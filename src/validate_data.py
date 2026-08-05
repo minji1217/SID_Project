@@ -286,12 +286,216 @@ def print_validation_result(
         print("필수 컬럼: 모두 존재")
 
 
+# STEP7. articles.parquet 핵심 데이터 검사하는 함수
+def validate_articles() -> dict[str, Any]:
+    '''
+    검사 항목
+    -----------
+    1. article_id가 null인 기사 수
+    2. 같은 article_id 가진 중복 행 수
+    3. title과 subtitle이 모두 비어 있는 기사 수
+    4. category가 null인 기사 수
+    5. cateogry_str이 null이거나 빈 문자열인 수 
+    6. published_time이 null인 기사 수
+    7. ner_clusters와 entity_groups의 리스트 길이가 다른 기사 수 
+   
+    처리 원칙
+    -----------
+    문제가 있는 데이터 개수만 확인하고, 실제 제외 처리는 이후 전처리 모듈에서 수행
+    
+    상태
+    -----------
+    FAIL : article_id가 null이거나 중복
+    WARNING : 제외 가능한 기사 데이터 발견된 경우
+    PASS : 핵심 문제 발견되지 않은 경우 
+    '''
 
+    # STEP 7-1. 기존 기본 검증 함수 먼저 실행
+    basic_result = validate_parquet_file(
+        dataset_name="articles",
+        file_path=ARTICLES_PATH,
+    )
 
+    # STEP 7-2. 검증 실패 시 상세 검증도 중단 
 
+    if basic_result["status"] != "PASS":
+        return {
+            # 상세 기사 검증도 실패로 기록한다.
+            "status": "FAIL",
 
+            # 실패 원인을 확인할 수 있도록
+            # 기존 기본 검증 결과를 그대로 포함한다.
+            "basic_validation": basic_result,
+        }
 
+    # STEP 7-3. 기사 검증에 필요한 컬럼만 읽음 
+    articles = pl.read_parquet(
+        ARTICLES_PATH,
+        columns=[
+            "article_id",
+            "title",
+            "subtitle",
+            "category",
+            "category_str",
+            "published_time",
+            "ner_clusters",
+            "entity_groups",
+        ],
+    )
 
+    # STEP 7-4. article_id null 검사 
+    # article_id는 기사 임베딩, event_id, semantic id, 사용자 history, 클릭 target에 사용됨
+    article_id_null_count = (
+        articles.select(pl.col("article_id").is_null().sum().alias("count"))
+        .item()
+    )
+
+    # STEP 7-5. article_id 중복 검사 
+    # 하나의 article_id는 하나의 기사만 가리켜야함 
+    # is_duplicated()는 중복에 포함된 모든 행 True로 반환
+    # 예: [10,10,20] -> 2
+    article_id_duplicate_row_count = (
+        articles.
+        select(
+            (
+                pl.col("article_id").is_not_null() & pl.col("article_id").is_duplicated()
+            ).sum().alias("count")
+        ).item()
+
+    )
+
+    # STEP 7-6. title과 subtitle이 모두 빈 기사 검사 
+    # 기사 임베딩은 title+subtitle로 구성 (두 컬럼이 모두 비어 있는 경우는 문제됨)
+    # fill_null("") : null을 빈 문자열로 바꿈
+    # str.strip_chars() : 문자열 앞뒤의 공백 제거
+    # eq(""): 공백 제거 후 빈 문자열인지 확인
+    empty_title_and_subtitle_count = (
+        articles.select(
+            (
+                pl.col("title").fill_null("").str.strip_chars().eq("")
+                &
+                pl.col("subtitle").fill_null("").str.strip_chars().eq("")
+            ).sum().alias("count")
+        ).item()
+    )
+
+    # STEP 7-7. 원본 category ID null 검사 
+    category_null_count = (
+        articles.select(pl.col("category").is_null().sum().alias("count")).item()
+    )
+
+    # STEP 7-8. category_str 빈값 검사 
+    # 이후 model_category_id 만드는 기준 (tag prediction loss의 정답)
+    # 예 : 빈 카테고리 <UNK> ID 0, "sport" -> model_category_id 1
+    # null, 빈 문자열 "", 공백만 있는 문자열 " " -> 빈 카테고리로 판단
+    # category_str이 비어있으면 이후 카테고리 매핑 단계에서 <UNK>=0으로 처리 (걍 model_category_id 0임)
+    empty_category_str_count = (
+        articles.select(
+            pl.col("category_str").fill_null("").str.strip_chars().eq("").sum().alias("count")
+        ).item()
+    )
+
+    # STEP 7-9. published_time null 검사 
+    # 발행 시간이 없는 클러스터링 처리 불가
+    published_time_null_count = (
+        articles.select(
+            pl.col("published_time").is_null().sum().alias("count")
+        ).item()
+    )
+
+    # STEP 7-10. NER과 entity type 리스트 길이 검사 
+    # 동일한 리스트 위치끼리 서로 대응
+    # 예:
+    # ner_clusters = ["OpenAI", "Seoul"]
+    # entity_groups = ["ORG", "LOC"]
+
+    # -> 각 행의 리스트 길이 계산해서 리스트 자체가 null이면 0으로 처리하고, 길이가 다른 기사 확인
+    # 이후 NER 기반 event 구성 단계에서 제외 ㅇ
+    ner_entity_length_mismatch_count = (
+        articles.select(
+            (
+                pl.col("ner_clusters").list.len().fill_null(0)
+                !=
+                pl.col("entity_groups").list.len().fill_null(0)
+            ).sum().alias("count")
+        ).item()
+    )
+
+    # STEP 7-11. 구조적인 실패 조건 확인
+    # article_id가 null이거나 중복되면 안됨 
+    has_fatal_issue = (
+        article_id_null_count > 0
+        or article_id_duplicate_row_count > 0 
+    )
+
+    # STEP 7-12. 경고 조건 확인 
+    # 1. title과 subtitle 모두 빈 기사: 임베딩 생성 대상에서 제외
+    # 2. category 또는 category_str 누락: 원본 확인 또는 <UNK>=0 처리
+    # 3. published_time 누락: 시간 기반 event clustering에서 제외
+    # 4. NER 길이 불일치: NER 기반 event 구성에서 제외
+    has_warning = (
+        empty_title_and_subtitle_count > 0
+        or category_null_count > 0
+        or empty_category_str_count > 0
+        or published_time_null_count > 0
+        or ner_entity_length_mismatch_count > 0
+    )
+
+    # STEP 7-13. 최종 검증 상태 결정
+    if has_fatal_issue: status = "FAIL"
+    elif has_warning: status = "WARNING"
+    else: status = "PASS"
+
+    # STEP 7-14. 기사 검증 결과 반환
+    # 각 검사 결과를 딕셔너리로 반환
+    # 현재 함수에서 JSON파일 직접 저장하지 않고 
+    # 이후 run_validation에서 다른 검증 결과와 합쳐 보고서로 저장
+    return {
+        # articles.parquet 파일 경로
+        "file_path": str(ARTICLES_PATH),
+
+        # 기사 데이터의 최종 검증 상태
+        "status": status,
+
+        # 전체 기사 행 수
+        "row_count": articles.height,
+
+        # article_id가 null인 기사 수
+        "article_id_null_count": int(
+            article_id_null_count
+        ),
+
+        # 중복 article_id에 포함된 전체 행 수
+        "article_id_duplicate_row_count": int(
+            article_id_duplicate_row_count
+        ),
+
+        # title과 subtitle이 모두 비어 있는 기사 수
+        "empty_title_and_subtitle_count": int(
+            empty_title_and_subtitle_count
+        ),
+
+        # 원본 category ID가 null인 기사 수
+        "category_null_count": int(
+            category_null_count
+        ),
+
+        # category_str이 null, 빈 문자열 또는 공백인 기사 수
+        "empty_category_str_count": int(
+            empty_category_str_count
+        ),
+
+        # published_time이 null인 기사 수
+        "published_time_null_count": int(
+            published_time_null_count
+        ),
+
+        # ner_clusters와 entity_groups의
+        # 리스트 길이가 다른 기사 수
+        "ner_entity_length_mismatch_count": int(
+            ner_entity_length_mismatch_count
+        ),
+    }
 
 
 
