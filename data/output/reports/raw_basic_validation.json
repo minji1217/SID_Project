@@ -1,0 +1,233 @@
+{
+  "overall_status": "PASS",
+  "datasets": {
+    "articles": {
+      "dataset_name": "articles",
+      "file_path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\raw\\articles.parquet",
+      "exists": true,
+      "status": "PASS",
+      "row_count": 20738,
+      "column_count": 21,
+      "columns": [
+        "article_id",
+        "title",
+        "subtitle",
+        "last_modified_time",
+        "premium",
+        "body",
+        "published_time",
+        "image_ids",
+        "article_type",
+        "url",
+        "ner_clusters",
+        "entity_groups",
+        "topics",
+        "category",
+        "subcategory",
+        "category_str",
+        "total_inviews",
+        "total_pageviews",
+        "total_read_time",
+        "sentiment_score",
+        "sentiment_label"
+      ],
+      "schema": {
+        "article_id": "Int32",
+        "title": "String",
+        "subtitle": "String",
+        "last_modified_time": "Datetime(time_unit='us', time_zone=None)",
+        "premium": "Boolean",
+        "body": "String",
+        "published_time": "Datetime(time_unit='us', time_zone=None)",
+        "image_ids": "List(Int64)",
+        "article_type": "String",
+        "url": "String",
+        "ner_clusters": "List(String)",
+        "entity_groups": "List(String)",
+        "topics": "List(String)",
+        "category": "Int16",
+        "subcategory": "List(Int16)",
+        "category_str": "String",
+        "total_inviews": "Int32",
+        "total_pageviews": "Int32",
+        "total_read_time": "Float32",
+        "sentiment_score": "Float32",
+        "sentiment_label": "String"
+      },
+      "required_columns": [
+        "article_id",
+        "category_str",
+        "entity_groups",
+        "ner_clusters",
+        "published_time",
+        "subtitle",
+        "title"
+      ],
+      "missing_required_columns": []
+    },
+    "train_behaviors": {
+      "dataset_name": "train_behaviors",
+      "file_path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\raw\\train\\behaviors.parquet",
+      "exists": true,
+      "status": "PASS",
+      "row_count": 232887,
+      "column_count": 17,
+      "columns": [
+        "impression_id",
+        "article_id",
+        "impression_time",
+        "read_time",
+        "scroll_percentage",
+        "device_type",
+        "article_ids_inview",
+        "article_ids_clicked",
+        "user_id",
+        "is_sso_user",
+        "gender",
+        "postcode",
+        "age",
+        "is_subscriber",
+        "session_id",
+        "next_read_time",
+        "next_scroll_percentage"
+      ],
+      "schema": {
+        "impression_id": "UInt32",
+        "article_id": "Int32",
+        "impression_time": "Datetime(time_unit='us', time_zone=None)",
+        "read_time": "Float32",
+        "scroll_percentage": "Float32",
+        "device_type": "Int8",
+        "article_ids_inview": "List(Int32)",
+        "article_ids_clicked": "List(Int32)",
+        "user_id": "UInt32",
+        "is_sso_user": "Boolean",
+        "gender": "Int8",
+        "postcode": "Int8",
+        "age": "Int8",
+        "is_subscriber": "Boolean",
+        "session_id": "UInt32",
+        "next_read_time": "Float32",
+        "next_scroll_percentage": "Float32"
+      },
+      "required_columns": [
+        "article_id",
+        "article_ids_clicked",
+        "impression_id",
+        "impression_time",
+        "user_id"
+      ],
+      "missing_required_columns": []
+    },
+    "train_history": {
+      "dataset_name": "train_history",
+      "file_path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\raw\\train\\history.parquet",
+      "exists": true,
+      "status": "PASS",
+      "row_count": 15143,
+      "column_count": 5,
+      "columns": [
+        "user_id",
+        "impression_time_fixed",
+        "scroll_percentage_fixed",
+        "article_id_fixed",
+        "read_time_fixed"
+      ],
+      "schema": {
+        "user_id": "UInt32",
+        "impression_time_fixed": "List(Datetime(time_unit='us', time_zone=None))",
+        "scroll_percentage_fixed": "List(Float32)",
+        "article_id_fixed": "List(Int32)",
+        "read_time_fixed": "List(Float32)"
+      },
+      "required_columns": [
+        "article_id_fixed",
+        "impression_time_fixed",
+        "user_id"
+      ],
+      "missing_required_columns": []
+    },
+    "validation_behaviors": {
+      "dataset_name": "validation_behaviors",
+      "file_path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\raw\\validation\\behaviors.parquet",
+      "exists": true,
+      "status": "PASS",
+      "row_count": 244647,
+      "column_count": 17,
+      "columns": [
+        "impression_id",
+        "article_id",
+        "impression_time",
+        "read_time",
+        "scroll_percentage",
+        "device_type",
+        "article_ids_inview",
+        "article_ids_clicked",
+        "user_id",
+        "is_sso_user",
+        "gender",
+        "postcode",
+        "age",
+        "is_subscriber",
+        "session_id",
+        "next_read_time",
+        "next_scroll_percentage"
+      ],
+      "schema": {
+        "impression_id": "UInt32",
+        "article_id": "Int32",
+        "impression_time": "Datetime(time_unit='us', time_zone=None)",
+        "read_time": "Float32",
+        "scroll_percentage": "Float32",
+        "device_type": "Int8",
+        "article_ids_inview": "List(Int32)",
+        "article_ids_clicked": "List(Int32)",
+        "user_id": "UInt32",
+        "is_sso_user": "Boolean",
+        "gender": "Int8",
+        "postcode": "Int8",
+        "age": "Int8",
+        "is_subscriber": "Boolean",
+        "session_id": "UInt32",
+        "next_read_time": "Float32",
+        "next_scroll_percentage": "Float32"
+      },
+      "required_columns": [
+        "article_id",
+        "article_ids_clicked",
+        "impression_id",
+        "impression_time",
+        "user_id"
+      ],
+      "missing_required_columns": []
+    },
+    "validation_history": {
+      "dataset_name": "validation_history",
+      "file_path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\raw\\validation\\history.parquet",
+      "exists": true,
+      "status": "PASS",
+      "row_count": 15342,
+      "column_count": 5,
+      "columns": [
+        "user_id",
+        "impression_time_fixed",
+        "scroll_percentage_fixed",
+        "article_id_fixed",
+        "read_time_fixed"
+      ],
+      "schema": {
+        "user_id": "UInt32",
+        "impression_time_fixed": "List(Datetime(time_unit='us', time_zone=None))",
+        "scroll_percentage_fixed": "List(Float32)",
+        "article_id_fixed": "List(Int32)",
+        "read_time_fixed": "List(Float32)"
+      },
+      "required_columns": [
+        "article_id_fixed",
+        "impression_time_fixed",
+        "user_id"
+      ],
+      "missing_required_columns": []
+    }
+  }
+}

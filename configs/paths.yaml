@@ -1,0 +1,7 @@
+data_dir: data
+articles: articles.parquet
+train_behaviors: train/behaviors.parquet
+train_history: train/history.parquet
+validation_behaviors: validation/behaviors.parquet
+validation_history: validation/history.parquet
+outputs_dir: outputs
