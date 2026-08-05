@@ -92,6 +92,54 @@ REQUIRED_COLUMNS: dict[str, set[str]] = {
     },
 }
 
+
+# 공통 데이터 검사 함수 
+
+def count_null_rows(
+    dataframe: pl.DataFrame,
+    column_name: str,
+) -> int:
+    """
+    지정한 컬럼의 값이 null인 행 수를 반환
+
+    매개변수
+    ----------
+    dataframe:
+        검사할 Polars DataFrame
+
+    column_name:
+        null 개수를 검사할 컬럼 이름
+
+    반환값
+    -------
+    int:
+        해당 컬럼이 null인 행의 개수
+
+    주의
+    ----
+    리스트 컬럼에 사용하면 리스트 자체가 null인 행만 계산
+
+    예:
+        None        -> null로 계산
+        []          -> null이 아님
+        [101, None] -> 리스트 자체는 null이 아니므로 계산되지 않음
+    """
+
+    # 지정한 컬럼에서 null인 값을 True로 변환하고, True의 총개수를 합산
+    null_count = (
+        dataframe
+        .select(
+            pl.col(column_name)
+            .is_null()
+            .sum()
+            .alias("null_count")
+        )
+        .item()
+    )
+
+    # Polars에서 반환한 숫자를 일반 Python int로 변환
+    return int(null_count)
+
 # 4. parquet 파일 하나 검사하는 함수 
 def validate_parquet_file(
         dataset_name: str, # 검사할 데이터셋 이름 (예: train_behaviors)
@@ -345,9 +393,9 @@ def validate_articles() -> dict[str, Any]:
 
     # STEP 7-4. article_id null 검사 
     # article_id는 기사 임베딩, event_id, semantic id, 사용자 history, 클릭 target에 사용됨
-    article_id_null_count = (
-        articles.select(pl.col("article_id").is_null().sum().alias("count"))
-        .item()
+    article_id_null_count = count_null_rows(
+        dataframe=articles,
+        column_name="article_id",
     )
 
     # STEP 7-5. article_id 중복 검사 
@@ -380,8 +428,9 @@ def validate_articles() -> dict[str, Any]:
     )
 
     # STEP 7-7. 원본 category ID null 검사 
-    category_null_count = (
-        articles.select(pl.col("category").is_null().sum().alias("count")).item()
+    category_null_count = count_null_rows(
+    dataframe=articles,
+    column_name="category",
     )
 
     # STEP 7-8. category_str 빈값 검사 
@@ -397,10 +446,9 @@ def validate_articles() -> dict[str, Any]:
 
     # STEP 7-9. published_time null 검사 
     # 발행 시간이 없는 클러스터링 처리 불가
-    published_time_null_count = (
-        articles.select(
-            pl.col("published_time").is_null().sum().alias("count")
-        ).item()
+    published_time_null_count = count_null_rows(
+    dataframe=articles,
+    column_name="published_time",
     )
 
     # STEP 7-10. NER과 entity type 리스트 길이 검사 
@@ -570,15 +618,9 @@ def validate_history(
 
     # STEP 8-5. user_id가 null인 행 수 계산
     # user_id가 null이면 해당 history를 어떤 사용자에게 연결? 모름 
-    user_id_null_count = (
-        history
-        .select(
-            pl.col("user_id")
-            .is_null()
-            .sum()
-            .alias("count")
-        )
-        .item()
+    user_id_null_count = count_null_rows(
+    dataframe=history,
+    column_name="user_id",
     )
 
     # STEP 8-6. 중복 user_id 찾기 
@@ -745,78 +787,943 @@ def validate_history(
             status = "PASS"
 
         # STEP 8-13. history 검증 결과 반환 
+    return {
+    # train 또는 validation 구분
+    "split": split_name,
+    # 검사한 history.parquet 경로
+    "file_path": str(file_path),
+    # history 데이터의 최종 검증 상태
+    "status": status,
+    # 전체 history 행 수
+    "row_count": history.height,
+    # user_id가 null인 행 수
+    "user_id_null_count": int(
+        user_id_null_count
+    ),
+    # 중복 user_id 그룹에 포함된 전체 행 수
+    "user_id_duplicate_row_count": int(
+        user_id_duplicate_row_count
+    ),
+    # 기사 또는 시간 리스트 자체가 null인 행 수
+    "null_history_list_row_count": int(
+        null_history_list_row_count
+    ),
+    # 기사 리스트와 시간 리스트 길이가 다른 행 수
+    "history_length_mismatch_row_count": int(
+        history_length_mismatch_row_count
+    ),
+    # 기사 ID 리스트 내부에 null이 있는 행 수
+    "null_article_element_row_count": int(
+        null_article_element_row_count
+    ),
+    # 시간 리스트 내부에 null이 있는 행 수
+    "null_time_element_row_count": int(
+        null_time_element_row_count
+    ),
+    # 시간 오름차순이 아닌 history 행 수
+    "unsorted_history_row_count": int(
+        unsorted_history_row_count
+    ),
+    # 이후 build_sequences.py에서 제외할 후보 행 수
+    #
+    # 여러 문제가 겹쳐도 행 단위로 한 번만 집계한다.
+    "exclusion_candidate_row_count": int(
+        exclusion_candidate_row_count
+    ),
+    # 제외하지 않고 기사와 시간을 함께 정렬할 후보 행 수
+    "reorder_candidate_row_count": int(
+        reorder_candidate_row_count
+    ),
+}        
+
+# STEP 9. behaviors.parquet 핵심 데이터 검증
+
+def validate_behaviors(
+        split_name: str,
+        file_path: Path,
+)-> dict[str, Any]:
+    """
+    검사 대상 컬럼
+    --------------
+    1. impression_id
+    2. user_id
+    3. impression_time
+    4. article_id
+    5. article_ids_clicked
+
+    검사 항목
+    --------
+    1. impression_id가 null인 행 수
+    2. impression_id가 중복된 행 수
+    3. user_id가 null인 행 수
+    4. impression_time이 null인 행 수
+    5. 현재 article_id가 null인 행 수
+    6. 클릭 리스트 자체가 null인 행 수
+    7. 클릭 리스트가 빈 리스트인 행 수
+    8. 클릭 리스트 내부에 null이 있는 행 수
+    9. 클릭 리스트 내부에 중복 ID가 있는 행 수
+    10. stable dedup 후 클릭 기사가 0개인 행 수
+    11. stable dedup 후 클릭 기사가 1개인 행 수
+    12. stable dedup 후 클릭 기사가 2개 이상인 행 수
+    13. 실제 baseline 학습에 사용할 수 있는 단일 클릭 행 수
+
+    stable dedup : 클릭 리스트의 원래 순서 유지하며 중복만 제거하는 방식 
+
+    이후 실제 제외되는 경우
+    - impression_id가 null
+    - impression_id가 중복
+    - user_id가 null
+    - impression_time이 null
+    - 클릭 리스트가 null
+    - 클릭 리스트가 비어 있음
+    - 클릭 리스트 내부에 null이 있음
+    - stable dedup 후 클릭 기사가 0개
+    - stable dedup 후 클릭 기사가 2개 이상   
+
+    상태 기준
+    --------
+    FAIL:
+        파일이 없거나 필수 컬럼이 누락된 경우
+
+    WARNING:
+        제외 대상 또는 stable dedup이 필요한 행이 있는 경우
+
+    PASS:
+        핵심 문제가 발견되지 않은 경우        
+    """
+
+    # STEP 9-1. 현재 검사할 데이터셋 이름 만들기 
+    # 이 이름은 REQUIRED_COLUMNS의 key와 동일
+    dataset_name = f"{split_name}_behaviors" 
+
+    # STEP 9-2. 기존 기본 구조 검사 실행   
+    basic_result = validate_parquet_file(
+        dataset_name=dataset_name,
+        file_path=file_path,
+    )
+
+    # STEP 9-3. 기본 구조 검사 실패 시 함수 종료
+    # 파일이 없거나 필수 컬럼이 누락된 경우에는
+    # behavior 내부 데이터를 검사할 수 없다.
+    if basic_result["status"] != "PASS":
         return {
+            # train 또는 validation 구분
+            "split": split_name,
+
+            # 검사한 파일 경로
+            "file_path": str(file_path),
+
+            # 상세 검사를 수행할 수 없으므로 FAIL
+            "status": "FAIL",
+
+            # 기본 검사에서 발생한 문제를 함께 반환한다.
+            "basic_validation": basic_result,
+        }    
+
+    # STEP 9-4. behavior 검증에 필요한 컬럼만 읽기 
+    behaviors = pl.read_parquet(
+        file_path,
+        columns=[
+            "impression_id",
+            "user_id",
+            "impression_time",
+            "article_id",
+            "article_ids_clicked",
+        ],
+    )   
+
+    # STEP 9-5. impression_id가 null인 행 수 계산 
+    # 각 노출 행동을 구분하는 ID (핵심)
+    impression_id_null_count = count_null_rows(
+    dataframe=behaviors,
+    column_name="impression_id",
+    )    
+
+    # STEP 9-6. 중복 impression_id 찾기         
+    # is_duplicated()는 중복 그룹에 속하는 모든 행을 찾음
+    duplicated_impression_rows = (
+        behaviors
+        .filter(
+            pl.col("impression_id").is_not_null()
+            &
+            pl.col("impression_id").is_duplicated()
+        )
+    )
+
+    # 중복 impression_id 그룹에 포함된 전체 행 수를 계산
+    impression_id_duplicate_row_count = (
+        duplicated_impression_rows.height
+    )
+
+    # 중복된 impression_id들을 set으로 만든다.
+    # 이후 행별 검사에서 현재 행의 impression_id가
+    # 중복 ID인지 빠르게 확인하기 위해 사용
+    duplicated_impression_ids = set(
+        duplicated_impression_rows
+        .get_column("impression_id")
+        .to_list()
+    )
+
+    # STEP 9-7. user_id가 null인 행 수 계산 
+    user_id_null_count = count_null_rows(
+        dataframe=behaviors,
+        column_name="user_id",
+    )
+
+    # STEP 9-8. impression_time이 null인 행 수 계산
+    impression_time_null_count = count_null_rows(
+        dataframe=behaviors,
+        column_name="impression_time",
+    )
+
+    # STEP 9-9. 현재 article_id가 null인 행 수 계산
+    # behavior가 발생했을 때 사용자가 보고 있던 현재 기사 ID
+    current_article_id_null_count = count_null_rows(
+        dataframe=behaviors,
+        column_name="article_id",
+    )
+
+    # STEP 9-10. 클릭 데이터 검사 카운터 생성 
+ 
+    # article_ids_clicked 리스트 자체가 null인 행 수
+    clicked_list_null_count = 0
+
+    # article_ids_clicked가 빈 리스트인 행 수
+    clicked_list_empty_count = 0
+
+    # 클릭 리스트 내부에 null article_id가 있는 행 수
+    clicked_null_element_row_count = 0
+
+    # 클릭 리스트 내부에 중복 article_id가 있는 행 수
+    duplicate_clicked_row_count = 0
+
+    # stable dedup 후 고유 클릭 기사가 0개인 행 수
+    zero_click_after_dedup_row_count = 0
+
+    # stable dedup 후 고유 클릭 기사가 1개인 행 수
+    single_click_after_dedup_row_count = 0
+
+    # stable dedup 후 고유 클릭 기사가 2개 이상인 행 수
+    multi_click_after_dedup_row_count = 0
+
+    # 모든 핵심 조건을 만족해서
+    # 실제 baseline 단일 클릭 데이터로 사용할 수 있는 행 수
+    usable_single_click_row_count = 0
+
+    # 이후 build_sequences.py에서 제외해야 하는 행 수
+    #
+    # 한 행에 여러 문제가 있더라도 한 번만 계산한다.
+    exclusion_candidate_row_count = 0
+
+    # STEP 9-11. behavior를 한 행씩 검사 
+    # iter_rows(named=True) 사용하여 각 behavior 행을 파이썬 딕셔너리 형태로 가져옴
+    for row in behaviors.iter_rows(named=True):
+        # 현재 behavior의 노출 ID 가져옴
+        impression_id = row["impression_id"]
+
+        # 현재 behavior의 사용자 ID 가져옴
+        user_id = row["user_id"]
+
+        # 현재 behavior가 발생한 시각을 가져옴
+        impression_time = row["impression_time"]
+
+        # 클릭한 기사 ID 리스트 가져옴
+        clicked_ids = row["article_ids_clicked"]
+
+        # 현재 behavior 행을 이후 단계에서 제외해야하는지 기록
+        should_exclude_row = False # 문제 없다고 일단 가정
+
+        # STEP 9-12. behavior 식별자와 시간 문제 확인
+        # 1. impression_id가 null인 경우 
+        if impression_id is None:
+            should_exclude_row = True
+
+        # 2. 같은 impression_id가 여러 행에 존재하는 경우
+        if impression_id in duplicated_impression_ids:
+            should_exclude_row = True 
+
+        # 3. user_id가 null인 경우
+        if user_id is None: 
+            should_exclude_row = True 
+
+        # 4. impression_time이 null인 경우
+        if impression_time is None : 
+            should_exclude_row = True 
+
+        # 5. 클릭 리스트 자체가 null인지 ? 
+        if clicked_ids is None : 
+            clicked_list_null_count += 1
+            should_exclude_row = True 
+
+            # 클릭 리스트가 없으므로 아래 클릭 검사 진행 x
+            exclusion_candidate_row_count += 1
+            continue 
+
+        # 6. 클릭 리스트가 비어 있는지 ? 
+        # 빈 리스트에는 클릭 target이 없으므로 학습 샘플 생성 불가 
+        if len(clicked_ids) == 0:
+            clicked_list_empty_count += 1
+            zero_click_after_dedup_row_count += 1
+            should_exclude_row = True 
+
+            # 클릭할 기사 없으므로 아래 검사 진행 x 
+            exclusion_candidate_row_count += 1
+            continue 
+
+        # 7. 클릭 리스트 내부 null 검사 
+        # article_ids_clicked 내부에 null article_id 존재 ? 
+        has_null_clicked_id = any(
+            article_id is None 
+            for article_id in clicked_ids 
+        )
+
+        # null 클릭 ID가 있으면 해당 행을 제외 후보로 기록 
+        if has_null_clicked_id:
+            clicked_null_element_row_count += 1
+            should_exclude_row = True 
+
+        # STEP 9-16. null 클릭 ID를 제외한 임시 리스트 생성 
+        valid_clicked_ids = [
+            article_id for article_id in clicked_ids if article_id is not None 
+        ]
+
+        # STEP 9-17. stable dedup 수행 
+        # 지금까지 확인한 article_id 저장
+        # set[Any] : set 안에 아무 타입이나 들어갈 수 있는 집합임
+        # set() : 위에껀 그냥 미리 말만, 실질적으론 일단 set()으로 초기화
+        seen_clicked_ids: set[Any] = set() # 있는지 빨리 확인하려고 
+
+        # 원래 순서 유지하며 중복 제거한 클릭 ID 저장
+        unique_clicked_ids: list[Any] = []
+
+        # 클릭 리스트를 앞에서부터 확인
+        for article_id in valid_clicked_ids:
+            # 아직 등장하지 않은 article_id만 결과에 추가
+            if article_id not in seen_clicked_ids:
+                seen_clicked_ids.add(article_id)
+                unique_clicked_ids.append(article_id)
+
+        # STEP 9-18. 클릭 리스트 내부 중복 여부 검사 
+        # stable dedup 전후의 길이가 다르면 원복 클릭 리스트 내부에 중복 ID가 있었다는 것
+        # stable dedup 후 고유 클릭 ID가 하나라면 단일 클릭 샘플로 사용 가능 
+        if len(valid_clicked_ids) != len(unique_clicked_ids):
+            duplicate_clicked_row_count += 1
+
+        # STEP 9-19. stable dedup 후 클릭 수 분류
+        # 유효한 고유 클릭 기사 없는 경우
+        if len(unique_clicked_ids) == 0:
+            zero_click_after_dedup_row_count += 1
+            should_exclude_row = True 
+
+        # 유효한 고유 클릭 기사 정확히 하나인 경우 (-> 학습에 사용ㅇ)
+        elif len(unique_clicked_ids) == 1:
+            single_click_after_dedup_row_count += 1
+
+            # 다른 구조 문제가 없으면 실제 단일 클릭 샘플로 사용 가능
+            if not should_exclude_row:
+                usable_single_click_row_count += 1
+
+        # 유효한 고유 클릭 기사가 둘 이상인 경우
+        else:
+            multi_click_after_dedup_row_count += 1
+
+            # 클릭 간 정확한 순서를 알 수 없으므로 현재 baseline에서 일단 제외함
+            should_exclude_row = True 
+
+        # STEP 9-20. 제외 후보 행 수 계산
+        # 한 behavior 행에 문제가 여럿 있어도 제외되는 실제 행은 하나니까 1번만 증가시킴
+        if should_exclude_row:
+            exclusion_candidate_row_count += 1
+
+    # STEP 9-21. 경고 조건 확인
+    # 제외 후보 행 또는 stable dedup이 필요한 행이 있다면 
+    # 이후 후처리 필요 (build_sequences.py에서)
+    has_warning = (
+        exclusion_candidate_row_count > 0
+        or 
+        duplicate_clicked_row_count > 0
+    )
+
+    # STEP 9-22. 최종 상태 결정 
+    # 제외 또는 stable dedup 대상 있는 경우
+    if has_warning: status = "WARNING"
+    # 모든 핵심 검사 결과에 문제 없다면 PASS
+    else: status = "PASS"
+
+    # STEP 9-23. behaviors 결과 반환 
+    return {
         # train 또는 validation 구분
         "split": split_name,
 
-        # 검사한 history.parquet 경로
+        # 검사한 behaviors.parquet 경로
         "file_path": str(file_path),
 
-        # history 데이터의 최종 검증 상태
+        # behaviors 데이터의 최종 검증 상태
         "status": status,
 
-        # 전체 history 행 수
-        "row_count": history.height,
+        # 전체 behavior 행 수
+        "row_count": behaviors.height,
+
+        # impression_id가 null인 행 수
+        "impression_id_null_count": int(
+            impression_id_null_count
+        ),
+
+        # 중복 impression_id 그룹에 포함된 전체 행 수
+        "impression_id_duplicate_row_count": int(
+            impression_id_duplicate_row_count
+        ),
 
         # user_id가 null인 행 수
         "user_id_null_count": int(
             user_id_null_count
         ),
 
-        # 중복 user_id 그룹에 포함된 전체 행 수
-        "user_id_duplicate_row_count": int(
-            user_id_duplicate_row_count
+        # impression_time이 null인 행 수
+        "impression_time_null_count": int(
+            impression_time_null_count
         ),
 
-        # 기사 또는 시간 리스트 자체가 null인 행 수
-        "null_history_list_row_count": int(
-            null_history_list_row_count
+        # 현재 article_id가 null인 행 수
+        #
+        # 이 값은 허용되므로 제외 후보 수에는 포함하지 않는다.
+        "current_article_id_null_count": int(
+            current_article_id_null_count
         ),
 
-        # 기사 리스트와 시간 리스트 길이가 다른 행 수
-        "history_length_mismatch_row_count": int(
-            history_length_mismatch_row_count
+        # 클릭 리스트 자체가 null인 행 수
+        "clicked_list_null_count": int(
+            clicked_list_null_count
         ),
 
-        # 기사 ID 리스트 내부에 null이 있는 행 수
-        "null_article_element_row_count": int(
-            null_article_element_row_count
+        # 클릭 리스트가 빈 리스트인 행 수
+        "clicked_list_empty_count": int(
+            clicked_list_empty_count
         ),
 
-        # 시간 리스트 내부에 null이 있는 행 수
-        "null_time_element_row_count": int(
-            null_time_element_row_count
+        # 클릭 리스트 내부에 null article_id가 있는 행 수
+        "clicked_null_element_row_count": int(
+            clicked_null_element_row_count
         ),
 
-        # 시간 오름차순이 아닌 history 행 수
-        "unsorted_history_row_count": int(
-            unsorted_history_row_count
+        # 클릭 리스트 내부에 중복 article_id가 있는 행 수
+        "duplicate_clicked_row_count": int(
+            duplicate_clicked_row_count
+        ),
+
+        # stable dedup 후 고유 클릭 기사가 0개인 행 수
+        "zero_click_after_dedup_row_count": int(
+            zero_click_after_dedup_row_count
+        ),
+
+        # stable dedup 후 고유 클릭 기사가 1개인 행 수
+        "single_click_after_dedup_row_count": int(
+            single_click_after_dedup_row_count
+        ),
+
+        # stable dedup 후 고유 클릭 기사가 2개 이상인 행 수
+        "multi_click_after_dedup_row_count": int(
+            multi_click_after_dedup_row_count
+        ),
+
+        # 현재 정책상 실제 baseline 학습에 사용할 수 있는 행 수
+        "usable_single_click_row_count": int(
+            usable_single_click_row_count
         ),
 
         # 이후 build_sequences.py에서 제외할 후보 행 수
         #
-        # 여러 문제가 겹쳐도 행 단위로 한 번만 집계한다.
+        # 여러 문제가 동시에 있어도 행 단위로 한 번만 집계한다.
         "exclusion_candidate_row_count": int(
             exclusion_candidate_row_count
         ),
+    }    
 
-        # 제외하지 않고 기사와 시간을 함께 정렬할 후보 행 수
-        "reorder_candidate_row_count": int(
-            reorder_candidate_row_count
+
+# STEP 10. 파일 간 참조 관계 검증
+def validate_cross_file_references() -> dict[str, Any]:
+    """
+    articles, history, behaviors 파일 사이의 참조 관계 검사
+
+    검사 관계
+    --------
+    1. history.article_id_fixed -> articles.article_id
+    2. behaviors.article_id -> articles.article_id
+    3. behaviors.article_ids_clicked -> articles.article_id
+    4. behaviors.user_id -> 같은 split(train/val)의 history.user_id
+
+    처리 원칙
+    --------
+    존재하지 않는 기사 ID 또는 history에 없는 user_id 발견하면
+    해당 개수와 영향을 받는 행 수만 반환
+
+    실제 제외 처리는 이후 build_articles.py, build_sequences.py에서 함
+    
+    FAIL:
+        파일이 없거나 필수 컬럼이 누락되어
+        참조 관계를 검사할 수 없는 경우
+
+    WARNING:
+        존재하지 않는 기사 ID 또는 history에 없는 사용자가
+        하나 이상 발견된 경우
+
+    PASS:
+        모든 참조값이 정상적으로 연결되는 경우    
+    """
+
+    # STEP 10-1. 참조 검사에 필요한 파일의 기본 구조 검사 
+    # validate_parquet_file() 사용해 파일 존재 여부와 필수 컬럼 존재 여부 검사
+    basic_results = {
+        "articles": validate_parquet_file(
+            dataset_name="articles",
+            file_path=ARTICLES_PATH,
         ),
-    }        
+        "train_history": validate_parquet_file(
+            dataset_name="train_history",
+            file_path=TRAIN_HISTORY_PATH,
+        ),
+        "train_behaviors": validate_parquet_file(
+            dataset_name="train_behaviors",
+            file_path=TRAIN_BEHAVIORS_PATH,
+        ),
+        "validation_history": validate_parquet_file(
+            dataset_name="validation_history",
+            file_path=VALIDATION_HISTORY_PATH,
+        ),
+        "validation_behaviors": validate_parquet_file(
+            dataset_name="validation_behaviors",
+            file_path=VALIDATION_BEHAVIORS_PATH,
+        ),
+    }
+
+    # STEP 10-2. 기본 구조 검사 실패 여부 chk
+    # 5개 파일 중 하나라도 기본 검증 통과못하면 파일 간 참조 관계 정확히 검사 불가
+    has_basic_failure = any(
+        result["status"] != "PASS"
+        for result in basic_results.values()
+    )
+
+    # 기본 구조에 문제가 있다면 참조 검사 미수행
+    if has_basic_failure:
+        return {
+            "status": "FAIL",
+            "basic_validation": basic_results,
+        }
+    
+    # STEP 10-3. articles.parquet의 유효한 article_id 읽기 
+    # 참조 검사의 기준은 articles.article_id
+    # 이때 article_id가 null인 행을 고려해 drop_nulls()로 제외
+    # unique() 통해 중복값도 제거 
+
+    article_ids = (
+        pl.read_parquet(
+            ARTICLES_PATH,
+            columns=["article_id"],
+        ).drop_nulls("article_id")
+        .unique()
+    )
+
+    # 전체 고유 article_id 개수를 기록
+    article_id_count = article_ids.height 
+
+    # STEP 10-4. split 하나를 검사하는 내부 함수 정의
+    # validate_cross_file_references()가 실행되는 동안에만 사용됨
+    def inspect_split_references(
+        split_name:str,
+        history_path: Path,
+        behaviors_path: Path,
+    ) -> dict[str, Any]:
+        # STEP 10-4-1. history 핵심 컬럼 읽기
+        # user_id : behaviors의 사용자가 history에 존재 ? 
+        # article_id_fixed : 과거 기사 ID가 articles에 존재 ? 
+
+        history = pl.read_parquet(
+            history_path,
+            columns=[
+                "user_id",
+                "article_id_fixed",
+            ],
+        )
+
+        # STEP 10-4-2. behaviors 핵심 컬럼 읽기
+        # impression_id : 문제가 발생한 behavior 행 구분 위해 
+        # user_id : 같은 split의 history에 존재 ? 
+        # article_id : 사용자가 행동 당시 보고 있던 현재 기사 
+        # article_ids_clicked : 실제 클릭 target 기사 목록
+        behaviors = pl.read_parquet(
+            behaviors_path,
+            columns=[
+                "impression_id",
+                "user_id",
+                "article_id",
+                "article_ids_clicked",
+            ],
+        )
+
+        # STEP 10-4-3. history에 존재하는 사용자 목록 
+        # 같은 split의 history에 존재하는 고유 user_id만 추출
+        # null user_id는 제외
+        history_user_ids = (
+            history.select("user_id").drop_nulls("user_id").unique()
+        )        
+
+        # STEP 10-4-4. history에 없는 behavior 사용자 찾기 
+        # history가 있어야 트랜스포머 학습시키는데 behaviors에는 있는 사용자가 history는 없다면?
+        # 그 사용자는 시작 이력이 없는 것으로, 시퀀스를 만들 수 없거나 빈 이력으로 시작해야함 
+
+        # behaviors의 user_id 중 history_user_ids에 존재하지 않는 행 찾기 
+        # anti join : 왼쪽 DF엔 있지만 오른쪽 DF에 없는 행만 남기기
+        # 이때 user_id가 아예 NULL인 경우는 여기서의 문제가 아니므로 제외
+        missing_behaviors_users = (
+            behaviors.filter(pl.col("user_id").is_not_null())
+            .join(
+                history_user_ids,
+                on="user_id", # user_id가 같은 것끼리 짝지어 붙임
+                how="anti",   # 이때, 그중에서도 짝을 못찾은 애들만 남김
+            )
+        )
+
+        # history에 없는 user_id 때문에 영향 받는 behavior 전체 행 수 계산
+        behavior_user_missing_history_row_count = (
+            missing_behaviors_users.height 
+        )
+
+        # history에 없는 고유 사용자 수 계산
+        # 같은 사용자가 여러 behavior 행 가질 수 있기 때문에
+        behavior_user_missing_history_user_count = (
+            missing_behaviors_users.get_column("user_id").n_unique()
+        )
+
+        # 위에는 몇개, 몇명인지만 알기 때문에 이번엔 그게 직접 누구인지 확인 
+        # history에 없는 user_id 예시로 최대 10개 저장 (for 확인용)
+        # get_column : Series [55,77,99]로 변환
+        # to_list() : Series -> 순수 파이썬 리스트로 
+        missing_history_user_examples = (
+            missing_behaviors_users.select("user_id").unique().sort("user_id").head(10).get_column("user_id").to_list()
+        )
+
+        # STEP 10-4-5. history 기사 ID 리스트를 행 단위로 펼치기 
+        # 각 사용자의 history 리스트를 풀어서 그 안에 있는 기사 ID 하나하나가
+        # 진짜 존재하는 기사인지 확인하기 좋은 형태로 바꿈 
+        # 현재 예시:
+        # user_id = 10
+        # article_id_fixed = [101,202, 303]
+        # explode() 적용 후:
+        # user_id | article_id
+        # 10      | 101
+        # 10      | 202
+        # 10      | 303
+
+        # with_row_index("_history_row")는 원래 어떤 history행에서
+        # 나온 기사인지 확인하기 위한 임시 행 번호임 
+        # 뒤에서 explode하면 원래 몇번째 사용자 것이었는지 헷갈리기에 출신 남기는 것과 동일
+        # 검증할 때 history에서 user id 중복 없는 것 확인했으니 위의 문장처럼 말해도 ok
+        history_article_references = (
+            history.with_row_index("_history_row").select([
+                "_history_row",
+                "user_id",
+                "article_id_fixed",
+            ]).explode("article_id_fixed").rename(
+                {"article_id_fixed":"article_id"}
+            ).drop_nulls("article_id")
+        )
+
+        # STEP 10-4-6. articles에 없는 history 기사 찾기 
+        # history에서 사용된 article_id 중 articles.parquet에 존재하지 않는 ID만 찾는다
+        missing_history_article_references = (
+            history_article_references.join(
+                article_ids, 
+                on="article_id",
+                how="anti",
+            )
+        )
+
+        # 존재하지 않는 article_id가 history 리스트에서
+        # 총 몇 번 참조되었는지 계산
+        # 같은 누락 ID가 여러 사용자의 history에 존재하면 여러번 계산되는 것임
+        missing_history_article_reference_count = (
+            missing_history_article_references.height 
+        )
+
+        # 존재하지 않는 기사 ID 때문에 영향 받는 history 원본 행 수(사용자 수) 계산
+        missing_history_article_row_count = (
+            missing_history_article_references
+            .get_column("_history_row")
+            .n_unique()
+        )
+
+        # articles에 존재하지 않는 고유 기사 ID수 계산
+        missing_history_article_id_count = (
+            missing_history_article_references.
+            get_column("article_id").n_unique()
+        )
+
+        # 누락된 history article_id 예시를 최대 10개 저장 
+        # 누락된 history article_id 예시를 최대 10개 저장한다.
+        missing_history_article_id_examples = (
+            missing_history_article_references
+            .select("article_id")
+            .unique()
+            .sort("article_id")
+            .head(10)
+            .get_column("article_id")
+            .to_list()
+        )
+
+        # STEP 10-4-7. behaviors의 현재 article_id 참조 만들기
+        # 이번엔 현재 보고 있던 기사 하나가 실제 존재하는지 확인 
+        # 이때 article_id는 리스트가 아닌 스칼라이기에 history처럼 explode 필요 x
+        # behaviors.article_id는 사용자가 행동 당시 보고 있던 현재 기사 ID
+        # null값 허용되므로 참조 검사에서 제외
+        current_article_references = (
+            behaviors.with_row_index("_behavior_row").
+            select(
+                [
+                    "_behavior_row",
+                    "impression_id",
+                    "article_id",
+                ]
+            )
+            .drop_nulls("article_id")
+        )
+
+        # STEP 10-4-8. articles에 없는 현재 article_id 찾기 
+        # null이 아닌 현재 article_id 중 articles.parquet에 존재하지 않는 ID 찾는다
+        missing_current_article_references = (
+            current_article_references.join(
+                article_ids,
+                on="article_id",
+                how="anti",
+            )
+        )
+        # 현재 article_id가 articles에 존재하지 않는 behavior 행 수 계산
+        missing_current_article_row_count = (
+            missing_current_article_references.height 
+        )
+
+        # 존재하지 않는 고유한 현재 article_id 수 계산 
+        missing_current_article_id_count = (
+            missing_current_article_references.get_column("article_id").n_unique()
+        )
+
+        # 누락된 현재 article_id 예시 최대 10개 저장 
+        missing_current_article_id_examples = (
+            missing_current_article_references
+            .select("article_id")
+            .unique()
+            .sort("article_id")
+            .head(10)
+            .get_column("article_id")
+            .to_list()
+        )
+
+        # STEP 10-4-9. 클릭 기사 리스트를 행 단위로 펼치기 
+        # 이번엔 클릭 기사들이 실존하는지 확인
+        # 이 경우엔 explode 필요 
+        clicked_article_references = (
+            behaviors.with_row_index("_behavior_row").select(
+                [
+                    "_behavior_row",
+                    "impression_id",
+                    "article_ids_clicked",
+                ]
+            ).explode("article_ids_clicked").rename(
+                {
+                    "article_ids_clicked":"article_id",
+                }
+            ).drop_nulls("article_id")
+        )
+
+        # STEP 10-4-10. articles에 없는 클릭 기사 찾기
+        # 실제 클릭된 article_id 중 articles.parquet에 존재하지 않는 ID만 찾는다
+        missing_clicked_article_references = (
+            clicked_article_references.join(
+                article_ids,
+                on="article_id",
+                how="anti",
+            )
+        )
+
+        # 존재하지 않는 클릭 기사 ID가 총 몇번 등장했는지 계산
+        # 원본 리스트 내부에 같은 ID 반복되면 반복된 횟수도 포함됨
+        missing_clicked_article_reference_count = (
+            missing_clicked_article_references.height 
+        )
+
+        # 존재하지 않는 클릭 기사 때문에 영향 받는 behavior 원본 행 수 계산
+        missing_clicked_behavior_row_count = (
+            missing_clicked_article_references.get_column("_behavior_row").n_unique()
+        )
+
+        # 존재하지 않는 고유 클릭 article_id 수 계산 
+        # 원본 행 수는 클릭 기사 수가 리스트로 구성된 경우도 고려한 것
+        missing_clicked_article_id_count = (
+            missing_clicked_article_references.get_column("article_id").n_unique()
+        )
+
+        # 누락된 클릭 article_id 예시를 최대 10개 저장
+        missing_clicked_article_id_examples = (
+            missing_clicked_article_references
+            .select("article_id")
+            .unique()
+            .sort("article_id")
+            .head(10)
+            .get_column("article_id")
+            .to_list()
+        )
+
+        # STEP 10-4-11. 현재 split의 경고 여부 확인
+        # 아래 항목 중 하나라도 1 이상이면 파일 간 참조 완전 일치는 아니라는 의미
+        has_warning = (
+            behavior_user_missing_history_row_count > 0
+            or missing_history_article_reference_count > 0
+            or missing_current_article_row_count > 0
+            or missing_clicked_article_reference_count > 0
+        )
+
+        # 참조 누락이 하나라도 있으면 WARNING, 아니면 PASS
+        if has_warning:
+            status = "WARNING"
+        else:
+            status = "PASS"
+
+        # STEP 10-4-12. 현재 split의 참조 검사 결과 반환
+
+        return {
+            # train 또는 validation 구분
+            "split": split_name,
+
+            # 현재 split의 최종 상태
+            "status": status,
+
+            # 전체 history 행 수
+            "history_row_count": history.height,
+
+            # 전체 behavior 행 수
+            "behavior_row_count": behaviors.height,
+
+            # history에 user_id가 없는 behavior 행 수
+            "behavior_user_missing_history_row_count": int(
+                behavior_user_missing_history_row_count
+            ),
+
+            # history에 존재하지 않는 고유 사용자 수
+            "behavior_user_missing_history_user_count": int(
+                behavior_user_missing_history_user_count
+            ),
+
+            # history에 존재하지 않는 user_id 예시
+            "missing_history_user_examples": (
+                missing_history_user_examples
+            ),
+
+            # articles에 없는 history 기사 ID의 전체 참조 횟수
+            "missing_history_article_reference_count": int(
+                missing_history_article_reference_count
+            ),
+
+            # 존재하지 않는 기사 ID가 포함된 history 행 수
+            "missing_history_article_row_count": int(
+                missing_history_article_row_count
+            ),
+
+            # articles에 존재하지 않는 고유 history 기사 ID 수
+            "missing_history_article_id_count": int(
+                missing_history_article_id_count
+            ),
+
+            # 누락된 history article_id 예시
+            "missing_history_article_id_examples": (
+                missing_history_article_id_examples
+            ),
+
+            # articles에 없는 현재 article_id를 가진 behavior 행 수
+            "missing_current_article_row_count": int(
+                missing_current_article_row_count
+            ),
+
+            # articles에 존재하지 않는 고유 현재 article_id 수
+            "missing_current_article_id_count": int(
+                missing_current_article_id_count
+            ),
+
+            # 누락된 현재 article_id 예시
+            "missing_current_article_id_examples": (
+                missing_current_article_id_examples
+            ),
+
+            # articles에 없는 클릭 기사 ID의 전체 참조 횟수
+            #
+            # 동일 ID가 원본 클릭 리스트에서 반복되면
+            # 반복 횟수도 포함된다.
+            "missing_clicked_article_reference_count": int(
+                missing_clicked_article_reference_count
+            ),
+
+            # 존재하지 않는 클릭 기사가 포함된 behavior 행 수
+            "missing_clicked_behavior_row_count": int(
+                missing_clicked_behavior_row_count
+            ),
+
+            # articles에 존재하지 않는 고유 클릭 기사 ID 수
+            "missing_clicked_article_id_count": int(
+                missing_clicked_article_id_count
+            ),
+
+            # 누락된 클릭 article_id 예시
+            "missing_clicked_article_id_examples": (
+                missing_clicked_article_id_examples
+            ),
+        }
+
+    # STEP 10-5. train 파일 간 참조 검사 
+    train_result = inspect_split_references(
+        split_name="train",
+        history_path=TRAIN_HISTORY_PATH,
+        behaviors_path=TRAIN_BEHAVIORS_PATH,
+    )
+
+    # STEP 10-6. validation 파일 간 참조 검사 
+    validation_result = inspect_split_references(
+        split_name="validation",
+        history_path=VALIDATION_HISTORY_PATH,
+        behaviors_path=VALIDATION_BEHAVIORS_PATH,
+    )
+
+    # STEP 10-7. 전체 참조 검사 (train 또는 validation 중 하나라도 WARNING이면 전체도 WARNING)
+    if(
+        train_result["status"]=="WARNING"
+        or validation_result["status"]=="WARNING"
+    ):
+        status = "WARNING"
+    else:
+        status = "PASS"
+
+    # STEP 10-8. 전체 참조 검사 결과 반환
+
+    return {
+        # 전체 파일 간 참조 검증 상태
+        "status": status,
+
+        # articles.parquet에 존재하는 고유 article_id 수
+        "article_id_count": int(article_id_count),
+
+        # train 참조 검증 결과
+        "train": train_result,
+
+        # validation 참조 검증 결과
+        "validation": validation_result,
+    }                                    
 
 
-        
+
+
+
+
                 
 
 
-
-
-
-
-
-# 7. 원본 파일 5개 전체 검사 실행하는 중심 함수
+# STEP11. 원본 파일 5개 전체 검사 실행하는 중심 함수
 def run_validation() -> dict[str, Any]:
     '''
     처리 순서
@@ -830,35 +1737,35 @@ def run_validation() -> dict[str, Any]:
     7. JSON 보고서 저장
     '''
    
-    # 7-1. 검사 보고서 저장할 출력 폴더 생성
+    # STEP 11-1. 검사 보고서 저장할 출력 폴더 생성
     # config.py에 정의한 함수
     create_output_directories()
 
-    # 7-2. 파일별 결과를 저장할 빈 딕셔너리 생성 
+    # STEP 11-2. 파일별 결과를 저장할 빈 딕셔너리 생성 
     # 예 : {
     #        "articles" : {...}, "train_behaviors":{...}, 
     dataset_results: dict[str, Any] = {}
 
-    # 7-3. 원본 파일 5개를 하나씩 반복 
+    # STEP 11-3. 원본 파일 5개를 하나씩 반복 
     for dataset_name, file_path in DATASET_PATHS.items():
-        # 7-4. 현재 parquet 파일 기본 검사 
+        # STEP 11-4. 현재 parquet 파일 기본 검사 
         # 파일 하나를 validate_parquet_file()에 전달
         result = validate_parquet_file(
             dataset_name=dataset_name,
             file_path=file_path,
         )
 
-        # 7-5. 현재 파일의 결과 저장
+        # STEP 11-5. 현재 파일의 결과 저장
         # 현재 검사 결과를 전체 결과 딕셔너리에 저장
         dataset_results[dataset_name] = result
 
-        # 7-6. 현재 파일의 결과를 터미널에 출력
+        # STEP 11-6. 현재 파일의 결과를 터미널에 출력
         print_validation_result(
             dataset_name=dataset_name,
             result=result,
         )
 
-    # 7-7. 전체 PASS 또는 FAIL 결정
+    # STEP 11-7. 전체 PASS 또는 FAIL 결정
     # 파일 5개가 모두 PASS인지 확인
     # all()은 모든 조건이 True일 때만 True를 반환한다.
     all_files_passed = all(
@@ -874,7 +1781,7 @@ def run_validation() -> dict[str, Any]:
     else:
         overall_status = "FAIL"
 
-    # 7-8. 최종 JSON 보고서 구성 
+    # STEP 11-8. 최종 JSON 보고서 구성 
     report: dict[str, Any] = {
         # 전체 기본 검사 상태
         "overall_status": overall_status,
@@ -882,7 +1789,7 @@ def run_validation() -> dict[str, Any]:
         "datasets": dataset_results,
     }
 
-    # 7-9. JSON 보고서 저장 경로 생성 및 저장 
+    # STEP 11-9. JSON 보고서 저장 경로 생성 및 저장 
     # 실제 저장 경로 : data/output/reports/raw_basic_validation.json
     report_path = (
         REPORT_DIR / "raw_basic_validation.json"
@@ -892,7 +1799,7 @@ def run_validation() -> dict[str, Any]:
         output_path=report_path,
     )
 
-    # 7-10. 전체 결과 터미널에 출력
+    # STEP 11-10. 전체 결과 터미널에 출력
     print()
     print("=" * 70)
     print(f"전체 결과: {overall_status}")
@@ -900,11 +1807,11 @@ def run_validation() -> dict[str, Any]:
     print("=" * 70)
 
 
-    # 7-12. 전체 검사 결과 반환
+    # STEP 11-12. 전체 검사 결과 반환
     return report
 
 
-# 8. 이 파일을 직접 실행했을 때 검증 시작
+# STEP12. 이 파일을 직접 실행했을 때 검증 시작
 # 다음 명령으로 실행하면:
 #
 # python -m src.validate_data
