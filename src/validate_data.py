@@ -1725,90 +1725,151 @@ def validate_cross_file_references() -> dict[str, Any]:
 
 # STEP11. 원본 파일 5개 전체 검사 실행하는 중심 함수
 def run_validation() -> dict[str, Any]:
-    '''
-    처리 순서
-    -----------
-    1. 출력 폴더 생성
-    2. DATASET_PATHS의 파일 5개 반복
-    3. validate_parquet_file() 호출
-    4. 결과를 전체 딕셔너리에 저장
-    5. 터미널에 파일별 결과 출력
-    6. 전체 PASS 또는 FAIL 결정
-    7. JSON 보고서 저장
-    '''
-   
-    # STEP 11-1. 검사 보고서 저장할 출력 폴더 생성
-    # config.py에 정의한 함수
-    create_output_directories()
+    """
+    2. train/history.parquet 상세 검증
+    3. validation/history.parquet 상세 검증
+    4. train/behaviors.parquet 상세 검증
+    5. validation/behaviors.parquet 상세 검증
+    6. 파일 간 사용자 및 기사 참조 검증
 
-    # STEP 11-2. 파일별 결과를 저장할 빈 딕셔너리 생성 
-    # 예 : {
-    #        "articles" : {...}, "train_behaviors":{...}, 
-    dataset_results: dict[str, Any] = {}
+    전체 상태 기준
+    --------------
+    FAIL:
+        하나 이상의 검증 결과가 FAIL인 경우
 
-    # STEP 11-3. 원본 파일 5개를 하나씩 반복 
-    for dataset_name, file_path in DATASET_PATHS.items():
-        # STEP 11-4. 현재 parquet 파일 기본 검사 
-        # 파일 하나를 validate_parquet_file()에 전달
-        result = validate_parquet_file(
-            dataset_name=dataset_name,
-            file_path=file_path,
-        )
+    WARNING:
+        FAIL은 없지만 하나 이상의 검증 결과가 WARNING인 경우
 
-        # STEP 11-5. 현재 파일의 결과 저장
-        # 현재 검사 결과를 전체 결과 딕셔너리에 저장
-        dataset_results[dataset_name] = result
+    PASS:
+        모든 검증 결과가 PASS인 경우
 
-        # STEP 11-6. 현재 파일의 결과를 터미널에 출력
-        print_validation_result(
-            dataset_name=dataset_name,
-            result=result,
-        )
+    처리 원칙
+    --------
+    이 함수에서는 원본 데이터를 수정하거나 삭제하지 않는다.
 
-    # STEP 11-7. 전체 PASS 또는 FAIL 결정
-    # 파일 5개가 모두 PASS인지 확인
-    # all()은 모든 조건이 True일 때만 True를 반환한다.
-    all_files_passed = all(
-        result.get("status") == "PASS"
-        for result in dataset_results.values()
+    모든 검사 결과를 하나의 딕셔너리로 합친 뒤
+    JSON 검증 보고서로 저장한다.
+    """
+    
+    # STEP 11-1. articles.parquet 상세 검증
+    # 기사 ID, 텍스트, 카테고리, 발행 시각, NER 리스트 정합성 검사 
+    articles_result = validate_articles()
+
+    # STEP 11-2. train history.parquet 상세 검증
+    # train 사용자의 과거 기사 목록과 시간 목록의 정합성 검사
+    train_history_result = validate_history(
+        split_name = "train",
+        file_path = TRAIN_HISTORY_PATH,
     )
 
-    # 모든 파일이 PASS라면 전체 결과도 PASS다.
-    if all_files_passed:
-        overall_status = "PASS"
+    # STEP 11-3. validation history.parquet 상세 검증
+    # validation 사용자의 과거 기사 목록과 시간 목록의 정합성 검사
+    validation_history_result = validate_history(
+        split_name="validation",
+        file_path=VALIDATION_HISTORY_PATH,
+    )
 
-    # 하나라도 FAIL이면 전체 결과는 FAIL이다.
-    else:
-        overall_status = "FAIL"
+    # STEP 11-4. train behavior.parquet 상세 검증
+    # train behavior의 사용자, 시간, 현재 기사와 클릭 기사 목록 검사
+    train_behaviors_result = validate_behaviors(
+        split_name="train",
+        file_path=TRAIN_BEHAVIORS_PATH,
+    )
 
-    # STEP 11-8. 최종 JSON 보고서 구성 
-    report: dict[str, Any] = {
-        # 전체 기본 검사 상태
-        "overall_status": overall_status,
-        # 파일별 상세 기본 검사 결과
-        "datasets": dataset_results,
+    # STEP 11-5. validation behaviors.parquet 상세 검증
+    # validation behavior의 사용자, 시간, 현재 기사와 클릭 기사 목록 검사
+    validation_behaviors_result = validate_behaviors(
+        split_name="validation",
+        file_path=VALIDATION_BEHAVIORS_PATH,
+    )
+
+    # STEP 11-6. 파일 간 참조 관계 검증
+    # history와 behaviors에서 참조하는 사용자/기사 ID가 실제 다른 파일에 존재하는지?
+    cross_file_result = validate_cross_file_references()
+
+    # STEP 11-7. 모든 검증 결과 하나로 묶기 
+    # 검증 이름을 key로 사용
+    validation_results = {
+        "articles": articles_result,
+        "train_history": train_history_result,
+        "validation_history": validation_history_result,
+        "train_behaviors": train_behaviors_result,
+        "validation_behaviors": validation_behaviors_result,
+        "cross_file_reference": cross_file_result,
     }
 
-    # STEP 11-9. JSON 보고서 저장 경로 생성 및 저장 
-    # 실제 저장 경로 : data/output/reports/raw_basic_validation.json
-    report_path = (
-        REPORT_DIR / "raw_basic_validation.json"
-    )
-    save_report(
-        report=report,
-        output_path=report_path,
-    )
+    # STEP 11-8. 각 검증 결과의 상태만 추출
+    # 예 : ["WARNING", "PASS", ...]
+    validation_statuses = [
+        result["status"]
+        for result in validation_results.values()
+    ]
 
-    # STEP 11-10. 전체 결과 터미널에 출력
+    # STEP 11-9. 전체 검증 상태 결정 
+    # 하나라도 FAIL이면 전체 검증을 FAIL로 처리한다.
+    #
+    # 파일 누락이나 필수 컬럼 누락처럼
+    # 이후 단계를 진행할 수 없는 문제가 있다는 뜻이다.
+    if "FAIL" in validation_statuses:
+        overall_status = "FAIL"
+
+    # FAIL은 없지만 WARNING이 하나라도 있으면
+    # 전체 검증을 WARNING으로 처리
+    # -> 데이터 파일은 사용할 수 있지 이후 전처리에서 제외 또는 정제가 필요하다는 뜻
+    elif "WARNING" in validation_statuses:
+        overall_status = "WARNING"
+
+    # 모든 결과가 PASS라면 전체 검증도 PASS
+    else:
+        overall_status = "PASS"   
+
+    # STEP 11-10. 최종 JSON 보고서 구성 
+    # cf. 총 몇 개의 검증을 실행했는지 계산
+    total_validation_count = len(validation_statuses)
+
+    # results에는 각 파일별 상세 검증 결과 저장 
+    report = {
+        # 전체 원본 데이터 검증 상태
+        "status": overall_status,
+
+        # 전체 검증 결과 요약
+        "summary": {
+            # 실행한 전체 검증 개수
+            "total_validation_count": int(
+                total_validation_count
+            )
+        },
+        # 각 데이터별 상세 검증 결과
+        "results": validation_results, 
+    }
+
+    # STEP 11-11. 검증 결과 터미널에 출력 
     print()
     print("=" * 70)
-    print(f"전체 결과: {overall_status}")
-    print(f"상세 보고서: {report_path}")
+    print("원본 데이터 전체 검증 결과")
     print("=" * 70)
 
+    # 각 검증 결과를 기존 출력 함수로 출력
+    for dataset_name, result in validation_results.items():
+        print(
+            f"{dataset_name}: "
+            f"{result['status']}"
+        )   
 
-    # STEP 11-12. 전체 검사 결과 반환
-    return report
+    # STEP 11-12. JSON 보고서 저장
+    # 기존 save_report() 함수 사용해 전체 검증 결과를 JSON 파일로 저장
+    report_path = (REPORT_DIR / "raw_validation_report.json")
+    save_report(report=report, output_path=report_path,)
+    
+    # 저장된 보고서 경로를 터미널에 출력
+    print(
+        "검증 보고서 : "
+        f"{report_path}"
+    ) 
+    print("=" * 70)
+
+    # STEP 11-13. 전체 검증 결과 반환
+    return report # 최종 보고서 딕셔너리 반환
 
 
 # STEP12. 이 파일을 직접 실행했을 때 검증 시작
