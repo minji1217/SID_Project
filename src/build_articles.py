@@ -19,6 +19,11 @@ TRAIN_USED_ARTICLE_IDS_PATH = (
     MODEL_INPUT_DIR/"train_used_article_ids.parquet"
 )
 
+# train 데이터만 기준으로 생성한 카테고리 매핑 저장 경로 
+CATEGORY_MAPPING_PATH = (
+    MODEL_INPUT_DIR/"category_mapping.parquet"
+)
+
 # STEP2. 모델에서 사용할 유효 기사 데이터 생성
 def build_valid_articles() -> dict[str, Any]:
     """
@@ -520,3 +525,208 @@ def collect_train_used_article_ids() -> dict[str,Any]:
             excluded_reference_article_ids
         )[:10],
     }    
+
+# STEP4. train 기준 카테고리 매핑 생성
+def build_category_mapping()-> dict[str, Any]:
+    """
+    train에서 실제 사용하는 기사만 기준으로 category_str을 model_category_id로 변환할 매핑 생성
+
+    매핑 원칙
+    -----------
+    1. <UNK> 카테고리는 model_category_id 0으로
+    2. train 기사에 등장한 정상 category_str만 매핑 수행
+    3. 정상 카테고리는 문자열 기준으로 정렬한 뒤 1부터 ID 부여
+    4. validation 데이터는 매핑 생성에 사용 x
+    5. 이후 train에서 보지 못한 카테고리는 <UNK>=0으로 처리
+    
+    생성 결과 예시
+    -------------
+    category_str | model_category_id
+    --------------------------------
+    <UNK>        | 0
+    culture      | 1
+    economy      | 2
+    sport        | 3    
+
+    """
+
+    # STEP 4-1. 출력 디렉토리 생성
+    create_output_directories()
+
+    # STEP 4-2. 선행 결과 파일 존재 여부 확인
+    # 카테고리 매핑 만들기 위해 필요한 유효 기사 파일과 train 사용 기사 ID 파일 먼저 생성됐는지 확인
+    if not ARTICLES_BASE_PATH.exists():
+        raise FileNotFoundError(
+            "articles_base.parquet 파일이 없습니다. "
+            "build_valid_articles()를 먼저 실행해야 합니다."
+        )
+
+    if not TRAIN_USED_ARTICLE_IDS_PATH.exists():
+        raise FileNotFoundError(
+            "train_used_article_ids.parquet 파일이 없습니다. "
+            "collect_train_used_article_ids()를 먼저 실행해야 합니다."
+        )
+
+    # STEP 4-3. 필요 데이터 읽기
+    # 전체 유효 기사에서 article_id와 category_str만 읽고
+    # train_used_article_ids에서는 실제 학습에 사용하는 기사 ID만 읽는다. 
+    article_categories = pl.read_parquet(
+        ARTICLES_BASE_PATH,
+        columns=[
+            "article_id",
+            "category_str",
+        ],
+    )
+
+    train_used_article_ids=pl.read_parquet(
+        TRAIN_USED_ARTICLE_IDS_PATH,
+        columns=[
+            "article_id",
+        ],
+    )
+
+    # STEP 4-4. train 사용 기사에 articles_base의 category_str 연결
+    # article_id | category_str
+    #     201    |   "정치"
+    #     202    |   "스포츠"
+  
+    
+    train_articles = (
+        train_used_article_ids.join(
+            article_categories,
+            on="article_id",
+            how="inner"
+        )
+    )
+
+    # STEP 4-5. category_str 정리
+    # null과 빈 문자열 동일하게 처리하고, 앞뒤 공백 차이로 같은 카테고리가 별도 ID 받는 것 방지
+    # "sport" "  sport" -> "sport"
+    # null -> ""
+
+    train_articles = train_articles.with_columns(
+        pl.col("category_str").cast(pl.Utf8, strict=False)
+        .fill_null("")
+        .str.strip_chars()
+        .alias("_clean_category_str")
+    )
+
+    # STEP 4-6. <UNK> 처리 대상 기사 수 계산
+    # category_str이 null, 빈문자열인 기사가 train 사용 기사 중 몇개 존재?
+    # 이 기사들은 이후 model_category_id 0으로 처리
+    train_unknown_category_article_count = (
+        train_articles.select(
+            pl.col("_clean_category_str")
+            .eq("") # 각 값이 빈 문자열인지 true/false로 
+            .sum()  # tru를 1, false를 0으로 세서 더함
+            .alias("count")
+        ).item()
+    )
+
+    # STEP 4-7. train의 정상 카테고리 추출
+    # train 기사에 등장한 비어 있지 않은 카테고리만 추출하고,
+    # 중복 제거하여 고유 카테고리 목록 만듦
+    # 문자열 기준으로 정렬해서 같은 카테고리에 같은 정수 ID가 부여되도록
+    known_categories = (
+        train_articles.filter(
+            pl.col("_clean_category_str") != ""
+        ).select(
+            pl.col("_clean_category_str").alias("category_str")
+        ).unique().sort("category_str")
+    )
+
+    # STEP 4-8. 실제 원본 카테고리에 <UNK> 존재 ? 
+    reserved_token_count = (
+        known_categories.filter(pl.col("category_str")=="<UNK>").height)
+    if reserved_token_count > 0:
+        raise ValueError("원본 category_str에 예약 문자열 <UNK> 존재")
+
+    # STEP 4-9. 정상 카테고리에 정수 ID 부여
+    # 정렬된 정상 카테고리에 1부터 시작하는 연속된 model_category_id 부여 
+    # 0은 <UNK>으로 사용하기에 offset=1로 
+    known_category_mapping= (
+        known_categories
+        .with_row_index(
+            name="model_category_id",
+            offset=1
+        ).select(
+            [
+                "category_str",
+                "model_category_id"
+            ]
+        ).with_columns(
+            pl.col("model_category_id").cast(pl.Int32)
+        )
+    )
+
+    # STEP 4-10. <UNK>=0 매핑 
+    # train에서 카테고리가 비어있거나, 이후 validation에만 등장하는 
+    # 새 카테고리를 model_cateogry_id 0으로 변환할 수 있게 
+    unknown_category_mapping = pl.DataFrame(
+        {
+            "category_str": pl.Series(
+                name="category_str",
+                values=[
+                    "<UNK>",
+                ],
+                dtype=pl.Utf8
+            ),
+            "model_category_id": pl.Series(
+                name="model_category_id",
+                values=[
+                    0,
+                ],
+                dtype=pl.Int32
+            )
+        }
+    )
+
+    # STEP 4-11. 최종 카테고리 매핑 결합
+    # <UNK>=0행과 train에서 추출한 정상 카테고리 매핑을 하나의 최종 매핑 테이블로
+    category_mapping = pl.concat(
+        [
+            unknown_category_mapping,
+            known_category_mapping,
+        ], how= "vertical",
+    )
+
+    # STEP 4-12. 카테고리 매핑 저장
+    # 이후 전체 기사에 model_category_id 붙일 때 
+    # 동일한 train 기준 매핑 재사용할 수 있도록 저장
+    category_mapping.write_parquet(
+        CATEGORY_MAPPING_PATH,
+        compression="zstd",
+    )
+
+    # STEP 4-13. 실행 결과 반환
+    # 매핑 생성에 사용된 기사 수와 카테고리 수, 저장 위치 출력
+    return {
+        # 함수가 정상적으로 끝났음을 의미한다.
+        "status": "SUCCESS",
+
+        # 생성한 카테고리 매핑 파일 경로
+        "output_path": str(
+            CATEGORY_MAPPING_PATH
+        ),
+
+        # 매핑 생성 기준이 된 train 사용 기사 수
+        "train_used_article_count": int(
+            train_used_article_ids.height
+        ),
+
+        # 카테고리가 비어 있어 <UNK>=0으로 처리될 train 기사 수
+        "train_unknown_category_article_count": int(
+            train_unknown_category_article_count
+        ),
+
+        # <UNK>를 제외한 train의 정상 고유 카테고리 수
+        "known_category_count": int(
+            known_category_mapping.height
+        ),
+
+        # <UNK> 행까지 포함한 최종 매핑 행 수
+        "mapping_row_count": int(
+            category_mapping.height
+        ),
+    }    
+
