@@ -29,6 +29,11 @@ ARTICLES_WITH_CATEGORY_PATH = (
     MODEL_INPUT_DIR/"articles_with_category.parquet"
 )
 
+# E5 임베딩 모델에 입력할 기사 순서와 텍스트 저장 경로 
+ARTICLE_EMBEDDING_INPUT_PATH = (
+    MODEL_INPUT_DIR / "article_embedding_input.parquet"
+)
+
 # STEP2. 모델에서 사용할 유효 기사 데이터 생성
 def build_valid_articles() -> dict[str, Any]:
     """
@@ -999,3 +1004,141 @@ def apply_category_mapping_to_articles() -> dict[str, Any]:
             unseen_category_examples
         ),
     }
+
+# STEP 6. 기사 임베딩 입력 데이터 생성
+def build_article_embedding_input() -> dict[str, Any]:
+    """
+    전체 유효 기사를 article_id 기준으로 정렬하고,
+    각 기사에 고정된 embedding_row 부여 
+
+    생성 컬럼
+    ---------
+    embedding_row : 임베딩 배열에서 해당 기사가 저장될 행 번호(0부터)
+    article_id : 원본 기사 id
+    model_text : E5 임베딩 모델에 입력할 최종 텍스트
+
+    처리 원칙
+    ---------
+    1. train과 validation 기사를 따로 임베딩하지 않는다.
+    2. 전체 유효 기사 20,719개를 한 번만 임베딩한다.
+    3. article_id 기준으로 정렬해 실행할 때마다 순서를 고정한다.
+    4. embedding_row와 article_id의 관계를 이후 모든 단계에서 유지한다.
+    """
+
+    # STEP 6-1. 출력 디렉토리 생성
+    create_output_directories()
+
+    # STEP 6-2. 선행 결과 파일 존재 여부 확인
+    if not ARTICLES_WITH_CATEGORY_PATH.exists():
+        raise FileNotFoundError(
+            "articles_with_category.parquet 파일이 없습니다. "
+            "apply_category_mapping_to_articles()를 먼저 실행해야 합니다."
+        )
+
+    # STEP 6-3. 임베딩에 필요한 기사 컬럼 읽기
+    # 기사 ID와 모델 입력 텍스트만 읽기
+    articles=pl.read_parquet(
+        ARTICLES_WITH_CATEGORY_PATH,
+        columns=[
+            "article_id",
+            "model_text",
+        ]
+    )
+
+    # STEP 6-4. article_id 기준으로 기사 순서 고정
+    # 프로그램 여러 번 실행해도 동일한 기사가 동일한 embedding_row 받도록 article_id로 정렬
+    articles = articles.sort(
+        "article_id",
+    )
+
+    # STEP 6-5. embedding_row 부여
+    # 임베딩 배열의 실제 행 번호와 article_id 연결 위해 
+    # 0부터 시작하는 embedding_row 만듦
+    # 예:
+    # embedding_row=0 -> 첫 번째 기사의 임베딩
+    # embedding_row=1 -> 두 번째 기사의 임베딩
+    article_embedding_input = (
+        articles
+        .with_row_index(
+            name="embedding_row",
+            offset=0,
+        )
+        .with_columns(
+            # 이후 NumPy 배열의 행 인덱스로 사용하기 쉽도록
+            # embedding_row 타입을 Int64로 통일한다.
+            pl.col("embedding_row")
+            .cast(pl.Int64)
+        )
+        .select(
+            [
+                "embedding_row",
+                "article_id",
+                "model_text",
+            ]
+        )
+    )
+
+    # STEP 6-6. 임베딩 입력 파일 저장
+    # 별도의 embed_articles.py에서 E5 임베딩을 생성할 때 
+    # 동일한 기사 순서와 model_text 사용할 수 있게 저장
+    article_embedding_input.write_parquet(
+        ARTICLE_EMBEDDING_INPUT_PATH,
+        compression="zstd",
+    )
+
+    # STEP 6-7. 실행 결과 반환
+    return {
+        # 함수가 정상적으로 완료됐음을 의미한다.
+        "status": "SUCCESS",
+
+        # 생성된 임베딩 입력 파일 경로
+        "output_path": str(
+            ARTICLE_EMBEDDING_INPUT_PATH
+        ),
+
+        # 임베딩을 생성할 전체 유효 기사 수
+        "article_count": int(
+            article_embedding_input.height
+        ),
+
+        # 첫 번째 임베딩 행 번호
+        "first_embedding_row": (
+            int(
+                article_embedding_input
+                .get_column("embedding_row")
+                .min()
+            )
+            if article_embedding_input.height > 0
+            else None
+        ),
+
+        # 마지막 임베딩 행 번호
+        "last_embedding_row": (
+            int(
+                article_embedding_input
+                .get_column("embedding_row")
+                .max()
+            )
+            if article_embedding_input.height > 0
+            else None
+        ),
+
+        # 첫 번째 article_id
+        "first_article_id": (
+            article_embedding_input
+            .get_column("article_id")
+            .first()
+            if article_embedding_input.height > 0
+            else None
+        ),
+
+        # 마지막 article_id
+        "last_article_id": (
+            article_embedding_input
+            .get_column("article_id")
+            .last()
+            if article_embedding_input.height > 0
+            else None
+        ),
+    }
+
