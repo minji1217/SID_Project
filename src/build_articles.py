@@ -24,6 +24,11 @@ CATEGORY_MAPPING_PATH = (
     MODEL_INPUT_DIR/"category_mapping.parquet"
 )
 
+# 전체 유효 기사에 카테고리 ID 연결한 결과 저장 경로 
+ARTICLES_WITH_CATEGORY_PATH = (
+    MODEL_INPUT_DIR/"articles_with_category.parquet"
+)
+
 # STEP2. 모델에서 사용할 유효 기사 데이터 생성
 def build_valid_articles() -> dict[str, Any]:
     """
@@ -730,3 +735,267 @@ def build_category_mapping()-> dict[str, Any]:
         ),
     }    
 
+# STEP 5. 전체 유효 기사에 카테고리 매핑 적용
+def apply_category_mapping_to_articles() -> dict[str, Any]:
+    """
+    train 기사만 기준으로 만든 category_mapping.parquet을
+    전체 유효 기사에 적용
+
+    적용 대상
+    ----------
+    articles_base.parquet에 포함된 전체 유효 기사
+
+    적용 규칙
+    ----------
+    1. train에서 발견된 category_str이면 기존 ID 사용
+    2. train에서 발견되지 않은 category_str이면 0 사용
+    3. category_str이 null 또는 빈 문자열이어도 0 사용
+    4. 원본 category_str 컬럼은 그대로 보존
+    5. model_category_id 컬럼 새로 추가 
+
+    결과 예시
+    category_str | model_category_id
+    --------------------------------
+    economy      | 1
+    sport        | 2
+    new_category | 0
+    null         | 0    
+    """
+
+    # STEP 5-1. 출력 디렉토리 생성
+    create_output_directories()
+
+    # STEP 5-2. 선행 결과 파일 존재 여부 확인
+    if not ARTICLES_BASE_PATH.exists():
+        raise FileNotFoundError(
+            "articles_base.parquet 파일이 없습니다. "
+            "build_valid_articles()를 먼저 실행해야 합니다."
+        )
+
+    if not CATEGORY_MAPPING_PATH.exists():
+        raise FileNotFoundError(
+            "category_mapping.parquet 파일이 없습니다. "
+            "build_category_mapping()을 먼저 실행해야 합니다."
+        )
+
+    # STEP 5-3. 전체 유효 기사 읽기 
+    # train, val에서 공통으로 사용할 전체 유효 기사 20,719개 읽기 
+    # 순서 유지하도록 순서 컬럼 함께 생성 
+    articles=(
+        pl.read_parquet(
+            ARTICLES_BASE_PATH
+        ).with_row_index(
+            name="_article_order"
+        )
+    )
+
+    # STEP 5-4. train 기준 카테고리 매핑 읽기
+    # train 기사만 기준으로 만든 category_str과 model_category_id 매핑 읽기
+    category_mapping = pl.read_parquet(
+        CATEGORY_MAPPING_PATH,
+        columns=[
+            "category_str",
+            "model_category_id",
+        ]
+    )
+
+    # STEP 5-5. 정상 카테고리 매핑만 분리 
+    # <UNK>=0행은 실제 category_str과 직접 연결하지않고
+    # 매핑되지 않은 모든 기사에 나중에 0 채우는 용도로 사용
+    known_category_mapping = (
+        category_mapping.
+        filter(
+            pl.col("category_str")!="<UNK>"
+        ).rename(
+            {
+                "category_str": "_clean_category_str",
+            }
+        )
+    )
+
+    # STEP 5-6. 전체 기사의 category_str 정리
+    # 예:
+    # "sport"   -> "sport"
+    # " sport " -> "sport"
+    # null      -> ""
+    articles = articles.with_columns(
+        pl.col("category_str")
+        .cast(
+            pl.Utf8,
+            strict=False,
+        )
+        .fill_null("")
+        .str.strip_chars()
+        .alias("_clean_category_str")
+    )
+
+    # STEP 5-7. 전체 기사에 train 카테고리 매핑 연결
+    # 전체 유효 기사의 정리된 category_str을 기준으로
+    # train에서 만든 model_category_id를 붙인다.
+    articles_with_category = (
+        articles
+        .join(
+            known_category_mapping,
+            on="_clean_category_str",
+            how="left",
+        )
+    )    
+
+    # STEP 5-8. 매핑되지않은 카테고리는 <UNK>=0으로 처리
+    # join 결과 null이 된 행은 예약 ID인 0으로 변환
+    articles_with_category = (
+        articles_with_category
+        .with_columns(
+            pl.col("model_category_id")
+            .fill_null(0)
+            .cast(pl.Int32)
+        )
+    )
+
+    # STEP 5-9. 빈 카테고리 기사 수 계산
+    # model_category_id 0으로 처리된 기사 수 확인
+    blank_category_article_count = (
+        articles_with_category
+        .filter(
+            pl.col("_clean_category_str") == ""
+        )
+        .height
+    )
+
+    # STEP 5-10. train에서 보지 못한 카테고리 확인
+    # validation에서만 사용되는 새 카테고리나
+    # train 학습 기사엔 등장하지 않은 카테고리 포함 가능
+    unseen_category_articles = (
+        articles_with_category
+        .filter(
+            (
+                pl.col("_clean_category_str") != ""
+            )
+            & (
+                pl.col("model_category_id") == 0
+            )
+        )
+    )
+
+    # STEP 5-11. 보지 못한 카테고리 통계 계산
+    # train에서 보지 못한 카테고리에 해당하는 기사 수와 
+    # 실제 고유 카테고리 종류 수 각각 계산 
+    unseen_category_article_count = (
+        unseen_category_articles.height 
+    ) 
+
+    unseen_category_count = (
+        unseen_category_articles.
+        select(
+            "_clean_category_str"
+        ).unique().height
+    )
+
+    # train에서 보지 못한 카테고리 직접 확인 (최대 10개)
+    unseen_category_examples = (
+        unseen_category_articles
+        .select(
+            "_clean_category_str"
+        )
+        .unique()
+        .sort(
+            "_clean_category_str"
+        )
+        .head(10)
+        .get_column(
+            "_clean_category_str"
+        )
+        .to_list()
+    )
+
+    # STEP 5-12. 알려진 카테고리(우리가 매핑한)와 <UNK> 기사 수 계산
+    known_category_article_count = (
+        articles_with_category
+        .filter(
+            pl.col("model_category_id") != 0
+        )
+        .height
+    )
+
+    unknown_category_article_count = (
+        articles_with_category
+        .filter(
+            pl.col("model_category_id") == 0
+        )
+        .height
+    )
+
+    # STEP 5-13. 임시 컬럼 제거
+    # 정리용 컬럼과 순서보존용 컬럼 제거 
+    # 예: " sport", "sport" -> "sport"
+    final_articles = (
+        articles_with_category
+        .sort(
+            "_article_order"
+        )
+        .drop(
+            [
+                "_article_order",
+                "_clean_category_str",
+            ]
+        )
+    )
+
+    # STEP 5-14. 전체 기사 결과 저장 
+    # 이후 임베딩, 이벤트 클러스터링, RQ-VAE 입력 생성에서
+    # 모든 기사가 동일한 model_category_id 사용하도록 저장
+    final_articles.write_parquet(
+        ARTICLES_WITH_CATEGORY_PATH,
+        compression="zstd",
+    )
+
+    # STEP 5-15. 실행 결과 반환
+    return {
+        # 함수가 정상적으로 완료됐음을 의미한다.
+        "status": "SUCCESS",
+
+        # 생성된 전체 기사 카테고리 파일 경로
+        "output_path": str(
+            ARTICLES_WITH_CATEGORY_PATH
+        ),
+
+        # 카테고리 매핑을 적용한 전체 유효 기사 수
+        "article_count": int(
+            final_articles.height
+        ),
+
+        # <UNK>를 포함한 전체 카테고리 매핑 행 수
+        "mapping_row_count": int(
+            category_mapping.height
+        ),
+
+        # train에서 학습한 정상 카테고리 ID를 받은 기사 수
+        "known_category_article_count": int(
+            known_category_article_count
+        ),
+
+        # model_category_id 0으로 처리된 전체 기사 수
+        "unknown_category_article_count": int(
+            unknown_category_article_count
+        ),
+
+        # category_str 자체가 비어 있어서 0으로 처리된 기사 수
+        "blank_category_article_count": int(
+            blank_category_article_count
+        ),
+
+        # category_str은 있지만 train에서 보지 못한 기사 수
+        "unseen_category_article_count": int(
+            unseen_category_article_count
+        ),
+
+        # train에서 보지 못한 고유 카테고리 종류 수
+        "unseen_category_count": int(
+            unseen_category_count
+        ),
+
+        # train에서 보지 못한 카테고리 예시 최대 10개
+        "unseen_category_examples": (
+            unseen_category_examples
+        ),
+    }
