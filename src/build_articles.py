@@ -1,5 +1,12 @@
 import polars as pl
 from typing import Any 
+import numpy as np
+import torch
+import torch.nn.functional as F
+
+from rich.progress import track
+from transformers import AutoModel, AutoTokenizer
+
 from src.config import(
     ARTICLES_PATH,
     MODEL_INPUT_DIR,
@@ -33,6 +40,24 @@ ARTICLES_WITH_CATEGORY_PATH = (
 ARTICLE_EMBEDDING_INPUT_PATH = (
     MODEL_INPUT_DIR / "article_embedding_input.parquet"
 )
+
+# 실제 768차원 기사 임베딩 배열 저장 경로
+ARTICLE_EMBEDDINGS_PATH = (
+    MODEL_INPUT_DIR / "article_embeddings.npy"
+)
+
+# 기사 임베딩에 사용할 허깅페이스 모델 이름
+ARTICLE_EMBEDDING_MODEL_NAME = (
+    "intfloat/multilingual-e5-base"
+)
+
+# 기사 텍스트를 토큰화할 때 사용할 최대 토큰 길이
+ARTICLE_EMBEDDING_MAX_LENGTH = 256
+
+# 한 번에 모델에 전달할 기사 수
+# 메모리 부족 오류가 발생하면 16에서 8 또는 4로 줄인다.
+ARTICLE_EMBEDDING_BATCH_SIZE = 16
+
 
 # STEP2. 모델에서 사용할 유효 기사 데이터 생성
 def build_valid_articles() -> dict[str, Any]:
@@ -1142,3 +1167,431 @@ def build_article_embedding_input() -> dict[str, Any]:
         ),
     }
 
+# 평균 pooling 보조 함수 정의
+def _average_pool(
+    last_hidden_state: torch.Tensor,
+    attention_mask:torch.Tensor,
+)-> torch.Tensor:
+    """
+    padding 토큰을 제외하고 실제 텍스트 토큰의 벡터만 평균 낸다.
+
+    파라미터
+    ---------
+    last_hidden_state : E5 모델이 각 토큰에 대해 출력한 벡터
+    -> 형태 : [batch_size, token_length, embedding_dim]
+    attention_mask : 실제 토큰은 1, padding 토큰은 0으로 표시한 값
+    -> 형태 : [batch_size, token_length]
+
+    반환값
+    -------
+    torch.Tensor : 문장별 평균 임베딩
+    -> 형태 : [batch_size, embedding_dim]
+    """
+
+    # attention_mask가 0인 padding 위치를 False로 변환하고,
+    # 임베딩 차원에 맞게 마지막 축을 하나 추가
+    expanded_attention_mask = (
+        attention_mask.unsqueeze(-1).bool()
+    )
+
+    # padding 토큰의 벡터는 평균 계산에 포함되지 않도록
+    # 모든 값을 0으로 변경한다.
+    masked_hidden_state = (
+        last_hidden_state
+        .masked_fill(
+            ~expanded_attention_mask,
+            0.0,
+        )
+    )
+
+    # 각 문장에 실제로 존재하는 토큰 수를 계산한다.
+    token_count = (
+        attention_mask
+        .sum(dim=1)
+        .unsqueeze(-1)
+        .clamp(min=1)
+    )
+
+    # 실제 토큰의 벡터를 모두 더한 후
+    # 실제 토큰 수로 나누어 문장 임베딩을 만든다.
+    return (
+        masked_hidden_state.sum(dim=1)
+        / token_count
+    )
+
+# STEP 6. 전체 기사 텍스트 임베딩 생성
+def generate_article_embeddings(
+        batch_size: int = ARTICLE_EMBEDDING_BATCH_SIZE,
+)-> dict[str, Any]:
+    """
+    전체 유효 기사의 model_text를 multilingual-e5-base에 입력해
+    768차원 L2 정규화 임베딩 생성
+
+    처리 순서 
+    ------------
+    1. article_embedding_input.parquet 읽음
+    2. embedding_row가 0부터 연속적으로 부여됐는지 확인
+    3. model_text가 비어있지 않고 query: 접두어 가지는지 확인
+    4. multilingual-e5-base 모델과 tokenizer 불러옴
+    5. model_text를 batch 단위로 토큰화
+    6. 모델의 토큰별 출력에 average pooling 적용
+    7. 각 기사 임베딩 L2 정규화
+    8. float32 Numpy 배열로 저장 
+
+    출력
+    ----
+    article_embeddings.npy
+
+    배열 형태
+    ---------
+    [기사 수, 임베딩 차원]
+
+    연결 방법
+    ---------
+    article_embeddings[embedding_row]
+    → 해당 embedding_row를 가진 기사의 임베딩
+    """
+    # STEP 6-1. 출력 디렉터리 생성
+    create_output_directories()
+
+    # STEP 6-2. batch_size 검사
+    if batch_size <= 0:
+        raise ValueError(
+            "batch_size는 1 이상의 정수여야 합니다."
+        )
+
+    # STEP 6-3. 임베딩 입력 파일 존재 여부 확인
+    if not ARTICLE_EMBEDDING_INPUT_PATH.exists():
+        raise FileNotFoundError(
+            "article_embedding_input.parquet 파일이 없습니다. "
+            "build_article_embedding_input()을 먼저 실행해야 합니다."
+        )
+
+    # STEP 6-4. 임베딩 입력 데이터 읽기
+    embedding_input = pl.read_parquet(
+        ARTICLE_EMBEDDING_INPUT_PATH,
+        columns=[
+            "embedding_row",
+            "article_id",
+            "model_text",
+        ],
+    )
+
+    article_count = embedding_input.height
+
+    # 임베딩 대상 기사가 하나도 없으면 모델을 실행할 수 없다.
+    if article_count == 0:
+        raise ValueError(
+            "임베딩을 생성할 기사가 없습니다."
+        )
+    
+    # STEP 6-5. embedding_row 연속성 확인
+    # embedding_row가 0부터 기사수-1까지 연속되어야
+    # numpy 배열의 실제 행 번호와 일치할 수 있음 
+    actual_embedding_rows = (
+        embedding_input
+        .get_column("embedding_row")
+        .to_list()
+    )
+
+    expected_embedding_rows = list(
+        range(article_count)
+    )
+
+    if actual_embedding_rows != expected_embedding_rows:
+        raise ValueError(
+            "embedding_row가 0부터 연속적으로 구성되어 있지 않습니다."
+        )
+    
+    # STEP 6-6. model_text 검사
+    # null 또는 빈 문자열은 정상적인 임베딩 만들 수 없기에 이중확인
+    model_text_values = (
+        embedding_input
+        .get_column("model_text")
+        .to_list()
+    )
+
+    null_model_text_count = sum(
+        text is None
+        for text in model_text_values
+    )
+
+    if null_model_text_count > 0:
+        raise ValueError(
+            "model_text에 null 값이 존재합니다. "
+            f"null 개수: {null_model_text_count}"
+        )
+
+    # null 검사를 통과했으므로 이후 처리에서는 문자열로 사용한다.
+    model_texts = [
+        str(text)
+        for text in model_text_values
+    ]
+
+    empty_model_text_count = sum(
+        text.strip() == ""
+        for text in model_texts
+    )
+
+    if empty_model_text_count > 0:
+        raise ValueError(
+            "model_text에 빈 문자열이 존재합니다. "
+            f"빈 문자열 개수: {empty_model_text_count}"
+        )
+
+    # STEP 6-7. E5 query 접두어 확인
+    # 모든 입력 텍스트가 query: 접두어 형식인지 확인
+    missing_query_prefix_count = sum(
+        not text.startswith("query: ")
+        for text in model_texts
+    )
+
+    if missing_query_prefix_count > 0:
+        raise ValueError(
+            "query: 접두어가 없는 model_text가 존재합니다. "
+            f"문제 행 수: {missing_query_prefix_count}"
+        )
+
+    # STEP 6-8. 실행 장치 선택 
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "cpu"
+    )
+
+    # STEP 6-9. tokenizer와 E5 모델 로드
+    # model_text를 토큰으로 변환할 tokenizer와 실제 768차원 임베딩 생성할 E5 모델 불러옴
+    tokenizer = AutoTokenizer.from_pretrained(
+        ARTICLE_EMBEDDING_MODEL_NAME
+    )
+
+    model = AutoModel.from_pretrained(
+        ARTICLE_EMBEDDING_MODEL_NAME
+    )
+
+    # 모델을 CPU 또는 GPU 장치로 이동한다.
+    model = model.to(device)
+
+    # dropout과 같은 학습용 동작을 비활성화하고
+    # 추론 전용 상태로 전환한다.
+    model.eval()
+
+    # 모델 설정에서 실제 출력 임베딩 차원을 가져온다.
+    embedding_dim = int(
+        model.config.hidden_size
+    )
+
+    # STEP 6-10. 최종 임베딩 배열 공간 생성
+    # 모든 기사 임베딩 저장할 Numpy 배열 공간 미리 만들기
+    # embedding_row가 곧 배열 행 번호이기에 각 batch의 결과를 해당 위치에 바로 저장
+    article_embeddings= np.empty(
+        (article_count,
+        embedding_dim,
+    ), dtype=np.float32,)
+
+    # STEP 6-11. batch 단위 임베딩 생성
+    batch_start_positions=range(0, article_count, batch_size)
+
+    # track : 진행바 화면에 그려줌 
+    for start_index in track(batch_start_positions, description="기사 임베딩 생성 중...",):
+        end_index = min(start_index+batch_size, article_count,)
+
+        # 현재 batch에 포함되는 기사 텍스트 가져옴
+        batch_texts=model_texts[
+            start_index:end_index
+        ]
+
+        # STEP 6-11-1. 기사 텍스트 토큰화
+        # 문자열을 E5 모델이 처리할 수 있는 token ID와 attention mask 형태로 변환
+        tokenized_batch = tokenizer(
+            batch_texts,
+            max_length = ARTICLE_EMBEDDING_MAX_LENGTH,
+            padding = True,
+            truncation=True,
+            return_tensors="pt", # 파이토치 
+        )
+        # "input_ids", "attention_mask" 형태 
+        # tensor([[101, 4521,...],...]) 
+        # tensor([[1,1,...],...])
+
+
+        # tokenizer 출력도 모델과 같은 CPU 또는 GPU로 
+        tokenized_batch = {
+            key: value.to(device)
+            for key, value in tokenized_batch.items()
+        }
+
+        # STEP 6-11.12 E5 모델 추론
+        # 학습용 gradient 만들지 않고 토큰별 임베딩만 계산
+        with torch.inference_mode():
+            model_output = model(
+                **tokenized_batch
+            )
+
+            # STEP 6-11-3. average pooling 
+            # 모델은 각 토큰마다 하나의 벡터 출력하므로
+            # padding 제외한 실제 토큰 벡터를 평균 내
+            # 기사 하나당 벡터 하나로 만듦 
+            batch_embeddings = _average_pool(
+                last_hidden_state=(
+                    model_output.last_hidden_state
+                ),
+                attention_mask=(
+                    tokenized_batch["attention_mask"]
+                ),
+            )
+
+            # STEP 6-11-4. L2 정규화
+            # 각 임베딩 벡터의 길이를 1로 맞춤
+            batch_embeddings = F.normalize(
+                batch_embeddings,
+                p=2, # L2
+                dim=1, # 기사(행)마다 정규화 
+            )
+
+        # STEP 6-11-5. Numpy float32 배열로 변환
+        # GPU 또는 CPU의 파이토치 텐서를 cpu로 옮기고,
+        # 최종 저장 형식인 numpy float32로 변환
+        batch_embeddings_numpy = (
+            batch_embeddings
+            .detach()
+            .cpu()
+            .numpy()
+            .astype(
+                np.float32,
+                copy=False,
+            )
+        )
+
+        # 현재 batch의 결과를 embedding_row와 동일한 위치에 저장
+        article_embeddings[
+            start_index:end_index
+        ]= batch_embeddings_numpy 
+
+    # STEP 6-12. 임베딩 배열 형태 확인
+    # 1. 생성된 임베딩 행 수 = 기사 수?
+    # 2. 열 수 = 모델 출력 차원?
+    expected_shape = (
+        article_count,
+        embedding_dim,
+    )
+
+    if article_embeddings.shape != expected_shape:
+        raise ValueError(
+            "기사 임베딩 배열의 형태가 예상과 다릅니다. "
+            f"예상: {expected_shape}, "
+            f"실제: {article_embeddings.shape}"
+        )
+
+    # STEP 6-13. NaN과 무한대 검사 
+    # NaN 또는 무한대가 포함된 벡터는 이후 클러스터링이나
+    # 모델 학습을 망가뜨릴 수 있으므로 저장 전에 차단
+    if not np.isfinite(
+        article_embeddings
+    ).all():
+        raise ValueError(
+            "기사 임베딩에 NaN 또는 무한대 값이 존재합니다."
+        )
+
+    # STEP 6-14. L2 정규화 결과 확인
+    # 모든 기사 벡터의 길이가 약 1인지 확인 
+    embedding_norms = np.linalg.norm(
+        article_embeddings,
+        axis=1,
+    )
+
+    minimum_l2_norm = float(
+        embedding_norms.min()
+    )
+
+    maximum_l2_norm = float(
+        embedding_norms.max()
+    )
+
+    if not np.allclose(
+        embedding_norms,
+        1.0,
+        atol=1e-4,
+    ):
+        raise ValueError(
+            "일부 기사 임베딩의 L2 norm이 1이 아닙니다. "
+            f"최소 norm: {minimum_l2_norm}, "
+            f"최대 norm: {maximum_l2_norm}"
+        )
+
+    # STEP 6-15. 실제 임베딩 배열 저장
+    # .npy로 저장 
+    np.save(
+        ARTICLE_EMBEDDINGS_PATH,
+        article_embeddings,
+        allow_pickle=False, # 순수 숫자 행렬만 저장 
+    )
+
+    # STEP 6-16. 실행 결과 반환
+    return {
+        # 함수가 정상적으로 완료됐음을 의미한다.
+        "status": "SUCCESS",
+
+        # 생성한 실제 기사 임베딩 파일 경로
+        "output_path": str(
+            ARTICLE_EMBEDDINGS_PATH
+        ),
+
+        # 사용한 E5 모델 이름
+        "model_name": (
+            ARTICLE_EMBEDDING_MODEL_NAME
+        ),
+
+        # 실제 추론에 사용한 장치
+        "device": str(
+            device
+        ),
+
+        # 임베딩 생성에 사용한 batch 크기
+        "batch_size": int(
+            batch_size
+        ),
+
+        # 토큰화 최대 길이
+        "max_length": int(
+            ARTICLE_EMBEDDING_MAX_LENGTH
+        ),
+
+        # 임베딩이 생성된 기사 수
+        "article_count": int(
+            article_count
+        ),
+
+        # 기사 한 개당 임베딩 차원
+        "embedding_dim": int(
+            embedding_dim
+        ),
+
+        # 최종 NumPy 배열 형태
+        "embedding_shape": [
+            int(article_embeddings.shape[0]),
+            int(article_embeddings.shape[1]),
+        ],
+
+        # 최종 저장 자료형
+        "dtype": str(
+            article_embeddings.dtype
+        ),
+
+        # L2 정규화 후 가장 작은 벡터 길이
+        "minimum_l2_norm": (
+            minimum_l2_norm
+        ),
+
+        # L2 정규화 후 가장 큰 벡터 길이
+        "maximum_l2_norm": (
+            maximum_l2_norm
+        ),
+
+        # 저장된 파일 크기
+        "file_size_mb": round(
+            ARTICLE_EMBEDDINGS_PATH.stat().st_size
+            / (1024 * 1024),
+            2,
+        ),
+    }
