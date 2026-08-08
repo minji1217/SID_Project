@@ -38,7 +38,7 @@ from src.config import (
     EVENT_TIME_WINDOW_HOURS,
     ARTICLE_MASTER_PATH,
 
-    EVENT_MAX_ENTITY_DF_RAIO, 
+    EVENT_MAX_ENTITY_DF_RATIO, 
 
     create_output_directories,
 )
@@ -1610,6 +1610,7 @@ def build_article_events(
         time_window_hours: int=(
             EVENT_TIME_WINDOW_HOURS
         ),
+        max_entity_df_ratio:float=(EVENT_MAX_ENTITY_DF_RATIO)
 )-> dict[str, Any]:
     """
     train/validation 기사에 실제 사건 event_id 부여 
@@ -1633,6 +1634,13 @@ def build_article_events(
         raise ValueError(
             "time_window_hours는 "
             "0보다 커야 합니다."
+        )
+
+    # 0% 이하 또는 100% 초과와 같은 잘못된 비율 차단
+    if not (0.0 < max_entity_df_ratio <= 1.0):
+        raise ValueError(
+            "max_entity_df_ratio는 "
+            "0보다 크고 1 이하여야 합니다."    
         )
 
     create_output_directories()
@@ -1707,34 +1715,114 @@ def build_article_events(
     train_articles.sort(key = lambda article: (article["published_time"], article["article_id"]))
 
     if not train_articles: raise ValueError("Train 사건 생성에 사용할 유효 기사 존재하지 않습니다.")
-
+    
     # STEP 7-6-5. Train Entity IDF 계산
     # entity -> PER:trump 이 정규화된 개체로 계산 
+    train_article_count = len(train_articles)
     train_entity_sets = [ article["entity_set"] for article in train_articles]
 
     (entity_idf, entity_documnet_frequency, unseen_entity_idf,) = \
         _build_train_entity_idf(train_entity_sets)
 
+    # 너무 많은 기사에서 반복 등장해서 구체적인 사건 구분력 낮은 entity 찾기
+    # 예 : ORG::ekstra bladet
+    # 원본 ner_clusters/entity_groups에선 삭제 x
+    # event sim 계산에서만 제외
+    high_df_entities: set[str] = set()
+    for(
+        entity, document_frequency,
+    ) in entity_documnet_frequency.items():
+        entity_df_ratio = (document_frequency / train_article_count)
+        if(entity_df_ratio >= max_entity_df_ratio):
+            high_df_entities.add(entity)
+
     # entity_idf.items() 딕셔너리를 (키,값)쌍의 리스트처럼 순회 
     # [("PER::zlatan", 1.405), ("LOC::sverige", 1.405), ("ORG::ac milan", 1.693), ("PER::messi", 2.099)]
     
-    
-    entity_idf_rows = [{
-        "entity": entity, 
-        "document_frequency": int(entity_documnet_frequency[entity]),
-        "idf": float(idf_value)
-        # entity의 알파벳 순으로 정렬 
-    } for entity, idf_value in sorted(entity_idf.items(), key=lambda item:item[0])]
+    # entity idf 저장 행 생성 
+    # build_validtion.py에서도 동일한 train high-df entity 기준을 재사용할 수 있도록
+    # df 비율과 제외 여부까지 저장 
 
-    # entity가 하나도 없는 경우도 고려 
+    entity_idf_rows = []
+
+    for (
+        entity,
+        idf_value,
+    ) in sorted(
+        entity_idf.items(),
+        key=lambda item: item[0],
+    ):
+
+        document_frequency = int(
+            entity_documnet_frequency[
+                entity
+            ]
+        )
+
+        document_frequency_ratio = (
+            document_frequency
+            / train_article_count
+        )
+
+        entity_idf_rows.append(
+            {
+                "entity": entity,
+
+                "document_frequency": (
+                    document_frequency
+                ),
+
+                "document_frequency_ratio": float(
+                    document_frequency_ratio
+                ),
+
+                "idf": float(
+                    idf_value
+                ),
+
+                # Event 유사도에서 제외되는 Entity인지
+                "is_high_df": (
+                    entity
+                    in high_df_entities
+                ),
+            }
+        )
+
     entity_idf_df = pl.DataFrame(
         entity_idf_rows,
         schema={
             "entity": pl.Utf8,
             "document_frequency": pl.Int64,
+
+            
+            "document_frequency_ratio": pl.Float64,
+
             "idf": pl.Float64,
+
+            
+            "is_high_df": pl.Boolean,
         },
     )
+    
+    # Event 계산용 Entity Set 생성
+    # 원본 entity_set은 그대로 유지하고, high-df entity만 제외한 별도 집합 생성
+    # 예:
+    #
+    # 원본
+    # {
+    #     "ORG::ekstra bladet",
+    #     "PER::zlatan ibrahimovic",
+    #     "ORG::ac milan",
+    # }
+    #
+    # Event 계산용
+    # {
+    #     "PER::zlatan ibrahimovic",
+    #     "ORG::ac milan",
+    # }
+
+    for article in train_articles:
+        article["clustering_entity_set"] = article["entity_set"] - high_df_entities
 
 
     # entity | document_frequency | idf
@@ -1748,7 +1836,7 @@ def build_article_events(
     )
 
     # STEP 7-6-6. Train graph 생성
-    train_article_count = len(train_articles)
+
 
     union_find = _UnionFind(train_article_count)
     time_candidate_pair_count = 0
@@ -1757,7 +1845,7 @@ def build_article_events(
     for left_index in range(train_article_count):
         left_article = train_articles[left_index]
         left_time = left_article["published_time"]
-        left_entities=left_article["entity_set"]
+        left_entities=left_article["clustering_entity_set"]
 
         for right_index in range(left_index+1, train_article_count):
             right_article = train_articles[right_index]
@@ -1770,7 +1858,7 @@ def build_article_events(
 
             time_candidate_pair_count += 1
 
-            right_entities = right_article["entity_set"]
+            right_entities = right_article["clustering_entity_set"]
             similarity = _idf_weighted_jaccard(left_entities, right_entities, entity_idf, unseen_entity_idf)
 
             if similarity < entity_similarity_threshold: continue 
@@ -1842,7 +1930,7 @@ def build_article_events(
         event_entity_set: set[str] = set()
 
         for article in member_articles:
-            event_entity_set.update(article["entity_set"])
+            event_entity_set.update(article["clustering_entity_set"])
 
         event_start_time = component["event_start_time"]
         first_article_id = component["first_article_id"]
@@ -2328,6 +2416,33 @@ def build_article_events(
             "entity_set"
         ]
     )
+    # High-DF 제거 후 Event 계산에 사용할 Entity가
+    # 하나도 남지 않은 기사 수
+    # ========================================================
+
+    train_clustering_empty_entity_article_count = sum(
+        1
+        for article in train_articles
+        if not article[
+            "clustering_entity_set"
+        ]
+    )
+
+
+    # 원래 Entity는 있었지만
+    # 모두 High-DF Entity여서 제거된 기사 수
+    high_df_only_article_count = sum(
+        1
+        for article in train_articles
+        if (
+            article[
+                "entity_set"
+            ]
+            and not article[
+                "clustering_entity_set"
+            ]
+        )
+    )
     # STEP 7-6-19. Event Entity가 비어있는 Event 수 확인
     empty_entity_event_count = (
         event_master_df
@@ -2441,6 +2556,29 @@ def build_article_events(
 
         "train_event_embeddings_path": str(
             TRAIN_EVENT_EMBEDDINGS_PATH
+        ),
+        # High-DF 기준
+        "max_entity_df_ratio": float(
+            max_entity_df_ratio
+        ),
+
+        # Event 계산에서 제외된 High-DF Entity 수
+        "high_df_entity_count": int(
+            len(
+                high_df_entities
+            )
+        ),
+
+
+        # High-DF 제거 후 Entity가 하나도 남지 않은 기사 수
+        "train_clustering_empty_entity_article_count": int(
+            train_clustering_empty_entity_article_count
+        ),
+
+        # Entity는 있었지만 전부 High-DF여서
+        # Event 계산에서는 빈 Entity가 된 기사 수
+        "high_df_only_article_count": int(
+            high_df_only_article_count
         ),
     }
 
