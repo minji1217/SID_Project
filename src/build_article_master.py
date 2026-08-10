@@ -24,7 +24,7 @@ from src import config
 # 3. 앞 단계에서 이미 확정한 결과를 JOIN만 한다
 # 4. JOIN 과정에서 정보가 누락되면 오류 처리한다.
 
-def build_article_master() -> dict[str, Any]:
+def build_train_article_master() -> dict[str, Any]:
     # STEP 8-1. 출력 디렉토리 생성
     # 목적:
     # article_master.parquet을 저장할 model_inputs 디렉토리 생성
@@ -251,7 +251,7 @@ def build_article_master() -> dict[str, Any]:
         pl.col("article_id").is_duplicated().sum().alias("count")
     ).item()
 
-    if duplicate_count != 0:
+    if duplicate_article_count != 0:
         raise ValueError(
             "Article Master에 중복 article_id 존재합니다. "
         )

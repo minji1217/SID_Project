@@ -2,7 +2,7 @@ from pprint import pprint
 
 from src import config
 
-from src.build_articles import (
+from src.build_train import (
     build_valid_articles,
     collect_train_used_article_ids,
     build_category_mapping,
@@ -13,7 +13,7 @@ from src.build_articles import (
 )
 
 from src.build_article_master import (
-    build_article_master,
+    build_train_article_master,
 )
 
 
@@ -260,7 +260,7 @@ def main() -> None:
     # ========================================================
 
     result = (
-        build_article_master()
+        build_train_article_master()
     )
 
 
