@@ -64,7 +64,12 @@
       "single_click_after_dedup_row_count": 232233,
       "multi_click_after_dedup_row_count": 654,
       "usable_single_click_row_count": 232233,
-      "exclusion_candidate_row_count": 654
+      "exclusion_candidate_row_count": 654,
+      "inview_list_null_count": 0,
+      "inview_list_empty_count": 0,
+      "inview_null_element_row_count": 0,
+      "duplicate_inview_row_count": 0,
+      "clicked_not_inview_row_count": 0
     },
     "validation_behaviors": {
       "split": "validation",
@@ -84,7 +89,12 @@
       "single_click_after_dedup_row_count": 243899,
       "multi_click_after_dedup_row_count": 748,
       "usable_single_click_row_count": 243899,
-      "exclusion_candidate_row_count": 748
+      "exclusion_candidate_row_count": 748,
+      "inview_list_null_count": 0,
+      "inview_list_empty_count": 0,
+      "inview_null_element_row_count": 0,
+      "duplicate_inview_row_count": 0,
+      "clicked_not_inview_row_count": 0
     },
     "cross_file_reference": {
       "status": "PASS",
@@ -107,7 +117,11 @@
         "missing_clicked_article_reference_count": 0,
         "missing_clicked_behavior_row_count": 0,
         "missing_clicked_article_id_count": 0,
-        "missing_clicked_article_id_examples": []
+        "missing_clicked_article_id_examples": [],
+        "missing_inview_article_reference_count": 0,
+        "missing_inview_behavior_row_count": 0,
+        "missing_inview_article_id_count": 0,
+        "missing_inview_article_id_examples": []
       },
       "validation": {
         "split": "validation",
@@ -127,7 +141,11 @@
         "missing_clicked_article_reference_count": 0,
         "missing_clicked_behavior_row_count": 0,
         "missing_clicked_article_id_count": 0,
-        "missing_clicked_article_id_examples": []
+        "missing_clicked_article_id_examples": [],
+        "missing_inview_article_reference_count": 0,
+        "missing_inview_behavior_row_count": 0,
+        "missing_inview_article_id_count": 0,
+        "missing_inview_article_id_examples": []
       }
     }
   }

@@ -150,7 +150,7 @@ ARTICLE_MASTER_PATH = (MODEL_INPUT_DIR / "article_master.parquet")
 
 # validation history/behaviors/candidate에서 
 # 실제 참조되는 전체 유효 기사 ID 
-VAILDATION_USED_ARTICLE_IDS_PATH = (
+VALIDATION_USED_ARTICLE_IDS_PATH = (
     MODEL_INPUT_DIR / "validation_used_article_ids.parquet"
 )
 
@@ -175,5 +175,5 @@ EVENT_MASTER_WITH_VALIDATION_PATH = (
 
 # RQ-VAE Validation inference에 전달할 기사 단위 metadata
 VALIDATION_ARTICLE_MASTER_PATH = (
-    MODEL_INPUT_DIR / "validation_article_matser.parquet"
+    MODEL_INPUT_DIR / "validation_article_master.parquet"
 )

@@ -58,6 +58,7 @@ REQUIRED_COLUMNS: dict[str, set[str]] = {
         "title",            # 기사 제목 
         "subtitle",         # 기사 부제목 또는 요약문
         "published_time",   # 기사 발행 시각
+        "category", 
         "category_str",     # 기사 카테고리 문자열
         "ner_clusters",     # 기사에 등장하는 개체명 목록
         "entity_groups",    # 각 개체명의 타입 목록 (예: 인물, 장소, 기관)
@@ -77,6 +78,7 @@ REQUIRED_COLUMNS: dict[str, set[str]] = {
         "impression_time",      
         "article_id",           
         "article_ids_clicked",  
+        "article_ids_inview",
     },
     # 3-4. train/history.parquet 필수 컬럼
     "train_history": {
@@ -921,15 +923,27 @@ def validate_behaviors(
         }    
 
     # STEP 9-4. behavior 검증에 필요한 컬럼만 읽기 
+    # TRAIN / validation 공통으로 필요한 기본 컬럼
+    behavior_columns = [
+        "impression_id",
+        "user_id",
+        "impression_time",
+        "article_id",
+        "article_ids_clicked",
+    ]
+
+    # validation에서는 ranking 평가 위해 실제 impression에 노출된 
+    # candidate 기사 목록도 검사한다. 
+
+    # article_ids_inview 예 : [100, 200,300,400] -> [300] : target
+    # 300 = positive, 100, 200, 400 = negative candidate
+
+    if split_name == "validation":
+        behavior_columns.append("article_ids_inview")
+
     behaviors = pl.read_parquet(
-        file_path,
-        columns=[
-            "impression_id",
-            "user_id",
-            "impression_time",
-            "article_id",
-            "article_ids_clicked",
-        ],
+        file_path, 
+        columns = behavior_columns, 
     )   
 
     # STEP 9-5. impression_id가 null인 행 수 계산 
@@ -1015,9 +1029,20 @@ def validate_behaviors(
     # 한 행에 여러 문제가 있더라도 한 번만 계산한다.
     exclusion_candidate_row_count = 0
 
+    # validation candidate(article_ids_inview) 검사용 카운터
+    # train에선 모두 0으로 유지
+    inview_list_null_count = 0
+    inview_list_empty_count = 0
+    inview_null_element_row_count = 0
+    duplicate_inview_row_count = 0
+
+    # 클릭 target이 실제 노출 candidate 안에 없는 이상한 행
+    clicked_not_inview_row_count = 0
+
     # STEP 9-11. behavior를 한 행씩 검사 
     # iter_rows(named=True) 사용하여 각 behavior 행을 파이썬 딕셔너리 형태로 가져옴
     for row in behaviors.iter_rows(named=True):
+
         # 현재 behavior의 노출 ID 가져옴
         impression_id = row["impression_id"]
 
@@ -1029,6 +1054,22 @@ def validate_behaviors(
 
         # 클릭한 기사 ID 리스트 가져옴
         clicked_ids = row["article_ids_clicked"]
+
+        # validation인 경우
+        # 실제 impression에 노출된 candidate 기사 목록 가져옴
+        # train에서는 article_ids_inview 컬럼 읽지 않았기에 None으로
+        if split_name == "validation":
+            inview_ids = row["article_ids_inview"]
+        else:
+            inview_ids = None 
+
+        # 아래에서 validation candidate stable dedup 결과를 저장하기 위한 빈 리스트
+        # train에서도 변수가 항상 존재하도록 반복문 시작 시 빈 리스트로 초기화
+        unique_inview_ids: list[Any] = []
+
+        # candidate 목록이 정상이라 target 포함 여부 검사할 수 있는지 여부
+        can_check_inview_membership = False 
+
 
         # 현재 behavior 행을 이후 단계에서 제외해야하는지 기록
         should_exclude_row = False # 문제 없다고 일단 가정
@@ -1049,6 +1090,57 @@ def validate_behaviors(
         # 4. impression_time이 null인 경우
         if impression_time is None : 
             should_exclude_row = True 
+
+        # + validation candidate(article_ids_inview) 검사 
+        # train에서는 candidate ranking 평가하지않기에 validation에서만 검사
+        # 예 : article_ids_inview [100, 200, 300, 400]
+        # article_ids_clicked : [300]
+        # 이후 build_sequences.py에선 
+        # candidate_article_ids = [100, 200, 300, 400]
+        # candidate_labels      = [0, 0, 1, 0] 형태로 만들 예정 
+
+        if split_name == "validation":
+            # 1. candidate list 자체가 null
+            if inview_ids is None : 
+                inview_list_null_count += 1
+                should_exclude_row = True 
+
+            # 2. candidate list가 빈 리스트
+            elif len(inview_ids) == 0:
+                inview_list_empty_count += 1
+                should_exclude_row = True 
+            else:
+                # 3. candidate list 내부 null 검사
+                # 예 : [100, 200, None, 400]
+                has_null_inview_id = any(
+                    article_id is None for article_id in inview_ids
+                )
+
+                if has_null_inview_id :
+                    inview_null_element_row_count += 1
+                    should_exclude_row = True 
+
+                # null값을 제외한 candidate ID만 임시로 사용
+                valid_inview_ids = [
+                    article_id for article_id in inview_ids 
+                    if article_id is not None 
+                ]
+
+                # 4. candidate stable dedup
+                seen_inview_ids: set[Any] = set()
+
+                for article_id in valid_inview_ids:
+                    if article_id not in seen_inview_ids:
+                        seen_inview_ids.add(article_id)
+                        unique_inview_ids.append(article_id)
+
+                # stable dedup 전후 길이가 다르면
+                # 원본 candidate 리스트에 중복 ID가 있었다는 뜻
+                if len(valid_inview_ids) != len(unique_inview_ids):
+                    duplicate_inview_row_count += 1
+
+                if not has_null_inview_id:
+                    can_check_inview_membership = True 
 
         # 5. 클릭 리스트 자체가 null인지 ? 
         if clicked_ids is None : 
@@ -1119,6 +1211,13 @@ def validate_behaviors(
         elif len(unique_clicked_ids) == 1:
             single_click_after_dedup_row_count += 1
 
+            # validation에선 clicked target이 실제 impression candidate 안에 있었는지 검사 
+            if split_name == "validation" and can_check_inview_membership:
+                target_article_id = unique_clicked_ids[0]
+                if target_article_id not in unique_inview_ids:
+                    clicked_not_inview_row_count += 1
+                    should_exclude_row = True 
+
             # 다른 구조 문제가 없으면 실제 단일 클릭 샘플로 사용 가능
             if not should_exclude_row:
                 usable_single_click_row_count += 1
@@ -1142,6 +1241,9 @@ def validate_behaviors(
         exclusion_candidate_row_count > 0
         or 
         duplicate_clicked_row_count > 0
+        # validation candidate에 중복이 있는 경우
+        # # stable dedup 필요하므로  
+        or duplicate_inview_row_count > 0
     )
 
     # STEP 9-22. 최종 상태 결정 
@@ -1237,6 +1339,33 @@ def validate_behaviors(
         "exclusion_candidate_row_count": int(
             exclusion_candidate_row_count
         ),
+        # Validation candidate(article_ids_inview) 검사 결과
+        # ========================================================
+
+        # article_ids_inview 리스트 자체가 null인 행 수
+        "inview_list_null_count": int(
+            inview_list_null_count
+        ),
+
+        # article_ids_inview가 빈 리스트인 행 수
+        "inview_list_empty_count": int(
+            inview_list_empty_count
+        ),
+
+        # article_ids_inview 내부에 null article_id가 있는 행 수
+        "inview_null_element_row_count": int(
+            inview_null_element_row_count
+        ),
+
+        # candidate 리스트 내부에 중복 article_id가 있는 행 수
+        "duplicate_inview_row_count": int(
+            duplicate_inview_row_count
+        ),
+
+        # clicked target이 article_ids_inview 안에 없는 행 수
+        "clicked_not_inview_row_count": int(
+            clicked_not_inview_row_count
+        ),
     }    
 
 
@@ -1257,7 +1386,7 @@ def validate_cross_file_references() -> dict[str, Any]:
     존재하지 않는 기사 ID 또는 history에 없는 user_id 발견하면
     해당 개수와 영향을 받는 행 수만 반환
 
-    실제 제외 처리는 이후 build_articles.py, build_sequences.py에서 함
+    실제 제외 처리는 이후 build_train.py, build_sequences.py에서 함
     
     FAIL:
         파일이 없거나 필수 컬럼이 누락되어
@@ -1350,14 +1479,22 @@ def validate_cross_file_references() -> dict[str, Any]:
         # user_id : 같은 split의 history에 존재 ? 
         # article_id : 사용자가 행동 당시 보고 있던 현재 기사 
         # article_ids_clicked : 실제 클릭 target 기사 목록
+        behavior_columns = [
+            "impression_id",
+            "user_id",
+            "article_id",
+            "article_ids_clicked",
+        ]
+
+        # Validation에서만 candidate 기사 참조 검사
+        if split_name == "validation":
+            behavior_columns.append(
+                "article_ids_inview"
+            )
+
         behaviors = pl.read_parquet(
             behaviors_path,
-            columns=[
-                "impression_id",
-                "user_id",
-                "article_id",
-                "article_ids_clicked",
-            ],
+            columns=behavior_columns,
         )
 
         # STEP 10-4-3. history에 존재하는 사용자 목록 
@@ -1572,6 +1709,119 @@ def validate_cross_file_references() -> dict[str, Any]:
             .to_list()
         )
 
+
+        # STEP 10-4-11.
+        # Validation article_ids_inview -> articles.article_id
+        # 참조 관계 검사
+ 
+
+        # Train에서는 사용하지 않으므로 기본값 0 / 빈 리스트
+        missing_inview_article_reference_count = 0
+        missing_inview_behavior_row_count = 0
+        missing_inview_article_id_count = 0
+        missing_inview_article_id_examples = []
+
+        if split_name == "validation":
+
+            # ----------------------------------------------------
+            # candidate 리스트를 article_id 단위로 펼친다.
+            #
+            # 예:
+            #
+            # impression_id = 10
+            # article_ids_inview = [100,200,300]
+            #
+            # ↓ explode
+            #
+            # impression_id | article_id
+            # 10            | 100
+            # 10            | 200
+            # 10            | 300
+            # ----------------------------------------------------
+
+            inview_article_references = (
+                behaviors
+                .with_row_index(
+                    "_behavior_row"
+                )
+                .select(
+                    [
+                        "_behavior_row",
+                        "impression_id",
+                        "article_ids_inview",
+                    ]
+                )
+                .explode(
+                    "article_ids_inview"
+                )
+                .rename(
+                    {
+                        "article_ids_inview":
+                        "article_id"
+                    }
+                )
+                .drop_nulls(
+                    "article_id"
+                )
+            )
+
+            # ----------------------------------------------------
+            # articles.parquet에 존재하지 않는
+            # candidate article_id만 남긴다.
+            # ----------------------------------------------------
+
+            missing_inview_article_references = (
+                inview_article_references
+                .join(
+                    article_ids,
+                    on="article_id",
+                    how="anti",
+                )
+            )
+
+            # 누락 candidate가 총 몇 번 참조됐는지
+            missing_inview_article_reference_count = (
+                missing_inview_article_references.height
+            )
+
+            # 누락 candidate 때문에 영향을 받은 behavior 행 수
+            missing_inview_behavior_row_count = (
+                missing_inview_article_references
+                .get_column(
+                    "_behavior_row"
+                )
+                .n_unique()
+            )
+
+            # 실제 존재하지 않는 고유 candidate article_id 수
+            missing_inview_article_id_count = (
+                missing_inview_article_references
+                .get_column(
+                    "article_id"
+                )
+                .n_unique()
+            )
+
+            # 확인용 예시 최대 10개
+            missing_inview_article_id_examples = (
+                missing_inview_article_references
+                .select(
+                    "article_id"
+                )
+                .unique()
+                .sort(
+                    "article_id"
+                )
+                .head(
+                    10
+                )
+                .get_column(
+                    "article_id"
+                )
+                .to_list()
+            )
+
+
         # STEP 10-4-11. 현재 split의 경고 여부 확인
         # 아래 항목 중 하나라도 1 이상이면 파일 간 참조 완전 일치는 아니라는 의미
         has_warning = (
@@ -1579,6 +1829,7 @@ def validate_cross_file_references() -> dict[str, Any]:
             or missing_history_article_reference_count > 0
             or missing_current_article_row_count > 0
             or missing_clicked_article_reference_count > 0
+            or missing_inview_article_reference_count > 0
         )
 
         # 참조 누락이 하나라도 있으면 WARNING, 아니면 PASS
@@ -1673,6 +1924,27 @@ def validate_cross_file_references() -> dict[str, Any]:
             # 누락된 클릭 article_id 예시
             "missing_clicked_article_id_examples": (
                 missing_clicked_article_id_examples
+            ),
+            # Validation candidate 중 articles.parquet에
+            # 존재하지 않는 참조의 총 횟수
+            "missing_inview_article_reference_count": int(
+                missing_inview_article_reference_count
+            ),
+
+            # 존재하지 않는 candidate가 포함된 behavior 행 수
+            "missing_inview_behavior_row_count": int(
+                missing_inview_behavior_row_count
+            ),
+
+            # articles.parquet에 존재하지 않는
+            # 고유 candidate article_id 수
+            "missing_inview_article_id_count": int(
+                missing_inview_article_id_count
+            ),
+
+            # 누락 candidate article_id 예시
+            "missing_inview_article_id_examples": (
+                missing_inview_article_id_examples
             ),
         }
 
