@@ -142,4 +142,38 @@ EVENT_MAX_ENTITY_DF_RATIO = 0.01
 # TRAIN에서 실제 사용하는 기사들의 최종 학습용 메타데이터 저장
 ARTICLE_MASTER_PATH = (MODEL_INPUT_DIR / "article_master.parquet")
 
-# =========================================== 여기까지 build_articles.py에 등장 
+# =========================================== 여기까지 build_train.py에 등장 
+
+# ==========================================
+# build_validation.py 
+# ==========================================
+
+# validation history/behaviors/candidate에서 
+# 실제 참조되는 전체 유효 기사 ID 
+VAILDATION_USED_ARTICLE_IDS_PATH = (
+    MODEL_INPUT_DIR / "validation_used_article_ids.parquet"
+)
+
+# validation에서 사용되지만 train에서 한 번도 사용되지 않은 기사 ID
+# 이 기사들은 학습 완료된 RQ-VAE에 넣어서 frozen inference로 SID 생성
+VALIDATION_ONLY_ARTICLE_IDS_PATH = (
+    MODEL_INPUT_DIR / "validation_only_article_ids.parquet"
+)
+
+# validation_only 기사에 dynamic event assignment를 적용한 결과
+VALIDATION_ARTICLE_EVENTS_PATH = (
+    MODEL_INPUT_DIR / "validation_article_events.parquet"
+)
+
+# train event 상태에 validation 기사를 시간순으로 반영한 
+# 최종 event 상태 
+
+# 기존 EVENT_MASTER_PATH는 train 결과이므로 덮어쓰지 않는다.
+EVENT_MASTER_WITH_VALIDATION_PATH = (
+    MODEL_INPUT_DIR / "event_master_with_validation.parquet"
+)
+
+# RQ-VAE Validation inference에 전달할 기사 단위 metadata
+VALIDATION_ARTICLE_MASTER_PATH = (
+    MODEL_INPUT_DIR / "validation_article_matser.parquet"
+)
