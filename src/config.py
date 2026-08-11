@@ -148,6 +148,17 @@ ARTICLE_MASTER_PATH = (MODEL_INPUT_DIR / "article_master.parquet")
 # build_validation.py 
 # ==========================================
 
+# validation에서 새로 생성된 event의 event_id - validation_event_embeddings.npy row 연결 정보
+VALIDATION_EVENT_EMBEDDING_INPUT_PATH = (
+    MODEL_INPUT_DIR / "validation_event_embedding_input.parquet"
+)
+
+# validation-origin event의 생성 시점 고정 z(E)
+# 각 event의 최초 기사 E5 embedding을 그대로 사용
+VALIDATION_EVENT_EMBEDDINGS_PATH = (
+    MODEL_INPUT_DIR / "validation_event_embeddings.npy"
+)
+
 # validation history/behaviors/candidate에서 
 # 실제 참조되는 전체 유효 기사 ID 
 VALIDATION_USED_ARTICLE_IDS_PATH = (
