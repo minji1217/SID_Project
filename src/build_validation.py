@@ -656,7 +656,7 @@ def _assign_validation_events(
             matched_existing_event_count += 1
 
             if event["event_origin_split"] == "train":
-                matched_existing_event_count += 1
+                matched_train_origin_event_count += 1
             else:
                 matched_validation_origin_event_count += 1
             
@@ -1094,10 +1094,16 @@ def build_validation_article_master() -> dict[str, Any]:
         )
 
     # STEP 10-4-11. article_id 중복 검사
-    if empty_model_text_count != 0:
+    duplicate_article_count = (
+        validation_article_master
+        .select(pl.col("article_id").is_duplicated().sum())
+        .item()
+    )
+
+    if duplicate_article_count != 0:
         raise ValueError(
-            "Validation Article Master에 빈 model_text가 존재합니다. "
-            f"빈 문자열 수={empty_model_text_count}"
+            "Validation Article Master에 중복 article_id가 존재합니다. "
+            f"중복 행 수={duplicate_article_count}"
         )
 
     # STEP 10-4-12.
@@ -1151,12 +1157,10 @@ def build_validation_article_master() -> dict[str, Any]:
     ])
 
     # STEP 10-4-14. Validation Article Master 저장
-    validation_article_master = validation_article_master.with_columns([
-        pl.col("article_id").cast(pl.Int64),
-        pl.col("embedding_row").cast(pl.Int64),
-        pl.col("model_category_id").cast(pl.Int32),
-        pl.col("event_id").cast(pl.Int64),
-    ])
+    validation_article_master.write_parquet(
+        config.VALIDATION_ARTICLE_MASTER_PATH,
+        compression="zstd",
+    )
 
     # STEP 10-4-15. 결과 통계
     unknown_category_article_count = (

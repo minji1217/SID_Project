@@ -773,22 +773,19 @@ def validate_history(
         if should_exclude_row:
             exclusion_candidate_row_count += 1
 
-        # STEP 8-11. 경고 존재 여부 확인
-        # 제외 대상이나 재정렬 대상이 하나라도 있는 경우
-        # history 데이터 후처리 필요 
-        has_warning = (exclusion_candidate_row_count > 0 or reorder_candidate_row_count > 0)
+    # STEP 8-11. 경고 존재 여부 확인
+    # 제외 대상이나 재정렬 대상이 하나라도 있는 경우
+    # history 데이터 후처리 필요 
+    has_warning = (exclusion_candidate_row_count > 0 or reorder_candidate_row_count > 0)
+    # STEP 8-12. 최종 검증 상태 결정 
+    # 제외 또는 재정렬 후보가 있으면 WARNING이다.
+    if has_warning:
+        status = "WARNING"
+    # 모든 핵심 문제가 0이면 PASS다.
+    else:
+        status = "PASS"
 
-
-        # STEP 8-12. 최종 검증 상태 결정 
-        # 제외 또는 재정렬 후보가 있으면 WARNING이다.
-        if has_warning:
-            status = "WARNING"
-
-        # 모든 핵심 문제가 0이면 PASS다.
-        else:
-            status = "PASS"
-
-        # STEP 8-13. history 검증 결과 반환 
+    # STEP 8-13. history 검증 결과 반환 
     return {
     # train 또는 validation 구분
     "split": split_name,
