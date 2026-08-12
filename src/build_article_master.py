@@ -14,9 +14,8 @@ from src import config
 # 2. embedding_row
 # 3. model_category_id
 # 4. event_id
-# 5. event_id
-# 6. published_time
-# 7. model_text
+# 5. published_time
+# 6. model_text
 
 # 중요 :
 # 1. train에서 실제 사용하는 기사만 포함된다.

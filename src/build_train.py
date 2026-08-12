@@ -27,8 +27,6 @@ from src.config import (
     ARTICLE_EVENTS_PATH,
     EVENT_MASTER_PATH,
     ENTITY_IDF_PATH,
-    TRAIN_EVENT_EMBEDDING_INPUT_PATH,
-    TRAIN_EVENT_EMBEDDINGS_PATH,
 
     ARTICLE_EMBEDDING_MODEL_NAME,
     ARTICLE_EMBEDDING_MAX_LENGTH,
@@ -36,7 +34,6 @@ from src.config import (
 
     EVENT_ENTITY_SIMILARITY_THRESHOLD,
     EVENT_TIME_WINDOW_HOURS,
-    ARTICLE_MASTER_PATH,
 
     EVENT_MAX_ENTITY_DF_RATIO, 
 
@@ -1830,8 +1827,6 @@ class _UnionFind:
 # - article_events.parquet
 # - event_master.parquet
 # - entity_idf.parquet
-# - train_event_embedding_input.parquet
-# - train_event_embeddings.npy
 
 def build_article_events(
         entity_similarity_threshold: float=(
@@ -1843,9 +1838,7 @@ def build_article_events(
         max_entity_df_ratio:float=(EVENT_MAX_ENTITY_DF_RATIO)
 )-> dict[str, Any]:
     """
-    train/validation 기사에 실제 사건 event_id 부여 
-    train은 batch graph + connected components 방식
-    validation 신규 기사는 기존 사건에 배정 
+    train event 생성만 수행 
     """
 
     # STEP 7-6-1. 기본 입력값 검사
@@ -2133,7 +2126,7 @@ def build_article_events(
     # STEP 7-6-9. Train event 상태 생성 
     events: dict[ int, dict[str, Any]] = {}
     article_event_rows: list[dict[str, Any]]= []
-    train_event_article_ids: dict[int, list[int]]= {}
+    
 
 
     #train_components = [
@@ -2169,13 +2162,7 @@ def build_article_events(
         # 마지막 기사의 발행시각 = event의 마지막 기사 발행시각 
         event_last_added_time = member_articles[-1]["published_time"]
 
-        # Event에 속한 article_id 목록 생성
-        # [100, 200]
-        member_article_ids = [article["article_id"] for article in member_articles]
-
-        # train event embedding을 만들 때 사용할 수 있도록 event_id별 train article_id 목록 저장
-        # 0: [100,200], 1:[300], ...
-        train_event_article_ids[event_id] = member_article_ids.copy()
+        
 
         # 현재 train event의 상태 저장
         # validation 신규 기사가 들어오면 이 상태 기준으로
@@ -2212,124 +2199,6 @@ def build_article_events(
     train_singleton_event_count = sum(1 for event in events.values() if event["train_article_count"]==1)
     train_max_event_article_count = max(event["train_article_count"] for event in events.values())
 
-    # STEP 7-6-11. Train event embedding 생성
-    # z(E) 계산해 RQ-VAE의 c2 학습에 사용됨
-
-    # article_id -> embedding_row 매핑표 
-    embedding_input = pl.read_parquet(ARTICLE_EMBEDDING_INPUT_PATH).select([
-        "embedding_row", "article_id"
-    ])
-
-    article_embeddings = np.load(ARTICLE_EMBEDDINGS_PATH)
-
-    # article embedding 정합성 검사
-    if article_embeddings.ndim != 2:
-        raise ValueError(
-            "article_embeddings.npy는 2차원 배열이어야 합니다."
-        )
-
-    if article_embeddings.shape[0] != embedding_input.height:
-        raise ValueError(
-            "article_embeddings.npy 행 수와 "
-            "article_embedding_input.parquet 행 수가 다릅니다."
-        )
-
-    # article_id -> embedding_row lookup 생성
-    embedding_row_lookup = {int(article_id): int(embedding_row)
-                            for embedding_row, article_id 
-                            in embedding_input.iter_rows()}
-
-    train_event_embedding_rows: list[dict[str, Any]]=[]
-    train_event_embedding_vectors: list[np.ndarray]=[]
-
-    # Event별 평균 임베딩 생성
-    for event_embedding_row, event_id in enumerate(sorted(train_event_article_ids)):
-        member_article_ids = train_event_article_ids[event_id]
-        member_embedding_rows: list[int] = []
-
-        for article_id in member_article_ids:
-            if article_id not in embedding_row_lookup:
-                raise ValueError(
-                    "Train Event 기사에 대응하는 embedding_row가 없습니다. "
-                    f"article_id={article_id}"
-                )
-
-            member_embedding_rows.append(embedding_row_lookup[article_id])
-
-        # 같은 event에 속한 기사 임베딩 평균
-        event_embedding = article_embeddings[member_embedding_rows].mean(axis=0).astype(np.float32, copy=False)
-
-        # NAN/INF 검사
-        if not np.isfinite(event_embedding).all():
-            raise ValueError(
-                "Train Event Embedding에 NaN 또는 Inf가 있습니다. "
-                f"event_id={event_id}"
-            )
-        # .npy로 저장할 것
-        # event_id = 0,1,2,... -> 인덱스
-        # 해당하는 벡터 : z(E)
-        train_event_embedding_vectors.append(
-            event_embedding
-        )
-
-        # .parquet 파일로 저장할 것 
-      
-        train_event_embedding_rows.append(
-            {
-                "event_embedding_row": event_embedding_row, # .npy에서 z(E)벡터가 몇번째 줄? 
-                "event_id": event_id, # 그 사건 자체의 고유 식별자 
-                "event_article_count": len(member_article_ids),
-            }
-        )
-
-    # Train event embedding 저장
-    # (train_event_count, 768)
-
-    train_event_embeddings = (
-        np.stack(
-            train_event_embedding_vectors,
-            axis=0,
-        )
-        .astype(
-            np.float32,
-            copy=False,
-        )
-    )
-
-    np.save(
-        TRAIN_EVENT_EMBEDDINGS_PATH,
-        train_event_embeddings,
-    )
-
-    # event_id와 numpy 행 번호 연결 정보 저장
-    train_event_embedding_input_df = (
-        pl.DataFrame(
-            train_event_embedding_rows
-        )
-        .with_columns(
-            [
-                pl.col(
-                    "event_embedding_row"
-                ).cast(pl.Int64),
-
-                pl.col(
-                    "event_id"
-                ).cast(pl.Int64),
-
-                pl.col(
-                    "event_article_count"
-                ).cast(pl.Int64),
-            ]
-        )
-        .sort(
-            "event_embedding_row"
-        )
-    )
-
-    train_event_embedding_input_df.write_parquet(
-        TRAIN_EVENT_EMBEDDING_INPUT_PATH,
-        compression="zstd",
-    ) 
 
     # STEP 7-6-12. Train article -> event mapping 저장
     # train에서 실제 사용하는 각 article_id가 어떤 event_id에 속하는지 저장
@@ -2753,20 +2622,6 @@ def build_article_events(
             article_events_df.height
         ),
 
-        # Train Event Embedding 형태
-        "train_event_embedding_shape": [
-            int(
-                train_event_embeddings.shape[0]
-            ),
-            int(
-                train_event_embeddings.shape[1]
-            ),
-        ],
-
-        "train_event_embedding_dtype": str(
-            train_event_embeddings.dtype
-        ),
-
         # 저장 경로
         "article_events_path": str(
             ARTICLE_EVENTS_PATH
@@ -2780,13 +2635,6 @@ def build_article_events(
             ENTITY_IDF_PATH
         ),
 
-        "train_event_embedding_input_path": str(
-            TRAIN_EVENT_EMBEDDING_INPUT_PATH
-        ),
-
-        "train_event_embeddings_path": str(
-            TRAIN_EVENT_EMBEDDINGS_PATH
-        ),
         # High-DF 기준
         "max_entity_df_ratio": float(
             max_entity_df_ratio
