@@ -436,15 +436,16 @@ def collect_train_used_article_ids() -> dict[str,Any]:
         # STEP 3-8-4. 단일 클릭 behavior만 선택
         # 현재 baseline은 하나의 behavior에 대해 target 기사 하나만 정답으로 사용
 
-        # 즉, stable dedup 후 고유 클릭 기사가 정확히 1개인 행만 사용
-        if len(unique_clicked_ids) != 1:
+        # 즉, stable dedup 결과가 하나 이상이면 사용 
+        if len(unique_clicked_ids) == 0:
             continue 
+        
 
         # 현재 행이 모든 조건 통과했기에 실제 사용 가능한 behavior에 포함됨
         usable_behavior_row_count += 1
 
         # 유일한 클릭 기사를 target 기사로 저장
-        target_article_ids.add(unique_clicked_ids[0])
+        target_article_ids.update(unique_clicked_ids)
 
         # 현재 artciel_id는 원본 데이터에서 null이 허용되므로,
         # null이 아닌 경우만 train 사용 기사 목록에 추가됨

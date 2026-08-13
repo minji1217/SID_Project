@@ -1018,8 +1018,9 @@ def validate_behaviors(
     multi_click_after_dedup_row_count = 0
 
     # 모든 핵심 조건을 만족해서
-    # 실제 baseline 단일 클릭 데이터로 사용할 수 있는 행 수
-    usable_single_click_row_count = 0
+    # single/multi 포함한 실제 사용 가능한 behavior 수 
+
+    usable_click_row_count = 0
 
     # 이후 build_sequences.py에서 제외해야 하는 행 수
     #
@@ -1198,6 +1199,40 @@ def validate_behaviors(
         if len(valid_clicked_ids) != len(unique_clicked_ids):
             duplicate_clicked_row_count += 1
 
+        # STEP 9-18-1. Validation clicked target이 candidate 안에 모두 존재하는지 검사
+        # 목적 : 
+        # validation ranking 평가에서는 실제 정답이 article_ids_inview(candidate) 안에 존재해야함
+        # multi-target 정책이므로 target이 여러 개라면
+        # 모든 target이 candidate 안에 있어야 정상 sample로 사용한다.
+
+        # 예 : 
+        # clicked = [100, 300], candidate = [100, 200, 400] 
+        # -> 300이 candidate에 없으므로 제외 후보 
+
+        if (
+            split_name == "validation"
+            and can_check_inview_membership
+            and len(unique_clicked_ids) > 0
+        ):
+            # candidate를 set으로 변환해 빠르게 포함 여부 확인
+            unique_inview_id_set = set(
+                unique_inview_ids
+            )
+        
+            # candidate 안에 존재하지 않는 clicked target 찾기
+            clicked_not_inview_ids = [
+                article_id
+                for article_id in unique_clicked_ids
+                if article_id not in unique_inview_id_set
+            ]
+        
+            # target 중 하나라도 candidate에 없으면
+            # validation ranking sample로 사용할 수 없음
+            if clicked_not_inview_ids:
+                clicked_not_inview_row_count += 1
+                should_exclude_row = True
+
+
         # STEP 9-19. stable dedup 후 클릭 수 분류
         # 유효한 고유 클릭 기사 없는 경우
         if len(unique_clicked_ids) == 0:
@@ -1208,28 +1243,16 @@ def validate_behaviors(
         elif len(unique_clicked_ids) == 1:
             single_click_after_dedup_row_count += 1
 
-            # validation에선 clicked target이 실제 impression candidate 안에 있었는지 검사 
-            if split_name == "validation" and can_check_inview_membership:
-                target_article_id = unique_clicked_ids[0]
-                if target_article_id not in unique_inview_ids:
-                    clicked_not_inview_row_count += 1
-                    should_exclude_row = True 
-
-            # 다른 구조 문제가 없으면 실제 단일 클릭 샘플로 사용 가능
-            if not should_exclude_row:
-                usable_single_click_row_count += 1
-
         # 유효한 고유 클릭 기사가 둘 이상인 경우
         else:
             multi_click_after_dedup_row_count += 1
 
-            # 클릭 간 정확한 순서를 알 수 없으므로 현재 baseline에서 일단 제외함
-            should_exclude_row = True 
-
-        # STEP 9-20. 제외 후보 행 수 계산
-        # 한 behavior 행에 문제가 여럿 있어도 제외되는 실제 행은 하나니까 1번만 증가시킴
-        if should_exclude_row:
+        # STEP 9-20. 최종 usable / exclusion 행 수 계산
+        # 한 behavior 행에 문제가 여러 개 있어도 행 단위로 딱 한 번만 집계
+        if should_exclude_row: 
             exclusion_candidate_row_count += 1
+        else:
+            usable_click_row_count += 1
 
     # STEP 9-21. 경고 조건 확인
     # 제외 후보 행 또는 stable dedup이 필요한 행이 있다면 
@@ -1326,8 +1349,8 @@ def validate_behaviors(
         ),
 
         # 현재 정책상 실제 baseline 학습에 사용할 수 있는 행 수
-        "usable_single_click_row_count": int(
-            usable_single_click_row_count
+        "usable_click_row_count": int(
+            usable_click_row_count
         ),
 
         # 이후 build_sequences.py에서 제외할 후보 행 수

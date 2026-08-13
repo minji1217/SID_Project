@@ -224,15 +224,13 @@ def _collect_validation_used_article_ids(
 
             deduplicated_clicked_ids.append(article_id) 
 
-        # 현재 baseline : impression 하나 당 unique clicked article이 정확히 1개인 행만 사용
+        
 
-        if len(deduplicated_clicked_ids)!= 1: continue 
+        if len(deduplicated_clicked_ids) ==0 : continue 
         usable_behavior_row_count += 1
 
-        # target 기사
-        target_article_id = deduplicated_clicked_ids[0]
+        target_article_ids.update(deduplicated_clicked_ids)
 
-        target_article_ids.add(target_article_id)
 
         # 현재 보고 있던 기사
         if current_article_id is not None : current_article_ids.add(int(current_article_id))
