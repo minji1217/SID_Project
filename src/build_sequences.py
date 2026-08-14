@@ -514,9 +514,9 @@ def _prepare_inital_histories(
             continue 
 
         # STEP 11-4-4. 내부 null pair만 제거
-        # tuple의 세번째 값은 원래 index.
-        # 같은 timestamp일 때도 원래 상대 순서를 유지하는 설명용 정보이며, 
-        # 실제 sort는 timestamp만 key로 사용
+        # 각 pair는 (impression_time, article_id) 형태로 저장한다.
+        # 이후 timestamp 기준으로 정렬하며,
+        # Python sorted()는 stable sort이므로 같은 timestamp의 원래 상대 순서는 유지된다.
         valid_pairs: list[tuple[Any, int]] = []
 
         for article_id, impression_time in zip(article_ids, impression_times):
@@ -1129,7 +1129,7 @@ def _build_split_sequences(
         target_article_ids = _stable_unique_ints(valid_clicked_article_ids)
 
         if len(target_article_ids) != len(valid_clicked_article_ids):
-            duplicate_candidate_behavior_row_count += 1
+            duplicate_clicked_behavior_row_count += 1
 
         if len(target_article_ids) == 0:
             invalid_behavior_row_count += 1
@@ -1188,7 +1188,7 @@ def _build_split_sequences(
             missing_target_sid_article_count += len(missing_target_ids)
 
             for missing_id in missing_target_ids:
-                if len(missing_candidate_sid_examples) >= 10:
+                if len(missing_target_sid_examples) >= 10:
                     break 
                 if missing_id not in missing_target_sid_examples:
                     missing_target_sid_examples.append(missing_id)
@@ -1263,7 +1263,7 @@ def _build_split_sequences(
                 candidate_article_ids = _stable_unique_ints(valid_candidate_ids)
 
                 if len(candidate_article_ids)!=len(valid_candidate_ids):
-                    duplicate_clicked_behavior_row_count += 1
+                    duplicate_candidate_behavior_row_count += 1
 
         # STEP 11-10-5-3. 모든 target이 candidate 안에 있는지 ? 
         if should_emit:
