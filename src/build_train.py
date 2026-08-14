@@ -60,8 +60,8 @@ def build_valid_articles() -> dict[str, Any]:
     유지 조건 (예외)
     ---------------
     category 또는 category_str이 없는 기사는 현재 단계에서 제외 x 
-    -> category_str이 없는 경우엔 이후 카테고리 매핑 단계에서 <UNK> 카테고리로 처리 예정
-    -> 어차피 category_str로 tag prediction loss 정답 정수 만들기에 category 없어도 상관 x
+    # -> category_str을 기준으로 model_category_id를 만들고
+    # 이후 Semantic ID의 c1로 직접 사용하므로 원본 category 누락은 허용
 
     model_text 생성 규칙
     -------------------
@@ -279,8 +279,8 @@ def collect_train_used_article_ids() -> dict[str,Any]:
     수집 대상
     -----------
     1. train history의 article_id_fixed
-    2. 사용 가능한 단일 클릭 behavior의 현재 article_id
-    3. 사용 가능한 단일 클릭 behavior의 클릭 target article_id
+    2. 사용 가능한 클릭 behavior의 현재 article_id
+    3. 사용 가능한 클릭 behavior의 클릭 target article_id
 
     behavior 처리 규칙
     -----------------
@@ -291,7 +291,7 @@ def collect_train_used_article_ids() -> dict[str,Any]:
     4. impression_time이 null이 아님
     5. 클릭 리스트가 null 또는 빈 리스트 아님
     6. 클릭 리스트 내부에 null 없음
-    7. stable dedup후 고유 클릭 기사가 정확히 1개임
+    7. stable dedup후 고유 클릭 기사가 1개 이상 
 
     마지막엔 articles_base.parquet에 존재하는 유효 article_id와 교집합 계산
     """
@@ -316,14 +316,17 @@ def collect_train_used_article_ids() -> dict[str,Any]:
     )
 
     # train 사용자의 과거 기사 목록
+    # train 사용자의 과거 기사 목록
     train_history = pl.read_parquet(
-        TRAIN_HISTORY_PATH, 
-        columns= [
+        TRAIN_HISTORY_PATH,
+        columns=[
+            "user_id",
             "article_id_fixed",
+            "impression_time_fixed",
         ],
     )
 
-    # train behavior에서 실제 단일 클릭 샘플 고르기 위한 컬럼
+    # train behavior에서 실제 클릭 샘플 고르기 위한 컬럼
     train_behaviors = pl.read_parquet(
         TRAIN_BEHAVIORS_PATH,
         columns=[
@@ -346,12 +349,58 @@ def collect_train_used_article_ids() -> dict[str,Any]:
     )
 
     # STEP 3-5. train history 기사 ID 수집 
-    # train history 전체에서 등장한 고유 기사 ID 수집 
-    history_article_ids = set(
-        train_history.select(
-            pl.col("article_id_fixed").explode().alias("article_id")
-        ).drop_nulls("article_id").get_column("article_id").to_list()
+    #
+    # build_sequences.py와 동일한 history 유효성 정책을 적용한다.
+    # - user_id null / 중복 -> 해당 history 행 사용 안 함
+    # - list 자체 null -> 해당 history 행 사용 안 함
+    # - article/time 길이 불일치 -> 해당 history 행 사용 안 함
+    # - 내부 article/time null -> 해당 pair만 제거
+
+    duplicated_history_user_ids = set(
+        train_history
+        .filter(
+            pl.col("user_id").is_not_null()
+            &
+            pl.col("user_id").is_duplicated()
+        )
+        .get_column("user_id")
+        .to_list()
     )
+
+    history_article_ids: set[int] = set()
+
+    for row in train_history.iter_rows(named=True):
+        user_id = row["user_id"]
+        article_ids = row["article_id_fixed"]
+        impression_times = row["impression_time_fixed"]
+
+        # history 행 자체를 사용할 수 없는 경우
+        if user_id is None:
+            continue
+
+        if user_id in duplicated_history_user_ids:
+            continue
+
+        if article_ids is None or impression_times is None:
+            continue
+
+        if len(article_ids) != len(impression_times):
+            continue
+
+        # 내부 null은 pair만 제거
+        for article_id, impression_time in zip(
+            article_ids,
+            impression_times,
+        ):
+            if article_id is None:
+                continue
+
+            if impression_time is None:
+                continue
+
+            history_article_ids.add(
+                int(article_id)
+            )
 
     # STEP 3-6. 중복 impression_id 목록 생성 
     # 동일한 impression_id가 여러 행에 있음 안되기에 해당 ID에 속한 모든 행 제외
@@ -372,11 +421,11 @@ def collect_train_used_article_ids() -> dict[str,Any]:
     # stable dedup 후 고유 클릭이 1개인 target 기사 ID
     target_article_ids: set[Any] = set()
 
-    # 실제 단일 클릭 학습 샘플로 사용할 수 있는 behavior 행 수
+    # 실제 클릭 학습 샘플로 사용할 수 있는 behavior 행 수
     usable_behavior_row_count = 0 
 
     # STEP 3-8. train behavior 한 행씩 처리
-    # 학습에 사용할 수 있는 단일 클릭 행만 선택 
+    # 학습에 사용할 수 있는 클릭 행만 선택 
     for row in train_behaviors.iter_rows(
         named= True # 각 행을 컬럼명이 붙은 딕셔너리로 가져오기 
     ):
@@ -408,12 +457,12 @@ def collect_train_used_article_ids() -> dict[str,Any]:
         # 2. 클릭 리스트가 빈 리스트인 경우 
         if len(clicked_ids) == 0: continue 
         # 3. 클릭 리스트 내부에 null이 존재하는 경우 
-        has_null_clicked_id = any(
-            clicked_article_id is None 
-            for clicked_article_id in clicked_ids
-        )
+        valid_clicked_ids = [
+            clicked_article_id for clicked_article_id in clicked_ids if clicked_article_id is not None 
+        ]
 
-        if has_null_clicked_id: continue 
+        # null 제거 후 클릭 기사가 하나도 없으면 target이 없으므로 제외
+        if len(valid_clicked_ids) == 0: continue 
 
         # STEP 3-8-3. 클릭 목록 stable dedup
         # 클릭 목록의 원순서는 유지하며 동일한 기사 ID가 반복된 경우 중복 제거 
@@ -424,7 +473,7 @@ def collect_train_used_article_ids() -> dict[str,Any]:
         unique_clicked_ids: list[Any] = []
 
         # 클릭 ID를 원순서로 확인
-        for clicked_article_id in clicked_ids:
+        for clicked_article_id in valid_clicked_ids:
             # 아직 등장하지 않은 기사 ID만 결과에 추가 
             if clicked_article_id not in seen_clicked_ids:
                 seen_clicked_ids.add(
@@ -433,7 +482,7 @@ def collect_train_used_article_ids() -> dict[str,Any]:
 
                 unique_clicked_ids.append(clicked_article_id)
 
-        # STEP 3-8-4. 단일 클릭 behavior만 선택
+        # STEP 3-8-4. 클릭 behavior만 선택
         # 현재 baseline은 하나의 behavior에 대해 target 기사 하나만 정답으로 사용
 
         # 즉, stable dedup 결과가 하나 이상이면 사용 

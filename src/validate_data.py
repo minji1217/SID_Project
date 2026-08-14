@@ -436,7 +436,8 @@ def validate_articles() -> dict[str, Any]:
     )
 
     # STEP 7-8. category_str 빈값 검사 
-    # 이후 model_category_id 만드는 기준 (tag prediction loss의 정답)
+    # 이후 category_str을 model_category_id로 직접 매핑하고
+    # 해당 ID를 Semantic ID의 c1로 사용
     # 예 : 빈 카테고리 <UNK> ID 0, "sport" -> model_category_id 1
     # null, 빈 문자열 "", 공백만 있는 문자열 " " -> 빈 카테고리로 판단
     # category_str이 비어있으면 이후 카테고리 매핑 단계에서 <UNK>=0으로 처리 (걍 model_category_id 0임)
@@ -730,7 +731,7 @@ def validate_history(
                 # null article_id가 발견된 행 수 기록
                 if has_null_article:
                     null_article_element_row_count += 1
-                    should_exclude_row = True
+                    
 
                 # 3-3. 시간 리스트 내부 null 검사 
                 # impression_time_fixed 안에 null 시간이 하나라도 존재 ? 
@@ -740,32 +741,53 @@ def validate_history(
                 )
 
                 # null 시간이 발견된 행 수 기록
+                # 역시 history 행 전체를 제외하지 않고 해당 pair만 제거 
                 if has_null_time:
                     null_time_element_row_count += 1
-                    should_exclude_row = True
+                    
 
-                # STEP 8-10. history 시간 오름차순 검사
-                # 기사 ID와 시간이 모두 정상인 경우
-                if not has_null_article and not has_null_time:
-                    # 현재 시간과 바로 다음 시간을 차례로 비교
-                    # 같은 시각의 history는 허용
-                    # 예:
-                    # [10:00, 11:00, 11:00, 13:00] -> 정상
-                    # [10:00, 13:00, 12:00]        -> 비정상
-
-                    is_time_sorted = all(
-                        impression_times[index]
-                        <= impression_times[index + 1]
-                        for index in range(
-                            len(impression_times) - 1
-                        )
+                # STEP 8-10. 실제 사용할 수 있는 history pair만 만든다.
+                #
+                # 예:
+                # article_ids      = [100, None, 300, 400]
+                # impression_times = [10:00, 11:00, None, 13:00]
+                #
+                # valid_pairs
+                # = [(100, 10:00), (400, 13:00)]
+                valid_history_pairs = [
+                    (
+                        article_id,
+                        impression_time,
                     )
-
-                    # 특별 케이스 : 
-                    # 시간이 오름차순이 아니라면 해당 행은 삭제하지 않고 재정렬 후보로 기록
-                    if not is_time_sorted:
-                        unsorted_history_row_count += 1
-                        reorder_candidate_row_count += 1
+                    for article_id, impression_time in zip(
+                        article_ids,
+                        impression_times,
+                    )
+                    if (
+                        article_id is not None
+                        and impression_time is not None
+                    )
+                ]
+            
+                # null pair를 제거하고 남은 실제 사용 가능한 시간만 추출
+                valid_impression_times = [
+                    impression_time
+                    for _, impression_time in valid_history_pairs
+                ]
+            
+                # 유효 pair가 0개 또는 1개면 이미 시간순이라고 볼 수 있음
+                is_time_sorted = all(
+                    valid_impression_times[index]
+                    <= valid_impression_times[index + 1]
+                    for index in range(
+                        len(valid_impression_times) - 1
+                    )
+                )
+                # 특별 케이스 : 
+                # 시간이 오름차순이 아니라면 해당 행은 삭제하지 않고 재정렬 후보로 기록
+                if not is_time_sorted:
+                    unsorted_history_row_count += 1
+                    reorder_candidate_row_count += 1
 
 
         # 한 행에 여러 문제가 동시에 존재하더라도 
@@ -776,7 +798,12 @@ def validate_history(
     # STEP 8-11. 경고 존재 여부 확인
     # 제외 대상이나 재정렬 대상이 하나라도 있는 경우
     # history 데이터 후처리 필요 
-    has_warning = (exclusion_candidate_row_count > 0 or reorder_candidate_row_count > 0)
+    has_warning = (
+    exclusion_candidate_row_count > 0
+    or reorder_candidate_row_count > 0
+    or null_article_element_row_count > 0
+    or null_time_element_row_count > 0
+    )
     # STEP 8-12. 최종 검증 상태 결정 
     # 제외 또는 재정렬 후보가 있으면 WARNING이다.
     if has_warning:
@@ -852,19 +879,30 @@ def validate_behaviors(
 
     검사 항목
     --------
-    1. impression_id가 null인 행 수
-    2. impression_id가 중복된 행 수
-    3. user_id가 null인 행 수
-    4. impression_time이 null인 행 수
-    5. 현재 article_id가 null인 행 수
-    6. 클릭 리스트 자체가 null인 행 수
-    7. 클릭 리스트가 빈 리스트인 행 수
-    8. 클릭 리스트 내부에 null이 있는 행 수
-    9. 클릭 리스트 내부에 중복 ID가 있는 행 수
-    10. stable dedup 후 클릭 기사가 0개인 행 수
+    ...
+    10. null 제거 + stable dedup 후 클릭 기사가 0개인 행 수
     11. stable dedup 후 클릭 기사가 1개인 행 수
     12. stable dedup 후 클릭 기사가 2개 이상인 행 수
-    13. 실제 baseline 학습에 사용할 수 있는 단일 클릭 행 수
+    13. 실제 학습/평가에 사용할 수 있는 behavior 행 수
+
+    clicked 처리 순서
+    ----------------
+    1. clicked list 자체가 null이면 제외
+    2. 빈 리스트면 제외
+    3. 리스트 내부 null은 해당 원소만 제거
+    4. stable dedup 수행
+    5. 결과가 0개면 제외
+    6. 결과가 1개 이상이면 사용
+    7. 2개 이상도 multi-positive target으로 사용
+
+    Validation candidate 처리 순서
+    ------------------------------
+    1. candidate list 자체가 null이면 ranking sample 제외
+    2. 빈 리스트면 ranking sample 제외
+    3. 내부 null은 해당 원소만 제거
+    4. stable dedup 수행
+    5. cleanup 후 candidate가 0개면 ranking sample 제외
+    6. 모든 target이 candidate 안에 존재해야 함
 
     stable dedup : 클릭 리스트의 원래 순서 유지하며 중복만 제거하는 방식 
 
@@ -1110,19 +1148,34 @@ def validate_behaviors(
             else:
                 # 3. candidate list 내부 null 검사
                 # 예 : [100, 200, None, 400]
+                # 3. candidate list 내부 null 검사
                 has_null_inview_id = any(
-                    article_id is None for article_id in inview_ids
+                    article_id is None
+                    for article_id in inview_ids
                 )
 
-                if has_null_inview_id :
+                # null이 포함된 행 수만 기록
+                # candidate 전체 sample을 바로 제외하지는 않는다.
+                if has_null_inview_id:
                     inview_null_element_row_count += 1
-                    should_exclude_row = True 
 
-                # null값을 제외한 candidate ID만 임시로 사용
+                # null candidate만 제거
+                #
+                # 예:
+                # [100, None, 200, 300]
+                # ->
+                # [100, 200, 300]
                 valid_inview_ids = [
-                    article_id for article_id in inview_ids 
-                    if article_id is not None 
+                    article_id
+                    for article_id in inview_ids
+                    if article_id is not None
                 ]
+
+                # 원래 리스트는 있었지만
+                # null 제거 후 실제 candidate가 하나도 안 남았다면
+                # ranking sample은 만들 수 없다.
+                if len(valid_inview_ids) == 0:
+                    should_exclude_row = True
 
                 # 4. candidate stable dedup
                 seen_inview_ids: set[Any] = set()
@@ -1137,8 +1190,10 @@ def validate_behaviors(
                 if len(valid_inview_ids) != len(unique_inview_ids):
                     duplicate_inview_row_count += 1
 
-                if not has_null_inview_id:
-                    can_check_inview_membership = True 
+                # null 제거 + stable dedup 이후
+                # candidate가 하나 이상 남으면 membership 검사 가능
+                if len(unique_inview_ids) > 0:
+                    can_check_inview_membership = True
 
         # 5. 클릭 리스트 자체가 null인지 ? 
         if clicked_ids is None : 
@@ -1160,21 +1215,27 @@ def validate_behaviors(
             exclusion_candidate_row_count += 1
             continue 
 
-        # 7. 클릭 리스트 내부 null 검사 
-        # article_ids_clicked 내부에 null article_id 존재 ? 
+        # 7. 클릭 리스트 내부 null 검사
         has_null_clicked_id = any(
-            article_id is None 
-            for article_id in clicked_ids 
+            article_id is None
+            for article_id in clicked_ids
         )
 
-        # null 클릭 ID가 있으면 해당 행을 제외 후보로 기록 
+        # null이 포함된 행 수는 통계로 기록
+        # 하지만 behavior 전체를 제외하지 않는다.
         if has_null_clicked_id:
             clicked_null_element_row_count += 1
-            should_exclude_row = True 
 
-        # STEP 9-16. null 클릭 ID를 제외한 임시 리스트 생성 
+        # STEP 9-16. null 원소만 제거
+        #
+        # 예:
+        # [100, None, 200]
+        # ->
+        # [100, 200]
         valid_clicked_ids = [
-            article_id for article_id in clicked_ids if article_id is not None 
+            article_id
+            for article_id in clicked_ids
+            if article_id is not None
         ]
 
         # STEP 9-17. stable dedup 수행 
@@ -1259,11 +1320,10 @@ def validate_behaviors(
     # 이후 후처리 필요 (build_sequences.py에서)
     has_warning = (
         exclusion_candidate_row_count > 0
-        or 
-        duplicate_clicked_row_count > 0
-        # validation candidate에 중복이 있는 경우
-        # # stable dedup 필요하므로  
+        or duplicate_clicked_row_count > 0
         or duplicate_inview_row_count > 0
+        or clicked_null_element_row_count > 0
+        or inview_null_element_row_count > 0
     )
 
     # STEP 9-22. 최종 상태 결정 
@@ -1348,7 +1408,7 @@ def validate_behaviors(
             multi_click_after_dedup_row_count
         ),
 
-        # 현재 정책상 실제 baseline 학습에 사용할 수 있는 행 수
+        # 현재 정책상 single/multi target 포함해 실제 사용할 수 있는 behavior 행 수 
         "usable_click_row_count": int(
             usable_click_row_count
         ),

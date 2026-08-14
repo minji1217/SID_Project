@@ -79,7 +79,15 @@ def _collect_validation_used_article_ids(
     """
 
     # STEP 10-1-1. Validation history 읽기 
-    validation_history = pl.read_parquet(config.VALIDATION_HISTORY_PATH).select(["user_id", "article_id_fixed"])
+    validation_history = pl.read_parquet(
+        config.VALIDATION_HISTORY_PATH
+    ).select(
+        [
+            "user_id",
+            "article_id_fixed",
+            "impression_time_fixed",
+        ]
+    )
 
     # STEP 10-1-2. Validation behavior 스키마 확인
     behavior_schema = pl.scan_parquet(config.VALIDATION_BEHAVIORS_PATH).collect_schema()
@@ -138,16 +146,52 @@ def _collect_validation_used_article_ids(
     # user_id | article_id_fixed 
 
     # STEP 10-1-3. History 기사 ID 수집
-    history_article_ids : set[int] = set()
+    # Train과 동일한 history 유효성 정책 사용
+
+    duplicated_history_user_ids = set(
+        validation_history
+        .filter(
+            pl.col("user_id").is_not_null()
+            &
+            pl.col("user_id").is_duplicated()
+        )
+        .get_column("user_id")
+        .to_list()
+    )
+
+    history_article_ids: set[int] = set()
 
     for row in validation_history.iter_rows(named=True):
+        user_id = row["user_id"]
         article_ids = row["article_id_fixed"]
+        impression_times = row["impression_time_fixed"]
 
-        if article_ids is None : continue 
+        if user_id is None:
+            continue
 
-        for article_id in article_ids:
-            if article_id is None: continue 
-            history_article_ids.add(int(article_id))
+        if user_id in duplicated_history_user_ids:
+            continue
+
+        if article_ids is None or impression_times is None:
+            continue
+
+        if len(article_ids) != len(impression_times):
+            continue
+
+        for article_id, impression_time in zip(
+            article_ids,
+            impression_times,
+        ):
+            # 내부 null은 pair만 제거
+            if article_id is None:
+                continue
+
+            if impression_time is None:
+                continue
+
+            history_article_ids.add(
+                int(article_id)
+            )
 
 
     # STEP 10-1-4. 중복 impression_id 찾기
@@ -194,16 +238,20 @@ def _collect_validation_used_article_ids(
 
         # 클릭 목록 검사 
         if clicked_article_ids is None : continue 
-        if len(clicked_article_ids) == 0: continue 
-        # train 로직과 동일하게 clicked list 내부 null이 하나라도 있으면 해당 behavior 제외
-        has_null_clicked_id = any(
-            article_id is None
-            for article_id
-            in clicked_article_ids
-        )
-
-        if has_null_clicked_id:
+        if len(clicked_article_ids) == 0:
             continue
+        
+        # clicked 내부 null은 원소만 제거
+        valid_clicked_article_ids = [
+            article_id
+            for article_id in clicked_article_ids
+            if article_id is not None
+        ]
+
+        # null 제거 후 target이 하나도 없으면 제외
+        if len(valid_clicked_article_ids) == 0:
+            continue
+
 
         # stable dedup
         # 예 : [100, 100, 200, 100] -> [100, 200]
@@ -213,7 +261,7 @@ def _collect_validation_used_article_ids(
 
         seen_clicked_ids: set[int] = set()
 
-        for article_id in clicked_article_ids:
+        for article_id in valid_clicked_article_ids:
 
             article_id = int(article_id) 
 

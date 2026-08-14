@@ -166,3 +166,26 @@ EVENT_MASTER_WITH_VALIDATION_PATH = (
 VALIDATION_ARTICLE_MASTER_PATH = (
     MODEL_INPUT_DIR / "validation_article_master.parquet"
 )
+
+# Transformer Seuquence 입력 / 출력 경로
+
+# RQ-VAE Train + Validation inference가 끝난 뒤
+# 모든 사용 기사에 대해 최종 SID 저장한 파일
+ARTICLE_SEMANTIC_IDS_PATH = (
+    MODEL_INPUT_DIR
+    / "article_semantic_ids.parquet"
+)
+
+# Train behavior를 시간순으로 누적하여 만든
+# Transformer 학습용 sequence 파일
+TRAIN_SEQUENCES_PATH = (
+    MODEL_INPUT_DIR
+    / "train_sequences.parquet"
+)
+
+# Validation behavior를 시간순으로 누적하여 만든
+# Transformer 검증/평가용 sequence 파일
+VALIDATION_SEQUENCES_PATH = (
+    MODEL_INPUT_DIR
+    / "validation_sequences.parquet"
+)
