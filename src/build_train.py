@@ -291,7 +291,8 @@ def collect_train_used_article_ids() -> dict[str,Any]:
     4. impression_time이 null이 아님
     5. 클릭 리스트가 null 또는 빈 리스트 아님
     6. 클릭 리스트 내부에 null 없음
-    7. stable dedup후 고유 클릭 기사가 1개 이상 
+    7. stable dedup후 고유 클릭 target 기사 ID (multi-target도 모두포함)
+
 
     마지막엔 articles_base.parquet에 존재하는 유효 article_id와 교집합 계산
     """
@@ -483,7 +484,8 @@ def collect_train_used_article_ids() -> dict[str,Any]:
                 unique_clicked_ids.append(clicked_article_id)
 
         # STEP 3-8-4. 클릭 behavior만 선택
-        # 현재 baseline은 하나의 behavior에 대해 target 기사 하나만 정답으로 사용
+        # stable dedup 후 target이 하나 이상이면 사용
+        # 여러 target도 multi-positive 정답으로 모두 유지
 
         # 즉, stable dedup 결과가 하나 이상이면 사용 
         if len(unique_clicked_ids) == 0:

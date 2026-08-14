@@ -1256,7 +1256,8 @@ def validate_behaviors(
 
         # STEP 9-18. 클릭 리스트 내부 중복 여부 검사 
         # stable dedup 전후의 길이가 다르면 원복 클릭 리스트 내부에 중복 ID가 있었다는 것
-        # stable dedup 후 고유 클릭 ID가 하나라면 단일 클릭 샘플로 사용 가능 
+        # stable dedup 후 중복 여부를 검사
+        # 고유 target이 하나 이상이면 single/multi-target sample로 사용 가능
         if len(valid_clicked_ids) != len(unique_clicked_ids):
             duplicate_clicked_row_count += 1
 
