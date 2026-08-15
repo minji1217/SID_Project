@@ -316,7 +316,7 @@ def _build_safe_normalization_mapping(
         entity_articles.setdefault(key, set()).add(int(row["article_id"]))
 
     entity_df: dict[tuple[str, str], int] = {
-        key: len(article_ids) for key, article_ids in entity_articles.itmes()
+        key: len(article_ids) for key, article_ids in entity_articles.items()
     }
 
     mapping: dict[str, str] = {}

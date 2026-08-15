@@ -265,3 +265,41 @@ def run_entity_experiment(
         "validation_result": validation_result,
         "snapshot_dir": snapshot_dir,
     }
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Entity representation만 변경하여 Event 단계만 재실행합니다."
+        )
+    )
+
+    parser.add_argument(
+        "--no-snapshot",
+        action="store_true",
+        help="실험 결과 snapshot을 만들지 않습니다.",
+    )
+
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="동일 experiment snapshot이 있으면 덮어씁니다.",
+    )
+
+    args = parser.parse_args()
+
+    result = run_entity_experiment(
+        snapshot=(
+            not args.no_snapshot
+        ),
+        overwrite=args.overwrite,
+    )
+
+    print()
+    print("=" * 80)
+    print("Entity Experiment 완료")
+    print("=" * 80)
+    pprint(result)
+
+
+if __name__ == "__main__":
+    main()

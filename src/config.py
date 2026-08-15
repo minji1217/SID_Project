@@ -194,3 +194,13 @@ ENTITY_PROCESSING_MODE = "normalize_only"
 # baseline
 # normalize_only
 # normalize_and_link
+
+# mention-level 상세 entity 처리 결과
+ARTICLE_ENTITIES_PATH = (
+    MODEL_INPUT_DIR / "article_entities.parquet"
+)
+
+# normalize_only에서 Train으로 fit한 normalization mapping
+ENTITY_NORMALIZATION_MAP_PATH = (
+    MODEL_INPUT_DIR / "entity_normalization_map.parquet"
+)
