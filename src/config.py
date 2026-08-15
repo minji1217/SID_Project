@@ -189,3 +189,8 @@ VALIDATION_SEQUENCES_PATH = (
     MODEL_INPUT_DIR
     / "validation_sequences.parquet"
 )
+
+ENTITY_PROCESSING_MODE = "normalize_only"
+# baseline
+# normalize_only
+# normalize_and_link
