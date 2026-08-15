@@ -1,0 +1,33 @@
+{
+  "package_name": "rqvae_validation_inputs",
+  "export_dir": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_validation_inputs",
+  "files": [
+    {
+      "name": "validation_article_master.parquet",
+      "path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_validation_inputs\\validation_article_master.parquet",
+      "size_bytes": 243443
+    },
+    {
+      "name": "article_embeddings.npy",
+      "path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_validation_inputs\\article_embeddings.npy",
+      "size_bytes": 63648896
+    },
+    {
+      "name": "event_master_with_validation.parquet",
+      "path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_validation_inputs\\event_master_with_validation.parquet",
+      "size_bytes": 759549
+    },
+    {
+      "name": "validation_article_events.parquet",
+      "path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_validation_inputs\\validation_article_events.parquet",
+      "size_bytes": 32045
+    }
+  ],
+  "validation": {
+    "status": "PASS",
+    "validation_only_article_count": 3122,
+    "event_count": 12186,
+    "minimum_embedding_row": 5,
+    "maximum_embedding_row": 19906
+  }
+}

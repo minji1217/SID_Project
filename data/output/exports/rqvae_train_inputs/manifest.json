@@ -1,0 +1,43 @@
+{
+  "package_name": "rqvae_train_inputs",
+  "export_dir": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_train_inputs",
+  "files": [
+    {
+      "name": "article_master.parquet",
+      "path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_train_inputs\\article_master.parquet",
+      "size_bytes": 750516
+    },
+    {
+      "name": "article_embeddings.npy",
+      "path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_train_inputs\\article_embeddings.npy",
+      "size_bytes": 63648896
+    },
+    {
+      "name": "category_mapping.parquet",
+      "path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_train_inputs\\category_mapping.parquet",
+      "size_bytes": 1145
+    },
+    {
+      "name": "article_events.parquet",
+      "path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_train_inputs\\article_events.parquet",
+      "size_bytes": 93152
+    },
+    {
+      "name": "event_master.parquet",
+      "path": "C:\\Users\\samsung\\OneDrive\\바탕 화면\\학부연구생\\2026\\에이전트팀\\SID_Project\\data\\output\\exports\\rqvae_train_inputs\\event_master.parquet",
+      "size_bytes": 580071
+    }
+  ],
+  "validation": {
+    "status": "PASS",
+    "article_count": 9738,
+    "unique_event_count": 9186,
+    "minimum_embedding_row": 0,
+    "maximum_embedding_row": 19051,
+    "article_embeddings_shape": [
+      20719,
+      768
+    ],
+    "article_embeddings_dtype": "float32"
+  }
+}
