@@ -39,6 +39,49 @@ _SAFE_POSSESSIVE_ENTITY_GROUPS = {
     "LOC",
 }
 
+# =============================================================================
+# Safe Normalization version
+# =============================================================================
+#
+# v1
+#   baseline
+#     ↓
+#   safe possessive
+#
+# v2
+#   baseline
+#     ↓
+#   safe possessive
+#     ↓
+#   safe hyphen/space
+#
+# config.ENTITY_NORMALIZATION_VERSION으로 선택한다.
+# =============================================================================
+
+SUPPORTED_ENTITY_NORMALIZATION_VERSIONS = {
+    "v1",
+    "v2",
+}
+
+
+# v2에서 hyphen/space 후보를 만들 때 동일하게 처리할 dash 문자들.
+#
+# 실제 entity를 무조건 바꾸는 용도가 아니다.
+# 뒤의 guardrail을 통과한 경우에만 최종 mapping으로 사용한다.
+_V2_DASH_TRANSLATION = str.maketrans(
+    {
+        "\u2010": "-",  # HYPHEN
+        "\u2011": "-",  # NON-BREAKING HYPHEN
+        "\u2012": "-",  # FIGURE DASH
+        "\u2013": "-",  # EN DASH
+        "\u2014": "-",  # EM DASH
+        "\u2212": "-",  # MINUS SIGN
+        "\uFE58": "-",  # SMALL EM DASH
+        "\uFE63": "-",  # SMALL HYPHEN-MINUS
+        "\uFF0D": "-",  # FULLWIDTH HYPHEN-MINUS
+    }
+)
+
 # 1. Baseline-compatible normalization
 
 def normalize_entity_text(entity: Any) -> str | None : 
@@ -412,6 +455,493 @@ def _build_safe_normalization_mapping(
         },
     )
 
+# =============================================================================
+# 4. Safe hyphen/space normalization mapping - v2
+# =============================================================================
+
+
+def _hyphen_to_space_candidate(
+    entity_text: str,
+) -> str:
+    """
+    v2 hyphen/space 후보 문자열을 만든다.
+
+    이 함수 자체는 entity를 확정적으로 변경하지 않는다.
+    단지 "이렇게 바꿨을 때 어떤 문자열이 되는가?"를 계산한다.
+
+    예:
+        "jyllands - posten"
+        -> "jyllands posten"
+
+        "helle thorning-schmidt"
+        -> "helle thorning schmidt"
+
+        "covid - 19"
+        -> "covid 19"
+
+    이후 _build_safe_hyphen_v2_mapping()에서
+    target이 실제 Train vocabulary에 존재하는지 등을 다시 검사한다.
+    """
+
+    # Unicode dash를 먼저 일반 '-'로 통일
+    text = entity_text.translate(
+        _V2_DASH_TRANSLATION
+    )
+
+    # hyphen을 space로 변경
+    text = text.replace(
+        "-",
+        " ",
+    )
+
+    # hyphen 주변에 공백이 이미 있었으면
+    # 여러 개의 공백이 생길 수 있으므로 다시 한 칸으로 축약
+    text = " ".join(
+        text.split()
+    )
+
+    return text
+
+
+def _has_dangling_hyphen(
+    entity_text: str,
+) -> bool:
+    """
+    NER이 중간에서 잘린 것처럼 보이는 entity를 찾는다.
+
+    실제 v2 후보 검토에서 발견된 위험 사례:
+
+        "midt -"
+        "olsen -"
+
+    이런 것은 정상적인:
+        "jyllands - posten"
+
+    같은 표기 차이와 다르다.
+
+    따라서 entity 시작이나 끝이 hyphen이면
+    v2 자동 normalization에서 제외한다.
+    """
+
+    text = entity_text.translate(
+        _V2_DASH_TRANSLATION
+    ).strip()
+
+    return (
+        text.startswith("-")
+        or text.endswith("-")
+    )
+
+
+def _build_safe_hyphen_v2_mapping(
+    train_mentions: pl.DataFrame,
+    possessive_mapping: dict[str, str],
+) -> tuple[
+    dict[str, str],
+    pl.DataFrame,
+    dict[str, int],
+]:
+    """
+    Safe Normalization v2의 hyphen/space mapping을 Train에서 fit한다.
+
+    매우 중요
+    -------------------------------------------------------------------------
+    v2는 raw entity에 바로 적용하지 않는다.
+
+        baseline
+            ↓
+        safe possessive v1
+            ↓
+        safe hyphen v2
+
+    순서로 적용한다.
+
+    즉 여기서는 v1 적용 후의 canonical vocabulary를 대상으로
+    hyphen/space 차이를 다시 찾는다.
+
+
+    Guardrail
+    -------------------------------------------------------------------------
+    1. Train-used article만 사용
+
+    2. 같은 entity TYPE 안에서만 mapping
+
+       예:
+           ORG -> ORG
+           PER -> PER
+
+    3. hyphen을 space로 변경한 최종 target이
+       같은 TYPE의 Train vocabulary에 실제 존재해야 한다.
+
+       예:
+
+           ORG::jyllands - posten
+           ORG::jyllands posten
+
+       둘 다 Train에서 관측
+       -> 허용 가능
+
+    4. dangling hyphen 제외
+
+       예:
+           ORG::midt -
+           PROD::olsen -
+
+       -> 제외
+
+    5. terminal punctuation은 처리하지 않는다.
+
+       예:
+           allan j.
+           -> allan j
+
+       이런 것은 이번 v2에서 보류한다.
+
+
+    반환
+    -------------------------------------------------------------------------
+    hyphen_mapping
+
+        v1 canonical entity key
+        ->
+        v2 canonical entity key
+
+
+    mapping_df
+
+        어떤 mapping이 생성됐는지 확인하는 상세 테이블
+
+
+    stats
+
+        collision group 수
+        candidate 수
+        accepted 수
+        rejected 수
+    """
+
+    # -------------------------------------------------------------------------
+    # STEP 4-1.
+    # Train mention에 v1 possessive를 먼저 적용한 뒤,
+    #
+    #   (entity_group, v1 canonical surface)
+    #       -> {article_id, ...}
+    #
+    # 형태로 Train vocabulary를 만든다.
+    #
+    # 같은 article에서 entity가 여러 번 나와도
+    # DF는 article 단위로 한 번만 센다.
+    # -------------------------------------------------------------------------
+
+    entity_articles: dict[
+        tuple[str, str],
+        set[int],
+    ] = {}
+
+    for row in train_mentions.select(
+        [
+            "article_id",
+            "baseline_entity_key",
+        ]
+    ).iter_rows(named=True):
+
+        article_id = int(
+            row["article_id"]
+        )
+
+        baseline_entity_key = str(
+            row["baseline_entity_key"]
+        )
+
+        # 먼저 v1 possessive 적용
+        v1_entity_key = (
+            possessive_mapping.get(
+                baseline_entity_key,
+                baseline_entity_key,
+            )
+        )
+
+        # 예:
+        # ORG::jyllands - posten
+        #
+        # entity_group = ORG
+        # entity_surface = jyllands - posten
+        entity_group, entity_surface = (
+            v1_entity_key.split(
+                "::",
+                1,
+            )
+        )
+
+        key = (
+            entity_group,
+            entity_surface,
+        )
+
+        entity_articles.setdefault(
+            key,
+            set(),
+        ).add(
+            article_id
+        )
+
+    # -------------------------------------------------------------------------
+    # STEP 4-2.
+    # hyphen/space transform 결과가 같은 entity들을 bucket으로 묶는다.
+    #
+    # 예:
+    #
+    #   jyllands - posten
+    #   jyllands posten
+    #
+    # 각각 transform:
+    #
+    #   jyllands posten
+    #   jyllands posten
+    #
+    # 따라서 같은 collision group이 된다.
+    # -------------------------------------------------------------------------
+
+    collision_buckets: dict[
+        tuple[str, str],
+        set[str],
+    ] = {}
+
+    for (
+        entity_group,
+        entity_surface,
+    ) in entity_articles:
+
+        candidate_surface = (
+            _hyphen_to_space_candidate(
+                entity_surface
+            )
+        )
+
+        bucket_key = (
+            entity_group,
+            candidate_surface,
+        )
+
+        collision_buckets.setdefault(
+            bucket_key,
+            set(),
+        ).add(
+            entity_surface
+        )
+
+    mapping: dict[
+        str,
+        str,
+    ] = {}
+
+    mapping_rows: list[
+        dict[str, Any]
+    ] = []
+
+    collision_group_count = 0
+    candidate_count = 0
+    accepted_count = 0
+
+    # -------------------------------------------------------------------------
+    # STEP 4-3.
+    # 실제 collision group만 검사한다.
+    # -------------------------------------------------------------------------
+
+    for (
+        entity_group,
+        candidate_surface,
+    ), surfaces in sorted(
+        collision_buckets.items()
+    ):
+
+        # 서로 다른 현재 surface가 최소 2개 있어야 한다.
+        #
+        # surface 1개밖에 없다면
+        # "비슷한 표현이 Train에 같이 존재한다"는 증거가 없으므로 제외.
+        if len(surfaces) < 2:
+            continue
+
+        # 최소 하나는 실제로 변해야 한다.
+        #
+        # 모두 동일 문자열이면 normalization 후보가 아니다.
+        changed_surfaces = [
+            surface
+            for surface in surfaces
+            if surface != candidate_surface
+        ]
+
+        if not changed_surfaces:
+            continue
+
+        collision_group_count += 1
+
+        # 최종 target
+        target_tuple = (
+            entity_group,
+            candidate_surface,
+        )
+
+        # target 자체가 Train vocabulary에 실제 존재하는지
+        target_observed_in_train = (
+            target_tuple in entity_articles
+        )
+
+        target_article_df = (
+            len(
+                entity_articles[
+                    target_tuple
+                ]
+            )
+            if target_observed_in_train
+            else 0
+        )
+
+        # 한 collision group 안에서도
+        # 변해야 하는 variant가 여러 개일 수 있다.
+        for variant_surface in sorted(
+            changed_surfaces
+        ):
+
+            candidate_count += 1
+
+            variant_tuple = (
+                entity_group,
+                variant_surface,
+            )
+
+            variant_article_df = len(
+                entity_articles[
+                    variant_tuple
+                ]
+            )
+
+            # -------------------------------------------------------------
+            # Guardrail 1.
+            # "midt -" 같은 dangling fragment는 제외
+            # -------------------------------------------------------------
+            if _has_dangling_hyphen(
+                variant_surface
+            ):
+                continue
+
+            # -------------------------------------------------------------
+            # Guardrail 2.
+            # 변환 후 target이 Train에 실제 존재해야 함
+            #
+            # 예:
+            #
+            #   esben jean - pierre - blum
+            #   esben jean - pierre blum
+            #
+            # 둘이 같은 가상 target으로 모이더라도,
+            #
+            #   esben jean pierre blum
+            #
+            # 이 Train에 실제 없다면 mapping하지 않는다.
+            # -------------------------------------------------------------
+            if not target_observed_in_train:
+                continue
+
+            variant_entity_key = (
+                make_entity_key(
+                    entity_group,
+                    variant_surface,
+                )
+            )
+
+            canonical_entity_key = (
+                make_entity_key(
+                    entity_group,
+                    candidate_surface,
+                )
+            )
+
+            mapping[
+                variant_entity_key
+            ] = canonical_entity_key
+
+            mapping_rows.append(
+                {
+                    "entity_group": entity_group,
+                    "variant_entity": (
+                        variant_surface
+                    ),
+                    "base_entity": (
+                        candidate_surface
+                    ),
+                    "variant_entity_key": (
+                        variant_entity_key
+                    ),
+                    "canonical_entity_key": (
+                        canonical_entity_key
+                    ),
+                    "variant_article_df": int(
+                        variant_article_df
+                    ),
+                    "base_article_df": int(
+                        target_article_df
+                    ),
+                    "rule": (
+                        "safe_hyphen_v2"
+                    ),
+                }
+            )
+
+            accepted_count += 1
+
+    # v1 mapping parquet과 같은 schema를 사용한다.
+    # 따라서 뒤에서 v1 + v2 mapping_df를 그대로 concat할 수 있다.
+    mapping_schema = {
+        "entity_group": pl.String,
+        "variant_entity": pl.String,
+        "base_entity": pl.String,
+        "variant_entity_key": pl.String,
+        "canonical_entity_key": pl.String,
+        "variant_article_df": pl.Int64,
+        "base_article_df": pl.Int64,
+        "rule": pl.String,
+    }
+
+    if mapping_rows:
+        mapping_df = (
+            pl.DataFrame(
+                mapping_rows,
+                schema=mapping_schema,
+            )
+            .sort(
+                [
+                    "entity_group",
+                    "variant_entity",
+                ]
+            )
+        )
+
+    else:
+        mapping_df = pl.DataFrame(
+            schema=mapping_schema
+        )
+
+    return (
+        mapping,
+        mapping_df,
+        {
+            "hyphen_collision_group_count": int(
+                collision_group_count
+            ),
+            "hyphen_candidate_count": int(
+                candidate_count
+            ),
+            "hyphen_accepted_count": int(
+                accepted_count
+            ),
+            "hyphen_rejected_count": int(
+                candidate_count
+                - accepted_count
+            ),
+        },
+    )
+
 # 4. Main builder
 def build_article_entities(mode: str | None = None)->dict[str, Any]:
     """
@@ -456,7 +986,41 @@ def build_article_entities(mode: str | None = None)->dict[str, Any]:
             "Entity Linking decision layer 구현 후 활성화합니다. "
             "현재는 baseline 또는 normalize_only를 사용하세요."
         )
+    if mode == "normalize_and_link":
+        raise NotImplementedError(
+            "ENTITY_PROCESSING_MODE='normalize_and_link'는 "
+            "Entity Linking decision layer 구현 후 활성화합니다. "
+            "현재는 baseline 또는 normalize_only를 사용하세요."
+        )
 
+    # -------------------------------------------------------------------------
+    # normalize_only 안에서 v1 / v2 선택
+    #
+    # config에 변수가 없으면 기존 동작을 깨지 않도록 v1이 기본값.
+    # -------------------------------------------------------------------------
+    if mode == "normalize_only":
+        normalization_version = str(
+            getattr(
+                config,
+                "ENTITY_NORMALIZATION_VERSION",
+                "v1",
+            )
+        ).strip().lower()
+
+        if (
+            normalization_version
+            not in SUPPORTED_ENTITY_NORMALIZATION_VERSIONS
+        ):
+            raise ValueError(
+                "지원하지 않는 ENTITY_NORMALIZATION_VERSION입니다. "
+                f"현재 값={normalization_version}, "
+                f"지원 값={sorted(SUPPORTED_ENTITY_NORMALIZATION_VERSIONS)}"
+            )
+
+    else:
+        normalization_version = "baseline"
+
+    
     config.create_output_directories()
 
     required_paths = [
@@ -527,7 +1091,29 @@ def build_article_entities(mode: str | None = None)->dict[str, Any]:
         pl.col("is_train_used")
     )
 
-    normalization_mapping: dict[str, str] = {}
+    # -------------------------------------------------------------------------
+    # v1 mapping과 v2 mapping을 따로 관리한다.
+    #
+    # 최종 적용 순서:
+    #
+    # baseline key
+    #     ↓
+    # possessive_mapping
+    #     ↓
+    # hyphen_mapping
+    #     ↓
+    # final canonical key
+    # -------------------------------------------------------------------------
+
+    possessive_mapping: dict[
+        str,
+        str,
+    ] = {}
+
+    hyphen_mapping: dict[
+        str,
+        str,
+    ] = {}
 
     empty_mapping_schema = {
         "entity_group": pl.String,
@@ -548,16 +1134,72 @@ def build_article_entities(mode: str | None = None)->dict[str, Any]:
         "possessive_candidate_count": 0,
         "possessive_accepted_count": 0,
         "possessive_rejected_count": 0,
+
+        "hyphen_collision_group_count": 0,
+        "hyphen_candidate_count": 0,
+        "hyphen_accepted_count": 0,
+        "hyphen_rejected_count": 0,
     }
-    
+
     if mode == "normalize_only":
+
+        # -------------------------------------------------------------
+        # STEP 1. 기존 v1 possessive
+        # -------------------------------------------------------------
         (
-            normalization_mapping,
-            mapping_df,
-            mapping_stats,
+            possessive_mapping,
+            possessive_mapping_df,
+            possessive_stats,
         ) = _build_safe_normalization_mapping(
             train_mentions=train_mentions
         )
+
+        mapping_stats.update(
+            possessive_stats
+        )
+
+        # v1까지만 실행하는 경우에는
+        # 기존과 동일하게 possessive mapping만 저장
+        mapping_df = (
+            possessive_mapping_df
+        )
+
+        # -------------------------------------------------------------
+        # STEP 2. v2일 때만 safe hyphen mapping 추가
+        # -------------------------------------------------------------
+        if normalization_version == "v2":
+            (
+                hyphen_mapping,
+                hyphen_mapping_df,
+                hyphen_stats,
+            ) = _build_safe_hyphen_v2_mapping(
+                train_mentions=train_mentions,
+                possessive_mapping=possessive_mapping,
+            )
+
+            mapping_stats.update(
+                hyphen_stats
+            )
+
+            # entity_normalization_map.parquet에는
+            # v1 + v2 mapping을 모두 저장
+            if hyphen_mapping_df.height > 0:
+                mapping_df = (
+                    pl.concat(
+                        [
+                            possessive_mapping_df,
+                            hyphen_mapping_df,
+                        ],
+                        how="vertical",
+                    )
+                    .sort(
+                        [
+                            "rule",
+                            "entity_group",
+                            "variant_entity",
+                        ]
+                    )
+                )
 
     output_rows: list[dict[str, Any]] = []
 
@@ -569,21 +1211,83 @@ def build_article_entities(mode: str | None = None)->dict[str, Any]:
             row["baseline_entity_key"]
         )
 
-        canonical_entity_key = (
-            normalization_mapping.get(
+        # -------------------------------------------------------------
+        # STEP 1. 기존 Safe Normalization v1
+        #
+        # 예:
+        #   PER::mette frederiksens
+        #   -> PER::mette frederiksen
+        # -------------------------------------------------------------
+        after_possessive_key = (
+            possessive_mapping.get(
                 baseline_entity_key,
                 baseline_entity_key,
             )
         )
 
-        if canonical_entity_key != baseline_entity_key:
-            processing_method = "safe_possessive_v1"
+        # -------------------------------------------------------------
+        # STEP 2. Safe Normalization v2
+        #
+        # v2가 비활성화된 경우 hyphen_mapping={}이므로
+        # after_possessive_key가 그대로 유지된다.
+        #
+        # 예:
+        #   ORG::jyllands - posten
+        #   -> ORG::jyllands posten
+        # -------------------------------------------------------------
+        canonical_entity_key = (
+            hyphen_mapping.get(
+                after_possessive_key,
+                after_possessive_key,
+            )
+        )
+
+        possessive_changed = (
+            after_possessive_key
+            != baseline_entity_key
+        )
+
+        hyphen_changed = (
+            canonical_entity_key
+            != after_possessive_key
+        )
+
+        # -------------------------------------------------------------
+        # 어떤 normalization이 적용됐는지 기록
+        # -------------------------------------------------------------
+        if (
+            possessive_changed
+            and hyphen_changed
+        ):
+            processing_method = (
+                "safe_possessive_v1"
+                "+safe_hyphen_v2"
+            )
+
+        elif possessive_changed:
+            processing_method = (
+                "safe_possessive_v1"
+            )
+
+        elif hyphen_changed:
+            processing_method = (
+                "safe_hyphen_v2"
+            )
+
+        else:
+            processing_method = (
+                "baseline"
+            )
+
+        if (
+            canonical_entity_key
+            != baseline_entity_key
+        ):
             changed_mention_count += 1
+
             changed_article_ids.add(
                 int(row["article_id"])
             )
-        else:
-            processing_method = "baseline"
 
         # TYPE::surface에서 surface만 분리.
         # split(..., 1)이라 surface 내부 '::'가 있더라도 첫 구분자만 사용.
@@ -678,6 +1382,7 @@ def build_article_entities(mode: str | None = None)->dict[str, Any]:
         "status": "SUCCESS",
         "entity_processing_mode": mode,
         "fit_split": "train_used_articles_only",
+        "normalization_version": normalization_version,
         "valid_article_count": int(
             articles.height
         ),

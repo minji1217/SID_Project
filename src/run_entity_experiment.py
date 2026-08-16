@@ -161,6 +161,7 @@ def _snapshot_results(
     manifest_lines = [
         f"experiment={experiment_name}",
         f"entity_processing_mode={config.ENTITY_PROCESSING_MODE}",
+        f"entity_normalization_version={getattr(config, 'ENTITY_NORMALIZATION_VERSION', 'v1')}",
         f"similarity_threshold={config.EVENT_ENTITY_SIMILARITY_THRESHOLD}",
         f"time_window_hours={config.EVENT_TIME_WINDOW_HOURS}",
         f"max_entity_df_ratio={config.EVENT_MAX_ENTITY_DF_RATIO}",
@@ -192,8 +193,38 @@ def run_entity_experiment(
         config.ENTITY_PROCESSING_MODE
     ).strip().lower()
 
+    normalization_version = str(
+        getattr(
+            config,
+            "ENTITY_NORMALIZATION_VERSION",
+            "v1",
+        )
+    ).strip().lower()
+
+    # -------------------------------------------------------------------------
+    # snapshot 이름 분리
+    #
+    # 기존 v1:
+    #   experiments/normalize_only/
+    #
+    # 새 v2:
+    #   experiments/normalize_v2/
+    #
+    # 기존 v1 실험 결과를 덮어쓰지 않기 위해 분리한다.
+    # -------------------------------------------------------------------------
     if mode == "normalize_and_link":
-        experiment_name = "entity_linked"
+        experiment_name = (
+            "entity_linked"
+        )
+
+    elif (
+        mode == "normalize_only"
+        and normalization_version == "v2"
+    ):
+        experiment_name = (
+            "normalize_v2"
+        )
+
     else:
         experiment_name = mode
 
