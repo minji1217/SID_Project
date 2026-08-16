@@ -190,10 +190,23 @@ VALIDATION_SEQUENCES_PATH = (
     / "validation_sequences.parquet"
 )
 
+# =============================================================================
+# Entity Processing 실험 설정
+# =============================================================================
+
 ENTITY_PROCESSING_MODE = "normalize_only"
-# baseline
-# normalize_only
-# normalize_and_link
+
+# normalize_only에서 적용할 Normalization 단계
+#
+# "v1"
+#   safe_possessive_v1만 적용
+#
+# "v2"
+#   safe_possessive_v1
+#       ↓
+#   safe_hyphen_v2
+#
+ENTITY_NORMALIZATION_VERSION = "v2"
 
 # mention-level 상세 entity 처리 결과
 ARTICLE_ENTITIES_PATH = (

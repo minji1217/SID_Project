@@ -1,0 +1,29 @@
+================================================================================
+Safe Normalization v2 Candidate Inspection
+================================================================================
+
+source_article_entities=C:\Users\samsung\OneDrive\바탕 화면\학부연구생\2026\에이전트팀\SID_Project\data\output\experiments\normalize_only\model_inputs\article_entities.parquet
+fit_split=train_used_articles_only
+train_entity_mention_rows=76588
+unique_train_entity_surfaces=28835
+
+--------------------------------------------------------------------------------
+Rule Statistics
+--------------------------------------------------------------------------------
+zero_width: tier=SAFE_FORMAT, collision_groups=0, mapping_candidates=0, affected_articles=0
+apostrophe_unicode: tier=SAFE_FORMAT, collision_groups=0, mapping_candidates=0, affected_articles=0
+double_quote_unicode: tier=SAFE_FORMAT, collision_groups=0, mapping_candidates=0, affected_articles=0
+dash_unicode: tier=SAFE_FORMAT, collision_groups=0, mapping_candidates=0, affected_articles=0
+hyphen_spacing: tier=REVIEW, collision_groups=0, mapping_candidates=0, affected_articles=0
+hyphen_vs_space: tier=REVIEW, collision_groups=28, mapping_candidates=31, affected_articles=244
+outer_quotes: tier=REVIEW, collision_groups=0, mapping_candidates=0, affected_articles=0
+terminal_punctuation: tier=RISKY_DIAGNOSTIC, collision_groups=20, mapping_candidates=20, affected_articles=55
+
+--------------------------------------------------------------------------------
+Overall
+--------------------------------------------------------------------------------
+collision_group_rows=48
+mapping_candidate_rows=51
+character_inventory_rows=13
+
+주의: 이 결과는 후보 진단이다. 아직 entity_processing.py에 자동 적용하지 않는다.

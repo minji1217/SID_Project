@@ -1,0 +1,34 @@
+================================================================================
+Baseline vs normalize_only Entity Event Comparison
+================================================================================
+
+entity_vocabulary_count: baseline=29445.000000, normalize_only=28835.000000, delta=-610.000000
+high_df_entity_count: baseline=47.000000, normalize_only=48.000000, delta=+1.000000
+train_event_count: baseline=9186.000000, normalize_only=9148.000000, delta=-38.000000
+train_singleton_event_count: baseline=8896.000000, normalize_only=8843.000000, delta=-53.000000
+train_singleton_event_ratio: baseline=0.968430, normalize_only=0.966659, delta=-0.001771
+train_multi_article_event_count: baseline=290.000000, normalize_only=305.000000, delta=+15.000000
+train_mean_event_size: baseline=1.060091, normalize_only=1.064495, delta=+0.004404
+train_median_event_size: baseline=1.000000, normalize_only=1.000000, delta=+0.000000
+train_max_event_size: baseline=36.000000, normalize_only=39.000000, delta=+3.000000
+final_event_count: baseline=12186.000000, normalize_only=12149.000000, delta=-37.000000
+new_validation_event_count: baseline=3000.000000, normalize_only=3001.000000, delta=+1.000000
+matched_existing_event_count: baseline=122.000000, normalize_only=121.000000, delta=-1.000000
+matched_train_origin_event_count: baseline=31.000000, normalize_only=32.000000, delta=+1.000000
+matched_validation_origin_event_count: baseline=91.000000, normalize_only=89.000000, delta=-2.000000
+added_cocluster_article_pair_count: baseline=0.000000, normalize_only=415.000000, delta=+415.000000
+removed_cocluster_article_pair_count: baseline=0.000000, normalize_only=64.000000, delta=+64.000000
+new_merge_or_reconfigured_event_count: baseline=0.000000, normalize_only=38.000000, delta=+38.000000
+split_or_reconfigured_event_count: baseline=0.000000, normalize_only=9.000000, delta=+9.000000
+
+--------------------------------------------------------------------------------
+High-DF 변화
+--------------------------------------------------------------------------------
+LOC::brøndby: df 93 -> 99
+ORG::venstre: df 97 -> 110
+
+--------------------------------------------------------------------------------
+정성 검토 대상
+--------------------------------------------------------------------------------
+new merge/reconfigured events = 38
+split/reconfigured events = 9
