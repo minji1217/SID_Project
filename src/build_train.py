@@ -10,6 +10,7 @@ import unicodedata # entity 문자열 정규화용
 
 from rich.progress import track
 from transformers import AutoModel, AutoTokenizer
+from src.entity_processing import load_canonical_entity_lookup
 
 from src.config import (
     ARTICLES_PATH,
@@ -1971,13 +1972,30 @@ def build_article_events(
         dict[str, Any],
     ] = {}
 
+    canonical_entity_lookup = load_canonical_entity_lookup()
+
+    for row in articles.iter_rows(named=True):
+        article_id = int(row["article_id"])
+
+        article_lookup[article_id] = {
+            "article_id": article_id,
+            "published_time": row["published_time"],
+            "entity_set": set(
+                canonical_entity_lookup.get(
+                    article_id,
+                    set(),
+                )
+            ),
+        }
+
+    """
     for row in articles.iter_rows(named=True):
         article_id = int(row["article_id"])
         article_lookup[article_id]={"article_id":article_id, 
                                     "published_time":row["published_time"],
                                     "entity_set": _normalize_entity_set(row["ner_clusters"],
-                                                                        row["entity_groups"])}
-
+                                                                    row["entity_groups"])}
+    """
     # STEP 7-6-4. Train 기사 정렬
     # train_articles = [
     #     {"article_id": 100, "published_time": "01-01 09:00", "entity_set": {"PER::Zlatan", "LOC::Sverige"}},  # index 0
@@ -2711,6 +2729,7 @@ def build_article_events(
             high_df_only_article_count
         ),
     }
+
 
 
 

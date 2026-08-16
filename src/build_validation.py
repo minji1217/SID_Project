@@ -8,7 +8,16 @@ from typing import Any
 import numpy as np
 import polars as pl
 
+
 from src import config
+
+from src.build_train import (
+    _idf_weighted_jaccard,
+)
+
+from src.entity_processing import (
+    load_canonical_entity_lookup,
+)
 
 
 # ==============================================
@@ -583,6 +592,9 @@ def _assign_validation_events(
     # clustering{PER::trump}
 
     validation_articles: list[dict[str, Any]] = []
+
+    # 아래 한줄 추가 
+    canonical_entity_lookup = load_canonical_entity_lookup()
     
     for row in articles.iter_rows(named=True):
         article_id = int(row["article_id"])
@@ -590,10 +602,18 @@ def _assign_validation_events(
         if article_id not in validation_only_article_ids:
             continue 
 
+        """
         # 해당 기사에서 나오는 개체들 정규화 
         entity_set = _normalize_entity_set(
             row["ner_clusters"], row["entity_groups"],
         )
+        """
+        entity_set = set(
+                canonical_entity_lookup.get(
+                    article_id,
+                    set(),
+                )
+            )
 
         # entity_set에서 흔한 것 뺌 
         clustering_entity_set = entity_set - high_df_entities

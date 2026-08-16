@@ -121,14 +121,10 @@ def _snapshot_results(
                 f"경로={snapshot_dir}. "
                 "덮어쓰려면 --overwrite를 명시하세요."
             )
-
-        shutil.rmtree(
-            snapshot_dir
-        )
-
+    
     snapshot_dir.mkdir(
         parents=True,
-        exist_ok=False,
+        exist_ok=True,
     )
 
     copied_files: list[str] = []
