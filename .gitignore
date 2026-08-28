@@ -1,7 +1,7 @@
 
 __pycache__/
 data/output/experiments/event_entity_linking/
-
+data
 data/output/experiments/
 data/output/exports.zip
 data/raw
