@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 
 # 현재 파일:
@@ -12,7 +13,16 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # 데이터 폴더
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
-OUTPUT_DIR = DATA_DIR / "output"
+# 기본값은 기존 data/output 그대로 사용한다.
+# Event parameter sweep runner는 subprocess를 시작할 때만
+# SID_OUTPUT_DIR 환경변수로 각 실험의 독립 출력 폴더를 지정한다.
+# 환경변수가 없으면 기존 파이프라인 동작은 전혀 바뀌지 않는다.
+OUTPUT_DIR = Path(
+    os.environ.get(
+        "SID_OUTPUT_DIR",
+        str(DATA_DIR / "output"),
+    )
+)
 
 
 # 원본 파일 경로
@@ -121,12 +131,23 @@ ARTICLE_EMBEDDING_BATCH_SIZE = 16
 
 
 # 클러스터링 하이퍼파라미터 
-EVENT_ENTITY_SIMILARITY_THRESHOLD = 0.3
-EVENT_TIME_WINDOW_HOURS = 72 
+# 기본값은 기존 실험값 그대로다.
+# 환경변수는 parameter sweep subprocess에서만 주입한다.
+# build_train.py가 이 값을 import 시점에 가져가므로,
+# 한 프로세스 안에서 config 값을 나중에 바꾸는 대신
+# 조합별 새 subprocess를 띄워 import 시점부터 올바른 값을 사용한다.
+EVENT_ENTITY_SIMILARITY_THRESHOLD = float(
+    os.environ.get("SID_EVENT_SIMILARITY_THRESHOLD", "0.3")
+)
+EVENT_TIME_WINDOW_HOURS = int(
+    os.environ.get("SID_EVENT_TIME_WINDOW_HOURS", "72")
+)
 
 # event 연결 계산에서 제외할 entity 기준 
 # train 기사 중 1% 이상에서 등장하면 event sim 계산에서 제외
-EVENT_MAX_ENTITY_DF_RATIO = 0.01 
+EVENT_MAX_ENTITY_DF_RATIO = float(
+    os.environ.get("SID_EVENT_MAX_ENTITY_DF_RATIO", "0.01")
+)
 
 # TRAIN에서 실제 사용하는 기사들의 최종 학습용 메타데이터 저장
 ARTICLE_MASTER_PATH = (MODEL_INPUT_DIR / "article_master.parquet")

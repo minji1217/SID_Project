@@ -632,7 +632,7 @@ def _load_behaviors(
         behaviors.filter(pl.col("impression_id").is_not_null() 
                          &
                          pl.col("impression_id").is_duplicated())
-    ).get_column("impression_id").to_list()
+    .get_column("impression_id").to_list())
 
     # STEP 11-5-4. user - time - id 순 정렬 
     # impression time에 null 섞여있으면 맨 뒤로 
