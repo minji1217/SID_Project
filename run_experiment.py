@@ -1385,7 +1385,7 @@ def run_experiment(plan: ExperimentPlan, args: argparse.Namespace) -> None:
         # 4. EXP 대표 SID 선택
         # ------------------------------------------------------------------
         # 자동 "최종 모델 선정"이 아니라, downstream 연결 편의를 위한 대표 파일이다.
-        # 기본은 best_total이고, --sid-checkpoint best_rec으로 바꿀 수 있다.
+        # 기본 대표 checkpoint는 best_rec이다. best_total도 진단용으로 별도 평가/보존한다.
         selected_variant = (
             args.sid_checkpoint
             if args.sid_checkpoint
@@ -1640,10 +1640,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sid-checkpoint",
         choices=["best_total", "best_rec", "final"],
-        default="best_total",
+        default="best_rec",
         help=(
             "EXP 대표 article_semantic_ids.parquet에 사용할 checkpoint. "
-            "best_total/best_rec은 둘 다 별도 평가되며 이 옵션은 대표 파일만 결정."
+            "best_total/best_rec은 둘 다 별도 평가되며 이 옵션은 대표 파일만 결정. 기본은 best_rec."
         ),
     )
 
