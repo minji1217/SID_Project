@@ -124,6 +124,77 @@ def detect_rqvae_root() -> Path:
     )
 
 
+
+# ============================================================================
+# Colab / Google Drive 결과 저장 정책
+# ============================================================================
+
+# Colab에서 Google Drive를 mount한 뒤 run_experiment.py를 실행하면,
+# --experiment-root를 따로 주지 않아도 모든 실험 결과를 아래에 바로 저장한다.
+#
+# MyDrive/
+# └─ SID_Project_Colab/
+#    └─ results/
+#       └─ <dataset>/
+#          ├─ stage_q2q3/
+#          ├─ stage_latent/
+#          └─ all_results.csv
+#
+# 로컬 Windows/Linux에서 실행할 때는 기존처럼
+# RQVAE/out/experiments/<dataset> 을 사용한다.
+COLAB_DRIVE_RESULTS_BASE = Path(
+    "/content/drive/MyDrive/SID_Project_Colab/results"
+)
+
+
+def running_in_colab() -> bool:
+    """현재 프로세스가 Google Colab 환경에서 실행 중인지 보수적으로 판단한다."""
+
+    return bool(
+        os.environ.get("COLAB_RELEASE_TAG")
+        or os.environ.get("COLAB_BACKEND_VERSION")
+        or os.environ.get("COLAB_GPU")
+    )
+
+
+def default_experiment_root(
+    rqvae_root: Path,
+    dataset: str,
+) -> Path:
+    """
+    --experiment-root가 생략됐을 때 사용할 결과 폴더를 결정한다.
+
+    - Colab: Google Drive가 반드시 mount되어 있어야 하며
+      MyDrive/SID_Project_Colab/results/<dataset> 사용
+    - 그 외: 기존 로컬 경로 RQVAE/out/experiments/<dataset> 사용
+
+    Colab인데 Drive가 mount되지 않은 경우 조용히 /content에 저장하지 않고
+    즉시 오류를 내서 세션 종료 시 결과가 유실되는 일을 막는다.
+    """
+
+    if running_in_colab():
+        my_drive = Path("/content/drive/MyDrive")
+        if not my_drive.exists():
+            raise RuntimeError(
+                "Google Colab에서 실행 중이지만 Google Drive가 mount되지 않았습니다.\n"
+                "먼저 아래 셀을 실행하세요:\n"
+                "from google.colab import drive\n"
+                "drive.mount('/content/drive')"
+            )
+
+        return (
+            COLAB_DRIVE_RESULTS_BASE
+            / dataset
+        )
+
+    return (
+        rqvae_root
+        / "out"
+        / "experiments"
+        / dataset
+    )
+
+
 DATASET_CONFIGS = {
     "ebnerd": Path("configs/rqvae_ebnerd.gin"),
     "mind": Path("configs/rqvae_mind.gin"),
@@ -399,6 +470,31 @@ def run_command(command: list[str], cwd: Path, log_path: Path) -> str:
         log_file.write(header)
         log_file.flush()
 
+        # RQVAE/evaluate/*.py가 `from modules...`, `from data...`처럼
+        # RQVAE 루트를 기준으로 import하므로 모든 자식 프로세스에
+        # cwd(=RQVAE root)를 PYTHONPATH로 전달한다.
+        #
+        # evaluate_all.py가 다시 eval_reconstruction.py 등을 subprocess로
+        # 실행해도 이 환경변수는 그대로 상속되므로 별도 수동 %env가 필요 없다.
+        env = os.environ.copy()
+        rqvae_python_path = str(Path(cwd).resolve())
+        current_pythonpath = env.get("PYTHONPATH", "")
+
+        if current_pythonpath:
+            pythonpath_items = current_pythonpath.split(os.pathsep)
+            if rqvae_python_path not in pythonpath_items:
+                env["PYTHONPATH"] = (
+                    rqvae_python_path
+                    + os.pathsep
+                    + current_pythonpath
+                )
+        else:
+            env["PYTHONPATH"] = rqvae_python_path
+
+        # Windows에서 UTF-8 gin 파일의 한글 주석을 cp949로 읽는 문제도 방어한다.
+        env.setdefault("PYTHONUTF8", "1")
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+
         process = subprocess.Popen(
             command,
             cwd=str(cwd),
@@ -406,6 +502,7 @@ def run_command(command: list[str], cwd: Path, log_path: Path) -> str:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,
         )
 
         assert process.stdout is not None
@@ -1501,7 +1598,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--experiment-root",
         type=Path,
         default=None,
-        help="실험 결과 루트. 기본: RQVAE/out/experiments/<dataset>",
+        help=("실험 결과 루트. 생략 시 Colab에서는 ""MyDrive/SID_Project_Colab/results/<dataset>, ""로컬에서는 RQVAE/out/experiments/<dataset>"),
     )
     parser.add_argument(
         "--config",
@@ -1600,11 +1697,26 @@ def main() -> None:
         baseline_config = args.rqvae_root / baseline_config
     args.baseline_config = baseline_config.resolve()
 
-    experiment_root = args.experiment_root or (args.rqvae_root / "out" / "experiments" / args.dataset)
-    if not experiment_root.is_absolute():
-        experiment_root = args.rqvae_root / experiment_root
+    # 사용자가 --experiment-root를 직접 주면 그 값을 최우선으로 사용한다.
+    # 생략했다면 Colab에서는 Google Drive, 로컬에서는 기존 RQVAE/out 경로를 사용한다.
+    if args.experiment_root is not None:
+        experiment_root = args.experiment_root
+        if not experiment_root.is_absolute():
+            experiment_root = (
+                args.rqvae_root
+                / experiment_root
+            )
+    else:
+        experiment_root = default_experiment_root(
+            args.rqvae_root,
+            args.dataset,
+        )
+
     args.experiment_root = experiment_root.resolve()
-    args.experiment_root.mkdir(parents=True, exist_ok=True)
+    args.experiment_root.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     parent_ids = [item.strip() for item in args.parents.split(",") if item.strip()]
     parents = resolve_parents(args.stage, parent_ids, args.experiment_root, args.baseline_config)
@@ -1652,6 +1764,10 @@ def main() -> None:
     print(f"Stage           : {args.stage}")
     print(f"Baseline config : {args.baseline_config}")
     print(f"Experiment root : {args.experiment_root}")
+    if str(args.experiment_root).startswith("/content/drive/MyDrive/"):
+        print("Result storage  : Google Drive (persistent)")
+    else:
+        print("Result storage  : Local filesystem")
     print(f"Parents         : {', '.join(parent_ids) if parent_ids else '-'}")
     print(f"Planned EXPs    : {len(plans)}")
     print(f"SID checkpoint  : {args.sid_checkpoint}")
