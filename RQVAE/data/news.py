@@ -6,7 +6,7 @@ import torch
 
 from torch.utils.data import Dataset
 
-
+ 
 class NewsArticleDataset(Dataset):
     REQUIRED_COLUMNS = {
         "article_id",
