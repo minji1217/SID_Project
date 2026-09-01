@@ -4,4 +4,4 @@ rich>=15.0.0 # 콘솔 출력 시 색상 및 스타일링
 
 numpy==2.2.6
 torch==2.10.0
-transformers==4.57.6
+transformers==4.57.6 
