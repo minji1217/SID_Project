@@ -15,7 +15,10 @@ from src import config
 # ------------------------------------------------------------
 # RQ-VAE가 필요한 모든 기사에 대해 최종 Semantic ID를 만든 뒤,
 #
-#     article_id -> (c1, c2, c3)
+#     article_id -> (c1, c2, c3, c4)
+#
+# c4는 동일한 (c1,c2,c3) 충돌을 구분하는 disambiguation code이므로
+# Transformer 입력까지 절대 버리지 않고 그대로 전달한다.
 #
 # 매핑을 EB-NeRD의 history / behaviors와 결합하여
 # Transformer 학습/평가용 사용자 sequence를 만든다.
@@ -35,7 +38,7 @@ from src import config
 # 입력
 # ------------------------------------------------------------
 # 1. article_semantic_ids.parquet
-#       article_id | c1 | c2 | c3
+#       article_id | c1 | c2 | c3 | c4
 #
 # 2. train/history.parquet
 # 3. train/behaviors.parquet
@@ -306,11 +309,13 @@ TRAIN_SEQUENCE_COLUMNS = [
     "history_c1",
     "history_c2",
     "history_c3",
+    "history_c4",
 
     "target_article_ids",
     "target_c1",
     "target_c2",
     "target_c3",
+    "target_c4",
 
 ]
 
@@ -319,6 +324,7 @@ VALIDATION_SEQUENCE_COLUMNS = TRAIN_SEQUENCE_COLUMNS + [
     "candidate_c1",
     "candidate_c2",
     "candidate_c3",
+    "candidate_c4",
     "candidate_labels",
 ]
 
@@ -356,18 +362,18 @@ def _stable_unique_ints(values: list[Any]) -> list[int]:
     return result 
 
 # STEP 11-3. RQ-VAE SID Lookup 생성
-def _load_sid_lookup() -> dict[int, tuple[int, int, int]]:
+def _load_sid_lookup() -> dict[int, tuple[int, int, int, int]]:
     """
-    article_semantic_ids.parquet을 읽어 article_id -> (c1,c2,c3)
+    article_semantic_ids.parquet을 읽어 article_id -> (c1,c2,c3,c4)
 
     lookup dict로 변환
-    예 : article_id | c1 | c2 | c3
+    예 : article_id | c1 | c2 | c3 | c4
         ---------------------------
-         100       |  3 | 10 | 8
-         200       |  5 | 10 | 21
+         100       |  3 | 10 | 8  | 0
+         200       |  5 | 10 | 21 | 1
     -> {
-        100: (3, 10, 8),
-        200: (5, 10, 21),
+        100: (3, 10, 8, 0),
+        200: (5, 10, 21, 1),
         }
     """
 
@@ -384,13 +390,14 @@ def _load_sid_lookup() -> dict[int, tuple[int, int, int]]:
         pl.read_parquet(
             ARTICLE_SEMANTIC_IDS_PATH, 
             columns=[
-                "article_id","c1","c2","c3"
+                "article_id","c1","c2","c3","c4"
             ]
         ).with_columns([
             pl.col("article_id").cast(pl.Int64),
             pl.col("c1").cast(pl.Int32),
             pl.col("c2").cast(pl.Int32),
             pl.col("c3").cast(pl.Int32),
+            pl.col("c4").cast(pl.Int32),
         ]).sort("article_id")
     )
 
@@ -410,7 +417,7 @@ def _load_sid_lookup() -> dict[int, tuple[int, int, int]]:
         )
 
     # STEP 11-3-5. 필수 컬럼 null 검사
-    for column_name in ["article_id", "c1", "c2", "c3",]:
+    for column_name in ["article_id", "c1", "c2", "c3", "c4"]:
         null_count = (
             semantic_ids.get_column(column_name).null_count()
         )
@@ -422,15 +429,16 @@ def _load_sid_lookup() -> dict[int, tuple[int, int, int]]:
             )
     # STEP 11-3-6. Python dict 생성
     sid_lookup = {
-        int(article_id): (int(c1), int(c2), int(c3),)
-     for article_id, c1, c2, c3 in semantic_ids.iter_rows()}
+        int(article_id): (int(c1), int(c2), int(c3), int(c4))
+        for article_id, c1, c2, c3, c4 in semantic_ids.iter_rows()
+    }
 
     return sid_lookup
 
 # STEP 11-4. Initial History 준비 
 def _prepare_inital_histories(
         history_path: Any, 
-        sid_lookup: dict[int, tuple[int, int, int]],
+        sid_lookup: dict[int, tuple[int, int, int, int]],
 )-> tuple[
     dict[int, list[int]],
     dict[str, Any],
@@ -645,21 +653,22 @@ def _load_behaviors(
 # STEP 11-6. Article ID list -> SID list 변환
 def _article_ids_to_codes(
         article_ids: list[int],
-        sid_lookup: dict[int, tuple[int, int, int]],
-)-> tuple[list[int], list[int], list[int]]:
+        sid_lookup: dict[int, tuple[int, int, int, int]],
+)-> tuple[list[int], list[int], list[int], list[int]]:
     """
-    article_id list를 동일 순서의 c1/c2/c3 리스트로 변환
+    article_id list를 동일 순서의 c1/c2/c3/c4 리스트로 변환
     
     예:
         article_ids = [100, 200]
 
-        100 -> (1, 10, 7)
-        200 -> (2, 10, 9)
+        100 -> (1, 10, 7, 0)
+        200 -> (2, 10, 9, 1)
 
     결과:
         c1 = [1, 2]
         c2 = [10, 10]
         c3 = [7, 9]
+        c4 = [0, 1]
     
     
     """
@@ -667,19 +676,23 @@ def _article_ids_to_codes(
     c1_list: list[int] = []
     c2_list: list[int] = []
     c3_list: list[int] = []
+    c4_list: list[int] = []
 
-    for article_id in article_ids: 
-        c1,c2,c3 = sid_lookup[article_id]
-        c1_list.append(c1);c2_list.append(c2);c3_list.append(c3)
+    for article_id in article_ids:
+        c1, c2, c3, c4 = sid_lookup[article_id]
+        c1_list.append(c1)
+        c2_list.append(c2)
+        c3_list.append(c3)
+        c4_list.append(c4)
 
-    return (c1_list, c2_list, c3_list)
+    return (c1_list, c2_list, c3_list, c4_list)
 
 
 # STEP 11-7. Current를 Running history에 반영
 def _append_current_if_needed(
         running_history: list[int],
         current_article_id: Any,
-        sid_lookup: dict[int, tuple[int, int, int]],
+        sid_lookup: dict[int, tuple[int, int, int, int]],
 )-> tuple[ str, int | None]:
     """
     current article를 현재 user의 running history에 반영
@@ -751,6 +764,9 @@ def _make_sequence_df(rows: list[dict[str, Any]], split_name :str)-> pl.DataFram
             "history_c3": (
                 pl.List(pl.Int32)
             ),
+            "history_c4": (
+                pl.List(pl.Int32)
+            ),
 
             "target_article_ids": (
                 pl.List(pl.Int64)
@@ -762,6 +778,9 @@ def _make_sequence_df(rows: list[dict[str, Any]], split_name :str)-> pl.DataFram
                 pl.List(pl.Int32)
             ),
             "target_c3": (
+                pl.List(pl.Int32)
+            ),
+            "target_c4": (
                 pl.List(pl.Int32)
             ),
         }
@@ -778,6 +797,9 @@ def _make_sequence_df(rows: list[dict[str, Any]], split_name :str)-> pl.DataFram
                     pl.List(pl.Int32)
                 ),
                 "candidate_c3": (
+                    pl.List(pl.Int32)
+                ),
+                "candidate_c4": (
                     pl.List(pl.Int32)
                 ),
                 "candidate_labels": (
@@ -829,6 +851,11 @@ def _make_sequence_df(rows: list[dict[str, Any]], split_name :str)-> pl.DataFram
                 pl.List(pl.Int32)
             ),
 
+            pl.col("history_c4")
+            .cast(
+                pl.List(pl.Int32)
+            ),
+
             pl.col("target_article_ids")
             .cast(
                 pl.List(pl.Int64)
@@ -845,6 +872,11 @@ def _make_sequence_df(rows: list[dict[str, Any]], split_name :str)-> pl.DataFram
             ),
 
             pl.col("target_c3")
+            .cast(
+                pl.List(pl.Int32)
+            ),
+
+            pl.col("target_c4")
             .cast(
                 pl.List(pl.Int32)
             ),
@@ -885,6 +917,13 @@ def _make_sequence_df(rows: list[dict[str, Any]], split_name :str)-> pl.DataFram
                 ),
 
                 pl.col(
+                    "candidate_c4"
+                )
+                .cast(
+                    pl.List(pl.Int32)
+                ),
+
+                pl.col(
                     "candidate_labels"
                 )
                 .cast(
@@ -907,12 +946,14 @@ def _validate_sequence_integrity(sequence_df:pl.DataFrame, split_name:str)-> Non
         == len(history_c1)
         == len(history_c2)
         == len(history_c3)
+        == len(history_c4)
 
     Target:
         len(target_article_ids)
         == len(target_c1)
         == len(target_c2)
         == len(target_c3)
+        == len(target_c4)
         >= 1
 
     Validation Candidate:
@@ -920,6 +961,7 @@ def _validate_sequence_integrity(sequence_df:pl.DataFrame, split_name:str)-> Non
         == len(candidate_c1)
         == len(candidate_c2)
         == len(candidate_c3)
+        == len(candidate_c4)
         == len(candidate_labels)
 
     validation candidate_labels에는 최소 하나 이상의 positive가 있어야함
@@ -933,7 +975,8 @@ def _validate_sequence_integrity(sequence_df:pl.DataFrame, split_name:str)-> Non
     invalid_history_length_count = sequence_df.filter(
         (pl.col("history_article_ids").list.len() != pl.col("history_c1").list.len()) | 
         (pl.col("history_article_ids").list.len() != pl.col("history_c2").list.len()) |
-        (pl.col("history_article_ids").list.len() != pl.col("history_c3").list.len())
+        (pl.col("history_article_ids").list.len() != pl.col("history_c3").list.len()) |
+        (pl.col("history_article_ids").list.len() != pl.col("history_c4").list.len())
     ).height 
 
     if invalid_history_length_count != 0:
@@ -946,7 +989,8 @@ def _validate_sequence_integrity(sequence_df:pl.DataFrame, split_name:str)-> Non
     invalid_target_length_count = sequence_df.filter(
         (pl.col("target_article_ids").list.len() != pl.col("target_c1").list.len()) | 
         (pl.col("target_article_ids").list.len() != pl.col("target_c2").list.len()) |
-        (pl.col("target_article_ids").list.len() != pl.col("target_c3").list.len())
+        (pl.col("target_article_ids").list.len() != pl.col("target_c3").list.len()) |
+        (pl.col("target_article_ids").list.len() != pl.col("target_c4").list.len())
     ).height 
 
     if invalid_target_length_count != 0:
@@ -961,6 +1005,7 @@ def _validate_sequence_integrity(sequence_df:pl.DataFrame, split_name:str)-> Non
         (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c1").list.len()) | 
         (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c2").list.len()) |
         (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c3").list.len()) |
+        (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c4").list.len()) |
         (pl.col("candidate_article_ids").list.len() != pl.col("candidate_labels").list.len())
     ).height 
 
@@ -987,7 +1032,7 @@ def _build_split_sequences(
         history_path: Any, 
         behaviors_path : Any, 
         output_path: Any, 
-        sid_lookup: dict[int, tuple[int, int, int]],
+        sid_lookup: dict[int, tuple[int, int, int, int]],
 )-> dict[str, Any]:
     """
     train 또는 validation 한 split의 seq 생성
@@ -1201,10 +1246,10 @@ def _build_split_sequences(
         # 아직 현재 clicked targets는 안들어감
         history_article_ids = list(running_history)
 
-        (history_c1, history_c2, history_c3)=_article_ids_to_codes(article_ids=history_article_ids, sid_lookup=sid_lookup)
+        (history_c1, history_c2, history_c3, history_c4) = _article_ids_to_codes(article_ids=history_article_ids, sid_lookup=sid_lookup)
 
         # STEP 11-10-3-9. Multi target sid list 생성
-        (target_c1, target_c2, target_c3) = _article_ids_to_codes(article_ids=target_article_ids, sid_lookup=sid_lookup)
+        (target_c1, target_c2, target_c3, target_c4) = _article_ids_to_codes(article_ids=target_article_ids, sid_lookup=sid_lookup)
 
         # Train / Validation 공통 row
         base_row: dict[str, Any] = {
@@ -1215,10 +1260,12 @@ def _build_split_sequences(
             "history_c1": history_c1,
             "history_c2": history_c2,
             "history_c3": history_c3,
+            "history_c4": history_c4,
             "target_article_ids": target_article_ids,
             "target_c1": target_c1,
             "target_c2": target_c2,
             "target_c3": target_c3,
+            "target_c4": target_c4,
         }
 
         # STEP 11-10-4. Train sample 생성
@@ -1298,8 +1345,7 @@ def _build_split_sequences(
                 should_emit = False
         # STEP 11-10-5-5. Candidate SID + Multi-positive label 생성
         if should_emit:
-            (candidate_c1, candidate_c2, candidate_c3)\
-                = _article_ids_to_codes(article_ids=candidate_article_ids, sid_lookup=sid_lookup)
+            (candidate_c1, candidate_c2, candidate_c3, candidate_c4) = _article_ids_to_codes(article_ids=candidate_article_ids, sid_lookup=sid_lookup)
             target_set = set(target_article_ids)
             candidate_labels = [(1 if candidate_article_id in target_set else 0) for candidate_article_id in candidate_article_ids]
             rows.append({**base_row, 
@@ -1307,6 +1353,7 @@ def _build_split_sequences(
                          "candidate_c1": candidate_c1,
                          "candidate_c2": candidate_c2,
                          "candidate_c3": candidate_c3,
+                         "candidate_c4": candidate_c4,
                          "candidate_labels": candidate_labels})
         else:
             # 현재 ranking sample은 출력하지 못했어도 
@@ -1567,7 +1614,7 @@ def _build_split_sequences(
 
 
 # STEP 11-11. Train seq 생성 wrapper
-def build_train_sequences(sid_lookup: (dict[int, tuple[int, int, int]] | None)= None,)-> dict[str, Any]:
+def build_train_sequences(sid_lookup: (dict[int, tuple[int, int, int, int]] | None)= None,)-> dict[str, Any]:
     """
     train history/behaviors를 이용해 train_sequences.parquet 생성
     validation running history와 공유 x
@@ -1581,12 +1628,12 @@ def build_train_sequences(sid_lookup: (dict[int, tuple[int, int, int]] | None)= 
 
 
 # STEP 11-12. Validation seq 생성 wrapper
-def build_validation_sequences(sid_lookup: (dict[int, tuple[int, int, int]]|None)=None)-> dict[str, Any]:
+def build_validation_sequences(sid_lookup: (dict[int, tuple[int, int, int, int]]|None)=None)-> dict[str, Any]:
     """
     validation running history는 train running history 이어받지 않음 
     추가 생성 : 
     candidate_article_ids
-    candidate_c1/c2/c3
+    candidate_c1/c2/c3/c4
     candidate_labels
     """
 
@@ -1605,7 +1652,7 @@ def build_sequences() -> dict[str, Any]:
     실행 순서
     ------------------
     1. 입력 파일 존재 확인
-    2. article_id -> (c1,c2,c3) lookup 생성
+    2. article_id -> (c1,c2,c3,c4) lookup 생성
     3. train running history / seq 생성
     4. validation running history / seq 생성
     5. 전체 결과 반환

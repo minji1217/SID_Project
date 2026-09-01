@@ -734,7 +734,7 @@ def _validate_rqvae_validation_inputs() -> dict[str, Any]:
 # 핵심 파일:
 #
 # article_semantic_ids.parquet
-#   article_id -> (c1,c2,c3)
+#   article_id -> (c1,c2,c3,c4)
 #
 # train_sequences.parquet
 #   history SID sequence -> target SID set
@@ -765,6 +765,7 @@ def _validate_transformer_inputs() -> dict[str, Any]:
             "c1",
             "c2",
             "c3",
+            "c4",
         },
         "article_semantic_ids.parquet",
     )
@@ -781,6 +782,7 @@ def _validate_transformer_inputs() -> dict[str, Any]:
         "c1",
         "c2",
         "c3",
+        "c4",
     ]:
         null_count = (
             semantic_ids
@@ -811,10 +813,12 @@ def _validate_transformer_inputs() -> dict[str, Any]:
         "history_c1",
         "history_c2",
         "history_c3",
+        "history_c4",
         "target_article_ids",
         "target_c1",
         "target_c2",
         "target_c3",
+        "target_c4",
     }
 
     _validate_required_columns(
@@ -832,6 +836,7 @@ def _validate_transformer_inputs() -> dict[str, Any]:
             "candidate_c1",
             "candidate_c2",
             "candidate_c3",
+            "candidate_c4",
             "candidate_labels",
         },
         "validation_sequences.parquet",
@@ -851,7 +856,7 @@ def _validate_transformer_inputs() -> dict[str, Any]:
             f"{split_name}_sequences.parquet",
         )
 
-        # history_article_ids와 history_c1/c2/c3는
+        # history_article_ids와 history_c1/c2/c3/c4는
         # 반드시 같은 길이어야 한다.
         #
         # 예:
@@ -859,6 +864,7 @@ def _validate_transformer_inputs() -> dict[str, Any]:
         # history_c1          = [1,2,3]
         # history_c2          = [4,5,6]
         # history_c3          = [7,8,9]
+        # history_c4          = [0,0,1]
         invalid_history_count = dataframe.filter(
             (
                 pl.col("history_article_ids").list.len()
@@ -872,6 +878,10 @@ def _validate_transformer_inputs() -> dict[str, Any]:
                 pl.col("history_article_ids").list.len()
                 != pl.col("history_c3").list.len()
             )
+            | (
+                pl.col("history_article_ids").list.len()
+                != pl.col("history_c4").list.len()
+            )
         ).height
 
         if invalid_history_count != 0:
@@ -881,7 +891,7 @@ def _validate_transformer_inputs() -> dict[str, Any]:
             )
 
         # target은 최소 1개 이상이어야 하고
-        # article_id / c1 / c2 / c3 list 길이가 같아야 한다.
+        # article_id / c1 / c2 / c3 / c4 list 길이가 같아야 한다.
         invalid_target_count = dataframe.filter(
             (
                 pl.col("target_article_ids").list.len()
@@ -899,6 +909,10 @@ def _validate_transformer_inputs() -> dict[str, Any]:
                 pl.col("target_article_ids").list.len()
                 != pl.col("target_c3").list.len()
             )
+            | (
+                pl.col("target_article_ids").list.len()
+                != pl.col("target_c4").list.len()
+            )
         ).height
 
         if invalid_target_count != 0:
@@ -909,7 +923,7 @@ def _validate_transformer_inputs() -> dict[str, Any]:
 
 
     # STEP 12-4-4. Validation candidate 정합성 검사
-    # candidate_article_ids와 candidate c1/c2/c3/label도
+    # candidate_article_ids와 candidate c1/c2/c3/c4/label도
     # index 기준 1:1 대응이므로 길이가 모두 같아야 한다.
     #
     # 예:
@@ -935,6 +949,10 @@ def _validate_transformer_inputs() -> dict[str, Any]:
         | (
             pl.col("candidate_article_ids").list.len()
             != pl.col("candidate_c3").list.len()
+        )
+        | (
+            pl.col("candidate_article_ids").list.len()
+            != pl.col("candidate_c4").list.len()
         )
         | (
             pl.col("candidate_article_ids").list.len()

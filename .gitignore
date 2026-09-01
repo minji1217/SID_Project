@@ -5,4 +5,6 @@ data
 data/output/experiments/
 data/output/exports.zip
 data/raw
+RQVAE/datasets/
+RQVAE/out/
 __pycache__/

@@ -1,0 +1,15 @@
+# SID Project - RQ-VAE direct dependencies
+# 최신 RQVAE 코드에서 실제 import하는 외부 패키지를 기준으로 정리했습니다.
+# 기존 SID_Project .venv 위에 추가 설치해도 됩니다.
+
+gin-config
+numpy
+pandas
+pyarrow
+torch
+einops
+huggingface-hub
+wandb
+accelerate
+scikit-learn
+tqdm

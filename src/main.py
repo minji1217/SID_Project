@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import shutil
+from pathlib import Path
 from pprint import pprint
 from typing import Any
 
@@ -288,7 +290,12 @@ def run_preprocess_pipeline() -> dict[str, Any]:
 # 기사 단위 SID를 사용자 행동 history/behavior와 결합하여
 # transformer 학습/평가용 seq를 만들고, 최종 트랜스포머 전달 package까지 생성
 
-def run_post_rqvae_pipeline() -> dict[str, Any]:
+def run_post_rqvae_pipeline(
+    *,
+    sid_path: str | Path | None = None,
+    experiment: str | None = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
     """
     RQ-VAE 결과 받은 뒤 트랜스포머 입력 생성까지 실행
 
@@ -302,67 +309,145 @@ def run_post_rqvae_pipeline() -> dict[str, Any]:
     # STEP 13-2-0. output 폴더 보장
     config.create_output_directories()
 
-    # STEP 13-2-1. RQ-VAE 최종 SID 파일 존재확인
-    # build_sequences.py는 반드시 article_id -> (c1,c2,c3) lookup 필요
-    # 따라서 SID 파일이 없으면 sequence 생성 자체를 시작하지 않는다.
-    if not config.ARTICLE_SEMANTIC_IDS_PATH.exists():
-        raise FileNotFoundError(
-            "RQ-VAE 최종 결과가 없습니다. "
-            "Train + Validation Frozen Inference를 먼저 완료해야 합니다. "
-            f"경로={config.ARTICLE_SEMANTIC_IDS_PATH}"
+    original_paths = {
+        "ARTICLE_SEMANTIC_IDS_PATH": config.ARTICLE_SEMANTIC_IDS_PATH,
+        "TRAIN_SEQUENCES_PATH": config.TRAIN_SEQUENCES_PATH,
+        "VALIDATION_SEQUENCES_PATH": config.VALIDATION_SEQUENCES_PATH,
+        "CATEGORY_MAPPING_PATH": config.CATEGORY_MAPPING_PATH,
+    }
+
+    transformer_export_dir: Path | None = None
+    effective_sid_path: Path
+
+    try:
+        if experiment is not None:
+            experiment = str(experiment).strip()
+            if not experiment or Path(experiment).name != experiment:
+                raise ValueError("--experiment에는 실험 폴더 이름만 입력하세요.")
+
+            experiment_root = config.OUTPUT_DIR / "experiments" / experiment
+            post_rqvae_dir = experiment_root / "post_rqvae"
+            transformer_export_dir = (
+                experiment_root / "exports" / "transformer_inputs"
+            )
+
+            # 실험별 downstream 결과는 frozen normalize_v2/model_inputs에 쓰지 않는다.
+            # 먼저 SID 원본을 확인한다. --overwrite 처리 중 원본을 실수로 지우지 않기 위함이다.
+            if sid_path is None:
+                raise ValueError(
+                    "실험별 post-rqvae 실행에는 --sid-path가 필요합니다. "
+                    "RQ-VAE가 생성한 article_semantic_ids.parquet 경로를 지정하세요."
+                )
+
+            source_sid_path = Path(sid_path).expanduser().resolve()
+            if not source_sid_path.exists():
+                raise FileNotFoundError(
+                    f"RQ-VAE SID 파일이 없습니다. 경로={source_sid_path}"
+                )
+
+            protected_dirs = [post_rqvae_dir, transformer_export_dir]
+            if overwrite and any(
+                source_sid_path == directory.resolve()
+                or directory.resolve() in source_sid_path.parents
+                for directory in protected_dirs
+            ):
+                raise ValueError(
+                    "--sid-path 원본이 덮어쓸 출력 폴더 내부에 있습니다. "
+                    "원본 SID를 다른 경로에 보존한 뒤 다시 실행하세요. "
+                    f"sid_path={source_sid_path}"
+                )
+
+            # 기존 결과가 있으면 --overwrite 없이는 시작 전에 차단한다.
+            non_empty = [
+                path for path in protected_dirs
+                if path.exists() and any(path.iterdir())
+            ]
+            if non_empty and not overwrite:
+                raise FileExistsError(
+                    "실험별 post-RQ-VAE 결과가 이미 존재합니다. "
+                    f"경로={[str(p) for p in non_empty]}. "
+                    "다시 만들려면 --overwrite를 명시하세요."
+                )
+
+            if overwrite:
+                for path in protected_dirs:
+                    if path.exists():
+                        shutil.rmtree(path)
+
+            post_rqvae_dir.mkdir(parents=True, exist_ok=True)
+
+            # 외부 RQ-VAE 결과를 실험 기록 폴더에 복사해 downstream 입력을 고정한다.
+            effective_sid_path = post_rqvae_dir / "article_semantic_ids.parquet"
+            shutil.copy2(source_sid_path, effective_sid_path)
+
+            config.ARTICLE_SEMANTIC_IDS_PATH = effective_sid_path
+            config.TRAIN_SEQUENCES_PATH = post_rqvae_dir / "train_sequences.parquet"
+            config.VALIDATION_SEQUENCES_PATH = (
+                post_rqvae_dir / "validation_sequences.parquet"
+            )
+
+            # c1 해석용 category mapping은 모든 비교 실험에서 frozen normalize_v2 것을 재사용한다.
+            frozen_category_mapping = (
+                config.OUTPUT_DIR
+                / "experiments"
+                / "normalize_v2"
+                / "model_inputs"
+                / "category_mapping.parquet"
+            )
+            if frozen_category_mapping.exists():
+                config.CATEGORY_MAPPING_PATH = frozen_category_mapping
+
+        else:
+            if sid_path is not None:
+                effective_sid_path = Path(sid_path).expanduser().resolve()
+                config.ARTICLE_SEMANTIC_IDS_PATH = effective_sid_path
+            else:
+                effective_sid_path = Path(config.ARTICLE_SEMANTIC_IDS_PATH)
+
+            if not effective_sid_path.exists():
+                raise FileNotFoundError(
+                    "RQ-VAE 최종 결과가 없습니다. "
+                    "Train + Validation Frozen Inference를 먼저 완료해야 합니다. "
+                    f"경로={effective_sid_path}"
+                )
+
+        # STEP 13-2-1. SID 파일 최종 존재 확인
+        if not config.ARTICLE_SEMANTIC_IDS_PATH.exists():
+            raise FileNotFoundError(
+                "RQ-VAE 최종 결과가 없습니다. "
+                f"경로={config.ARTICLE_SEMANTIC_IDS_PATH}"
+            )
+
+        # STEP 13-2-2. Transformer sequence 생성
+        sequence_result = build_sequences()
+        _print_stage_result(
+            "STEP 11 - Transformer Sequence Build",
+            sequence_result,
         )
 
+        # STEP 13-2-3. Transformer package export
+        transformer_export_result = export_transformer_inputs(
+            export_dir=transformer_export_dir,
+            overwrite=True if experiment is not None else True,
+        )
 
-    # STEP 13-2-2. Transformer seq build
-    # build_sequences.py가 하는 일 : 
-    # article_semantic_ids.parquet 
-    # + history.parquet
-    # + behaviors.parquet
-    #       ↓
-    # user별 running history 구성
-    #       ↓
-    # train_sequences.parquet
-    # validation_sequences.parquet
-    #
-    # Train / Validation running history는 서로 독립이다.
+        _print_stage_result(
+            "STEP 12 - Transformer Input Export",
+            transformer_export_result,
+        )
 
-    sequence_result = build_sequences()
-    _print_stage_result(
-        "STEP 11 - Transformer Sequence Build", 
-        sequence_result,
-    )
-
-
-    # STEP 13-2-3. Transformer input export
-    # build_sequences 결과와 SID 파일을
-    # Transformer 파트에 전달하기 좋은 별도 패키지로 묶음 
-
-    # 결과 예:
-    # data/output/exports/transformer_inputs/
-    #   article_semantic_ids.parquet
-    #   train_sequences.parquet
-    #   validation_sequences.parquet
-    #   category_mapping.parquet
-    #   manifest.json
-
-    transformer_export_result = export_transformer_inputs()
-
-    _print_stage_result(
-        "STEP 12 - Transformer Input Export",
-        transformer_export_result,
-    )
-
-    # STEP 13-2-4. POST-RQVAE 전체 결과 반환
-    return {
-        "status": "SUCCESS",
-        "pipeline_stage": (
-            "TRANSFORMER_INPUTS_COMPLETE"
-        ),
-        "sequence_build": sequence_result,
-        "transformer_export": (
-            transformer_export_result
-        ),
-    }
+        return {
+            "status": "SUCCESS",
+            "pipeline_stage": "TRANSFORMER_INPUTS_COMPLETE",
+            "experiment": experiment,
+            "article_semantic_ids_path": str(config.ARTICLE_SEMANTIC_IDS_PATH),
+            "sequence_build": sequence_result,
+            "transformer_export": transformer_export_result,
+        }
+    finally:
+        # 같은 Python 프로세스에서 다른 작업을 이어 실행해도 config 오염이 남지 않게 복구한다.
+        for name, value in original_paths.items():
+            setattr(config, name, value)
 
 
 # STEP 13-3. CLI 
@@ -404,6 +489,25 @@ def main() -> None :
                         help=("preprocess: RQ-VAE 입력 생성까지 / "
                               "post-rqvae: SID 수신 후 Transformer 입력 생성"))
 
+    parser.add_argument(
+        "--sid-path",
+        default=None,
+        help="post-rqvae에서 사용할 article_semantic_ids.parquet 경로",
+    )
+    parser.add_argument(
+        "--experiment",
+        default=None,
+        help=(
+            "실험별 downstream 결과를 분리할 이름. "
+            "예: normalize_v2, event_wikidata_only_strict"
+        ),
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="실험별 post-rqvae/Transformer 결과가 이미 있을 때 명시적으로 덮어씁니다.",
+    )
+
     # 사용자가 입력한 CLI argument 실제 해석
     args = parser.parse_args()
 
@@ -416,12 +520,14 @@ def main() -> None :
     # STEP 13-3-3. 선택한 stage 실행
     
     if args.stage == "preprocess":
-        result = (
-            run_preprocess_pipeline()
-        )
+        if args.sid_path is not None or args.experiment is not None:
+            parser.error("--sid-path/--experiment는 post-rqvae stage에서만 사용합니다.")
+        result = run_preprocess_pipeline()
     else:
-        result = (
-            run_post_rqvae_pipeline()
+        result = run_post_rqvae_pipeline(
+            sid_path=args.sid_path,
+            experiment=args.experiment,
+            overwrite=args.overwrite,
         )
 
     
