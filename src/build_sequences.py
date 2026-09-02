@@ -378,17 +378,22 @@ def _load_sid_lookup() -> dict[int, tuple[int, int, int, int]]:
     """
 
     # STEP 11-3-1. SID 파일 존재 여부 확인
-    if not ARTICLE_SEMANTIC_IDS_PATH.exists():
+    # 중요: post-rqvae의 --sid-path / --experiment 실행 시 main.py가
+    # config.ARTICLE_SEMANTIC_IDS_PATH를 런타임에 변경한다.
+    # 따라서 모듈 import 시점에 복사해 둔 상수가 아니라 현재 config 값을 사용해야 한다.
+    article_semantic_ids_path = config.ARTICLE_SEMANTIC_IDS_PATH
+
+    if not article_semantic_ids_path.exists():
         raise FileNotFoundError(
             "article_semantic_ids.parquet 파일이 없습니다. "
             "RQ-VAE Train과 validation frozen inference를 먼저 완료해야 합니다. "
-            f"경로={ARTICLE_SEMANTIC_IDS_PATH}"
+            f"경로={article_semantic_ids_path}"
         )
 
     # STEP 11-3-2. 필요한 컬럼만 읽고 타입 통일
     semantic_ids = (
         pl.read_parquet(
-            ARTICLE_SEMANTIC_IDS_PATH, 
+            article_semantic_ids_path,
             columns=[
                 "article_id","c1","c2","c3","c4"
             ]
