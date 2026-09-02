@@ -46,6 +46,7 @@ Stage가 끝난 뒤 stage_results.csv를 팀에서 검토하거나 ChatGPT에 �
 """
 
 import argparse
+import codecs
 import ast
 import csv
 import hashlib
@@ -55,6 +56,7 @@ import math
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -69,6 +71,130 @@ from typing import Any, Iterable
 # ============================================================================
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def detect_rqvae_root() -> Path:
+    """
+    RQ-VAE 코드가 들어 있는 실제 폴더를 자동으로 찾는다.
+
+    run_experiment.py는 아래 두 위치 모두에서 사용할 수 있다.
+
+    [형태 A] RQVAE 폴더 안에 둔 경우
+    SID_Project/
+    └─ RQVAE/
+       ├─ run_experiment.py
+       ├─ train_rqvae.py
+       └─ ...
+
+    [형태 B] 프로젝트 루트에 둔 경우
+    SID_Project/
+    ├─ run_experiment.py
+    └─ RQVAE/
+       ├─ train_rqvae.py
+       └─ ...
+
+    기존 버전은 형태 A만 가정했기 때문에 프로젝트 루트에서 실행하면
+    SID_Project/train_rqvae.py를 찾다가 FileNotFoundError가 발생했다.
+    이제는 두 위치를 순서대로 확인해 실제 RQVAE 루트를 자동 선택한다.
+    """
+
+    candidates = [
+        SCRIPT_DIR,            # run_experiment.py가 RQVAE 안에 있는 경우
+        SCRIPT_DIR / "RQVAE",  # run_experiment.py가 프로젝트 루트에 있는 경우
+    ]
+
+    required = [
+        Path("train_rqvae.py"),
+        Path("generate_semantic_ids.py"),
+        Path("evaluate") / "evaluate_all.py",
+    ]
+
+    for candidate in candidates:
+        if all((candidate / relative_path).exists() for relative_path in required):
+            return candidate.resolve()
+
+    # 여기까지 왔다면 어느 후보에서도 RQ-VAE 실행 파일을 찾지 못한 것이다.
+    # 아래 오류 메시지에서 실제로 검사한 경로를 모두 보여줘서 위치를 바로 확인할 수 있게 한다.
+    checked = "\n".join(f"  - {candidate.resolve()}" for candidate in candidates)
+    raise FileNotFoundError(
+        "RQ-VAE 코드 폴더를 자동으로 찾지 못했습니다.\n"
+        "아래 위치를 확인했습니다:\n"
+        f"{checked}\n\n"
+        "RQVAE 폴더 안에는 train_rqvae.py, generate_semantic_ids.py, "
+        "evaluate/evaluate_all.py가 있어야 합니다."
+    )
+
+
+
+# ============================================================================
+# Colab / Google Drive 결과 저장 정책
+# ============================================================================
+
+# Colab에서 Google Drive를 mount한 뒤 run_experiment.py를 실행하면,
+# --experiment-root를 따로 주지 않아도 모든 실험 결과를 아래에 바로 저장한다.
+#
+# MyDrive/
+# └─ SID_Project_Colab/
+#    └─ results/
+#       └─ <dataset>/
+#          ├─ stage_q2q3/
+#          ├─ stage_latent/
+#          └─ all_results.csv
+#
+# 로컬 Windows/Linux에서 실행할 때는 기존처럼
+# RQVAE/out/experiments/<dataset> 을 사용한다.
+COLAB_DRIVE_RESULTS_BASE = Path(
+    "/content/drive/MyDrive/SID_Project_Colab/results"
+)
+
+
+def running_in_colab() -> bool:
+    """현재 프로세스가 Google Colab 환경에서 실행 중인지 보수적으로 판단한다."""
+
+    return bool(
+        os.environ.get("COLAB_RELEASE_TAG")
+        or os.environ.get("COLAB_BACKEND_VERSION")
+        or os.environ.get("COLAB_GPU")
+    )
+
+
+def default_experiment_root(
+    rqvae_root: Path,
+    dataset: str,
+) -> Path:
+    """
+    --experiment-root가 생략됐을 때 사용할 결과 폴더를 결정한다.
+
+    - Colab: Google Drive가 반드시 mount되어 있어야 하며
+      MyDrive/SID_Project_Colab/results/<dataset> 사용
+    - 그 외: 기존 로컬 경로 RQVAE/out/experiments/<dataset> 사용
+
+    Colab인데 Drive가 mount되지 않은 경우 조용히 /content에 저장하지 않고
+    즉시 오류를 내서 세션 종료 시 결과가 유실되는 일을 막는다.
+    """
+
+    if running_in_colab():
+        my_drive = Path("/content/drive/MyDrive")
+        if not my_drive.exists():
+            raise RuntimeError(
+                "Google Colab에서 실행 중이지만 Google Drive가 mount되지 않았습니다.\n"
+                "먼저 아래 셀을 실행하세요:\n"
+                "from google.colab import drive\n"
+                "drive.mount('/content/drive')"
+            )
+
+        return (
+            COLAB_DRIVE_RESULTS_BASE
+            / dataset
+        )
+
+    return (
+        rqvae_root
+        / "out"
+        / "experiments"
+        / dataset
+    )
+
 
 DATASET_CONFIGS = {
     "ebnerd": Path("configs/rqvae_ebnerd.gin"),
@@ -102,11 +228,17 @@ TRACKED_CONFIG_KEYS = [
     "train.gumbel_min_t",
     "train.gumbel_anneal_rate",
     "train.eval_every_epochs",
+    "train.early_stopping",
+    "train.early_stopping_min_epochs",
+    "train.early_stopping_patience",
+    "train.early_stopping_min_delta",
     "train.seed",
 ]
 
 # 평가 로그에서 수집하는 지표 이름. CSV 컬럼 순서를 일정하게 유지하기 위해 별도 정의한다.
 METRIC_COLUMNS = [
+    # 선택된 대표 checkpoint의 지표
+    "selected_checkpoint_variant",
     "train_rec_loss",
     "valid_rec_loss",
     "c2_event_consistency",
@@ -124,14 +256,38 @@ METRIC_COLUMNS = [
     "c1_category_accuracy",
     "final_sid_uniqueness",
     "max_c4",
+
+    # 학습 곡선 / Early Stopping 요약
     "best_valid_total_loss",
     "best_valid_total_epoch",
     "best_valid_rec_loss",
     "best_valid_rec_epoch",
     "final_valid_total_loss",
     "final_valid_rec_loss",
-]
+    "early_stopped",
+    "stopped_epoch",
 
+    # best_total / best_rec checkpoint를 각각 SID로 만든 결과.
+    # 한 EXP에서 두 checkpoint의 Semantic ID 품질을 사람이 비교할 수 있게 남긴다.
+    "best_total_valid_rec_loss",
+    "best_total_c2_event_consistency",
+    "best_total_collision_rate",
+    "best_total_q2_utilization",
+    "best_total_q3_utilization",
+    "best_total_delta_c2_similarity",
+    "best_total_delta_c3_similarity",
+    "best_total_final_sid_uniqueness",
+    "best_total_max_c4",
+    "best_rec_valid_rec_loss",
+    "best_rec_c2_event_consistency",
+    "best_rec_collision_rate",
+    "best_rec_q2_utilization",
+    "best_rec_q3_utilization",
+    "best_rec_delta_c2_similarity",
+    "best_rec_delta_c3_similarity",
+    "best_rec_final_sid_uniqueness",
+    "best_rec_max_c4",
+]
 # Quantizer 이름 -> gin enum 표현식.
 QUANTIZER_GIN = {
     "STE": "%QuantizeForwardMode.STE",
@@ -303,7 +459,13 @@ def shell_join(command: Iterable[str]) -> str:
 def run_command(command: list[str], cwd: Path, log_path: Path) -> str:
     """
     subprocess stdout/stderr를 터미널에 실시간 출력하면서 같은 내용을 log 파일에도 저장한다.
-    실패하면 CalledProcessError를 발생시켜 해당 EXP를 FAILED로 기록한다.
+
+    tqdm progress bar는 줄바꿈(\n)이 아니라 carriage return(\r)으로 같은 줄을 갱신한다.
+    따라서 line 단위(`for line in process.stdout`)로 읽으면 Colab에서 진행 막대가
+    늦게 보이거나 보이지 않을 수 있다.
+
+    여기서는 자식 프로세스를 unbuffered로 실행하고, PIPE를 byte chunk 단위로 즉시 읽어
+    \r까지 그대로 터미널에 전달한다. 학습/평가 로직에는 영향을 주지 않고 출력 방식만 바꾼다.
     """
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -311,25 +473,68 @@ def run_command(command: list[str], cwd: Path, log_path: Path) -> str:
 
     with log_path.open("w", encoding="utf-8") as log_file:
         header = f"$ {shell_join(command)}\n"
-        print(header, end="")
+        print(header, end="", flush=True)
         log_file.write(header)
         log_file.flush()
+
+        # RQVAE/evaluate/*.py가 `from modules...`, `from data...`처럼
+        # RQVAE 루트를 기준으로 import하므로 모든 자식 프로세스에
+        # cwd(=RQVAE root)를 PYTHONPATH로 전달한다.
+        env = os.environ.copy()
+        rqvae_python_path = str(Path(cwd).resolve())
+        current_pythonpath = env.get("PYTHONPATH", "")
+
+        if current_pythonpath:
+            pythonpath_items = current_pythonpath.split(os.pathsep)
+            if rqvae_python_path not in pythonpath_items:
+                env["PYTHONPATH"] = (
+                    rqvae_python_path
+                    + os.pathsep
+                    + current_pythonpath
+                )
+        else:
+            env["PYTHONPATH"] = rqvae_python_path
+
+        # 자식 Python stdout을 PIPE에 연결해도 즉시 flush되도록 강제한다.
+        env["PYTHONUNBUFFERED"] = "1"
+
+        # Windows에서 UTF-8 gin 파일의 한글 주석을 cp949로 읽는 문제도 방어한다.
+        env.setdefault("PYTHONUTF8", "1")
+        env.setdefault("PYTHONIOENCODING", "utf-8")
 
         process = subprocess.Popen(
             command,
             cwd=str(cwd),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
+            bufsize=0,
+            env=env,
         )
 
         assert process.stdout is not None
-        for line in process.stdout:
-            print(line, end="")
-            log_file.write(line)
+
+        # UTF-8 한 글자가 여러 byte로 나뉘어 들어와도 깨지지 않도록 incremental decoder 사용.
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+
+        while True:
+            chunk = os.read(process.stdout.fileno(), 1024)
+            if not chunk:
+                break
+
+            decoded = decoder.decode(chunk)
+            if decoded:
+                # tqdm의 \r도 그대로 전달되므로 Colab에서 progress bar가 실시간 갱신된다.
+                print(decoded, end="", flush=True)
+                log_file.write(decoded)
+                log_file.flush()
+                captured.append(decoded)
+
+        tail = decoder.decode(b"", final=True)
+        if tail:
+            print(tail, end="", flush=True)
+            log_file.write(tail)
             log_file.flush()
-            captured.append(line)
+            captured.append(tail)
 
         return_code = process.wait()
 
@@ -643,6 +848,20 @@ def parse_training_history(train_log: str) -> tuple[list[dict[str, Any]], dict[s
             }
         )
 
+    # train_rqvae.py의 최종 출력에서 실제 종료 epoch와 Early Stopping 여부를 읽는다.
+    stopped_epoch_match = re.findall(r"^Final epoch:\s*(\d+)", train_log, flags=re.MULTILINE)
+    early_stopped_match = re.findall(
+        r"^Early stopped:\s*(True|False)",
+        train_log,
+        flags=re.MULTILINE,
+    )
+
+    if stopped_epoch_match:
+        summary["stopped_epoch"] = int(stopped_epoch_match[-1])
+
+    if early_stopped_match:
+        summary["early_stopped"] = early_stopped_match[-1] == "True"
+
     return history, summary
 
 
@@ -693,6 +912,48 @@ def parse_semantic_id_metrics(generate_log: str) -> dict[str, Any]:
         "final_sid_uniqueness": last_regex_float(generate_log, r"^Final SID uniqueness\s*:\s*([0-9eE+\-.]+)"),
         "max_c4": last_regex_int(generate_log, r"^Max c4\s*:\s*(\d+)"),
     }
+
+
+def prefix_candidate_metrics(prefix: str, metrics: dict[str, Any]) -> dict[str, Any]:
+    """
+    best_total / best_rec checkpoint 평가 결과 중 Stage 비교에 필요한 핵심 지표만
+    prefix를 붙여 한 EXP의 stage_results.csv 한 행에 함께 저장한다.
+    """
+
+    keys = [
+        "valid_rec_loss",
+        "c2_event_consistency",
+        "collision_rate",
+        "q2_utilization",
+        "q3_utilization",
+        "delta_c2_similarity",
+        "delta_c3_similarity",
+        "final_sid_uniqueness",
+        "max_c4",
+    ]
+
+    return {
+        f"{prefix}_{key}": metrics.get(key)
+        for key in keys
+    }
+
+
+def write_checkpoint_candidates(path: Path, rows: list[dict[str, Any]]) -> None:
+    """EXP 내부에서 best_total / best_rec checkpoint 결과를 별도 CSV로도 남긴다."""
+
+    if not rows:
+        return
+
+    fields: list[str] = []
+    for row in rows:
+        for key in row:
+            if key not in fields:
+                fields.append(key)
+
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 # ============================================================================
@@ -886,8 +1147,31 @@ def experiment_is_complete(exp_dir: Path) -> bool:
 
 
 def run_experiment(plan: ExperimentPlan, args: argparse.Namespace) -> None:
+    """
+    EXP 하나를 끝까지 수행한다.
+
+    흐름
+    ----
+    1) EXP 전용 gin 생성
+    2) RQ-VAE 학습
+       - checkpoint_best_total.pt
+       - checkpoint_best_rec.pt
+       - checkpoint_final.pt
+    3) best_total / best_rec checkpoint 각각으로 Semantic ID 생성 + 평가
+    4) --sid-checkpoint로 지정한 checkpoint의 SID를 EXP 대표 SID로 복사
+    5) metrics.json / checkpoint_candidates.csv / stage_results.csv에 결과 취합
+
+    중요한 점
+    ----------
+    best_total과 best_rec 중 어느 쪽이 "진짜 최종 모델"인지는 자동으로 확정하지 않는다.
+    두 결과를 모두 남겨 팀에서 Semantic 지표를 보고 판단할 수 있게 한다.
+    """
+
     if experiment_is_complete(plan.exp_dir) and not args.force:
-        print(f"\n[SKIP] {plan.exp_id}: 이미 완료된 EXP입니다. --force가 없으므로 건너뜁니다.")
+        print(
+            f"\n[SKIP] {plan.exp_id}: 이미 완료된 EXP입니다. "
+            "--force가 없으므로 건너뜁니다."
+        )
         return
 
     global_paths = {
@@ -900,43 +1184,51 @@ def run_experiment(plan: ExperimentPlan, args: argparse.Namespace) -> None:
     if args.dry_run:
         json_dump(
             plan.exp_dir / "status.json",
-            {"status": "planned", "updated_at": now_iso(), "dry_run": True},
+            {
+                "status": "planned",
+                "updated_at": now_iso(),
+                "dry_run": True,
+            },
         )
-        print(f"[PLAN] {plan.exp_id} | parent={plan.parent_exp_id or '-'} | overrides={plan.overrides}")
+        print(
+            f"[PLAN] {plan.exp_id} | "
+            f"parent={plan.parent_exp_id or '-'} | "
+            f"overrides={plan.overrides}"
+        )
         return
 
     config_text = read_config(config_path)
-    dataset_folder = config_string(config_text, "train.dataset_folder")
+    dataset_folder = config_string(
+        config_text,
+        "train.dataset_folder",
+    )
     data_dir = Path(dataset_folder)
+
     if not data_dir.is_absolute():
         data_dir = args.rqvae_root / data_dir
 
-    q2_size = config_int(config_text, "train.vae_c2_codebook_size")
-    q3_size = config_int(config_text, "train.vae_c3_codebook_size")
-    checkpoint = plan.exp_dir / "rqvae" / "checkpoint_final.pt"
-    semantic_dir = plan.exp_dir / "semantic_ids"
-    sid_path = semantic_dir / "article_semantic_ids.parquet"
+    q2_size = config_int(
+        config_text,
+        "train.vae_c2_codebook_size",
+    )
+    q3_size = config_int(
+        config_text,
+        "train.vae_c3_codebook_size",
+    )
 
-    train_cmd = [sys.executable, "train_rqvae.py", str(config_path.resolve())]
-    generate_cmd = [
+    rqvae_dir = plan.exp_dir / "rqvae"
+    final_checkpoint = rqvae_dir / "checkpoint_final.pt"
+    best_total_checkpoint = rqvae_dir / "checkpoint_best_total.pt"
+    best_rec_checkpoint = rqvae_dir / "checkpoint_best_rec.pt"
+
+    semantic_root = plan.exp_dir / "semantic_ids"
+    selected_sid_path = semantic_root / "article_semantic_ids.parquet"
+
+    train_cmd = [
         sys.executable,
-        "generate_semantic_ids.py",
-        "--data_dir", str(data_dir.resolve()),
-        "--checkpoint", str(checkpoint.resolve()),
-        "--output_dir", str(semantic_dir.resolve()),
-        "--batch_size", str(args.sid_batch_size),
-        "--num_workers", str(args.sid_num_workers),
-    ]
-    evaluate_cmd = [
-        sys.executable,
-        "evaluate/evaluate_all.py",
-        "--sid", str(sid_path.resolve()),
-        "--data-dir", str(data_dir.resolve()),
-        "--checkpoint", str(checkpoint.resolve()),
-        "--split", args.eval_split,
-        "--q2-size", str(q2_size),
-        "--q3-size", str(q3_size),
-        "--pairs", str(args.pairs),
+        "-u",
+        "train_rqvae.py",
+        str(config_path.resolve()),
     ]
 
     start = time.time()
@@ -947,56 +1239,326 @@ def run_experiment(plan: ExperimentPlan, args: argparse.Namespace) -> None:
         "duration_seconds": None,
         "error": None,
     }
-    json_dump(plan.exp_dir / "status.json", status)
+    json_dump(
+        plan.exp_dir / "status.json",
+        status,
+    )
 
     print("\n" + "=" * 100)
-    print(f"START {plan.exp_id} | stage={plan.stage} | parent={plan.parent_exp_id or '-'}")
+    print(
+        f"START {plan.exp_id} | "
+        f"stage={plan.stage} | "
+        f"parent={plan.parent_exp_id or '-'}"
+    )
     print(f"Overrides: {plan.overrides}")
     print("=" * 100)
 
     try:
-        train_output = run_command(train_cmd, args.rqvae_root, plan.exp_dir / "train.log")
-        if not checkpoint.exists():
-            raise FileNotFoundError(f"학습은 종료됐지만 checkpoint_final.pt가 없습니다: {checkpoint}")
+        # ------------------------------------------------------------------
+        # 1. Train
+        # ------------------------------------------------------------------
+        train_output = run_command(
+            train_cmd,
+            args.rqvae_root,
+            plan.exp_dir / "train.log",
+        )
 
-        semantic_output = run_command(generate_cmd, args.rqvae_root, plan.exp_dir / "semantic_ids.log")
-        if not sid_path.exists():
-            raise FileNotFoundError(f"Semantic ID 생성 후 article_semantic_ids.parquet가 없습니다: {sid_path}")
+        if not final_checkpoint.exists():
+            raise FileNotFoundError(
+                "학습은 종료됐지만 checkpoint_final.pt가 없습니다: "
+                f"{final_checkpoint}"
+            )
 
-        eval_output = run_command(evaluate_cmd, args.rqvae_root, plan.exp_dir / "evaluate.log")
+        history, history_summary = parse_training_history(
+            train_output
+        )
+        write_training_history(
+            plan.exp_dir / "training_history.csv",
+            history,
+        )
 
-        history, history_summary = parse_training_history(train_output)
-        write_training_history(plan.exp_dir / "training_history.csv", history)
+        # ------------------------------------------------------------------
+        # 2. 어떤 best checkpoint가 실제로 생성됐는지 확인
+        # ------------------------------------------------------------------
+        # do_eval=True라면 수정된 train_rqvae.py는 best_total / best_rec을 남긴다.
+        # 혹시 과거 코드/설정으로 파일이 없다면 final checkpoint를 fallback으로 사용한다.
+        candidate_checkpoints: dict[str, Path] = {}
 
-        metrics = parse_evaluation_metrics(eval_output)
-        metrics.update(parse_semantic_id_metrics(semantic_output))
-        metrics.update(history_summary)
-        json_dump(plan.exp_dir / "metrics.json", metrics)
+        if best_total_checkpoint.exists():
+            candidate_checkpoints[
+                "best_total"
+            ] = best_total_checkpoint
+
+        if best_rec_checkpoint.exists():
+            candidate_checkpoints[
+                "best_rec"
+            ] = best_rec_checkpoint
+
+        if not candidate_checkpoints:
+            candidate_checkpoints[
+                "final"
+            ] = final_checkpoint
+
+        candidate_rows: list[dict[str, Any]] = []
+        candidate_metrics: dict[
+            str,
+            dict[str, Any],
+        ] = {}
+
+        # ------------------------------------------------------------------
+        # 3. best_total / best_rec 각각 SID 생성 + Semantic 평가
+        # ------------------------------------------------------------------
+        for variant, checkpoint in candidate_checkpoints.items():
+            output_dir = (
+                semantic_root
+                / variant
+            )
+            sid_path = (
+                output_dir
+                / "article_semantic_ids.parquet"
+            )
+
+            generate_cmd = [
+                sys.executable,
+                "generate_semantic_ids.py",
+                "--data_dir",
+                str(data_dir.resolve()),
+                "--checkpoint",
+                str(checkpoint.resolve()),
+                "--output_dir",
+                str(output_dir.resolve()),
+                "--batch_size",
+                str(args.sid_batch_size),
+                "--num_workers",
+                str(args.sid_num_workers),
+            ]
+
+            evaluate_cmd = [
+                sys.executable,
+                "evaluate/evaluate_all.py",
+                "--sid",
+                str(sid_path.resolve()),
+                "--data-dir",
+                str(data_dir.resolve()),
+                "--checkpoint",
+                str(checkpoint.resolve()),
+                "--split",
+                args.eval_split,
+                "--q2-size",
+                str(q2_size),
+                "--q3-size",
+                str(q3_size),
+                "--pairs",
+                str(args.pairs),
+            ]
+
+            semantic_output = run_command(
+                generate_cmd,
+                args.rqvae_root,
+                plan.exp_dir
+                / f"semantic_ids_{variant}.log",
+            )
+
+            if not sid_path.exists():
+                raise FileNotFoundError(
+                    "Semantic ID 생성 후 파일이 없습니다: "
+                    f"{sid_path}"
+                )
+
+            eval_output = run_command(
+                evaluate_cmd,
+                args.rqvae_root,
+                plan.exp_dir
+                / f"evaluate_{variant}.log",
+            )
+
+            metrics_for_variant = (
+                parse_evaluation_metrics(
+                    eval_output
+                )
+            )
+            metrics_for_variant.update(
+                parse_semantic_id_metrics(
+                    semantic_output
+                )
+            )
+
+            candidate_metrics[
+                variant
+            ] = metrics_for_variant
+
+            candidate_rows.append(
+                {
+                    "checkpoint_variant": variant,
+                    "checkpoint_path": str(
+                        checkpoint.resolve()
+                    ),
+                    "sid_path": str(
+                        sid_path.resolve()
+                    ),
+                    **metrics_for_variant,
+                }
+            )
+
+        write_checkpoint_candidates(
+            plan.exp_dir
+            / "checkpoint_candidates.csv",
+            candidate_rows,
+        )
+
+        # ------------------------------------------------------------------
+        # 4. EXP 대표 SID 선택
+        # ------------------------------------------------------------------
+        # 자동 "최종 모델 선정"이 아니라, downstream 연결 편의를 위한 대표 파일이다.
+        # 기본 대표 checkpoint는 best_rec이다. best_total도 진단용으로 별도 평가/보존한다.
+        selected_variant = (
+            args.sid_checkpoint
+            if args.sid_checkpoint
+            in candidate_metrics
+            else next(
+                iter(candidate_metrics)
+            )
+        )
+
+        selected_source = (
+            semantic_root
+            / selected_variant
+            / "article_semantic_ids.parquet"
+        )
+
+        semantic_root.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        shutil.copy2(
+            selected_source,
+            selected_sid_path,
+        )
+
+        json_dump(
+            semantic_root
+            / "selected_checkpoint.json",
+            {
+                "selected_checkpoint_variant": (
+                    selected_variant
+                ),
+                "selected_checkpoint_path": str(
+                    candidate_checkpoints[
+                        selected_variant
+                    ].resolve()
+                ),
+                "selected_sid_path": str(
+                    selected_sid_path.resolve()
+                ),
+                "note": (
+                    "이 선택은 downstream 연결 편의를 위한 대표값입니다. "
+                    "최종 모델 판단은 checkpoint_candidates.csv의 "
+                    "Semantic 지표를 함께 보고 결정하세요."
+                ),
+            },
+        )
+
+        # ------------------------------------------------------------------
+        # 5. Stage 결과용 metrics.json 구성
+        # ------------------------------------------------------------------
+        # 기존 stage report가 계속 동작하도록 "선택된 대표 checkpoint" 지표는
+        # prefix 없는 기존 컬럼에도 넣는다.
+        metrics: dict[str, Any] = {
+            "selected_checkpoint_variant": (
+                selected_variant
+            ),
+            **candidate_metrics[
+                selected_variant
+            ],
+            **history_summary,
+        }
+
+        if (
+            "best_total"
+            in candidate_metrics
+        ):
+            metrics.update(
+                prefix_candidate_metrics(
+                    "best_total",
+                    candidate_metrics[
+                        "best_total"
+                    ],
+                )
+            )
+
+        if "best_rec" in candidate_metrics:
+            metrics.update(
+                prefix_candidate_metrics(
+                    "best_rec",
+                    candidate_metrics[
+                        "best_rec"
+                    ],
+                )
+            )
+
+        json_dump(
+            plan.exp_dir / "metrics.json",
+            metrics,
+        )
 
         status.update(
             {
                 "status": "completed",
                 "finished_at": now_iso(),
-                "duration_seconds": round(time.time() - start, 3),
+                "duration_seconds": round(
+                    time.time() - start,
+                    3,
+                ),
+                "selected_checkpoint_variant": (
+                    selected_variant
+                ),
             }
         )
-        json_dump(plan.exp_dir / "status.json", status)
-        print(f"\n[DONE] {plan.exp_id} ({status['duration_seconds']:.1f}s)")
+        json_dump(
+            plan.exp_dir / "status.json",
+            status,
+        )
+
+        print(
+            f"\n[DONE] {plan.exp_id} "
+            f"({status['duration_seconds']:.1f}s)"
+        )
+        print(
+            "Representative SID : "
+            f"{selected_sid_path}"
+        )
+        print(
+            "Checkpoint details : "
+            f"{plan.exp_dir / 'checkpoint_candidates.csv'}"
+        )
 
     except Exception as exc:
         status.update(
             {
                 "status": "failed",
                 "finished_at": now_iso(),
-                "duration_seconds": round(time.time() - start, 3),
-                "error": f"{type(exc).__name__}: {exc}",
+                "duration_seconds": round(
+                    time.time() - start,
+                    3,
+                ),
+                "error": (
+                    f"{type(exc).__name__}: "
+                    f"{exc}"
+                ),
             }
         )
-        json_dump(plan.exp_dir / "status.json", status)
-        print(f"\n[FAILED] {plan.exp_id}: {status['error']}", file=sys.stderr)
+        json_dump(
+            plan.exp_dir / "status.json",
+            status,
+        )
+        print(
+            f"\n[FAILED] {plan.exp_id}: "
+            f"{status['error']}",
+            file=sys.stderr,
+        )
+
         if args.fail_fast:
             raise
-
 
 
 def preflight_check(args: argparse.Namespace) -> None:
@@ -1061,7 +1623,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--experiment-root",
         type=Path,
         default=None,
-        help="실험 결과 루트. 기본: RQVAE/out/experiments/<dataset>",
+        help=("실험 결과 루트. 생략 시 Colab에서는 ""MyDrive/SID_Project_Colab/results/<dataset>, ""로컬에서는 RQVAE/out/experiments/<dataset>"),
     )
     parser.add_argument(
         "--config",
@@ -1073,6 +1635,42 @@ def build_parser() -> argparse.ArgumentParser:
     # 공통 학습 budget override. Stage 내 모든 EXP에 같은 값을 적용해야 공정한 비교가 된다.
     parser.add_argument("--epochs", type=int, default=None, help="모든 EXP의 epochs를 같은 값으로 강제할 때 사용")
     parser.add_argument("--eval-every-epochs", type=int, default=None, help="Validation 평가 주기를 동일하게 강제")
+
+    # Early Stopping은 같은 Stage의 모든 EXP에 동일한 정책을 적용해야 공정하게 비교할 수 있다.
+    parser.add_argument(
+        "--early-stopping",
+        choices=["on", "off"],
+        default=None,
+        help="gin 기본값을 덮어쓸 때 사용. on/off",
+    )
+    parser.add_argument(
+        "--early-stopping-min-epochs",
+        type=int,
+        default=None,
+        help="이 epoch 전에는 Early Stopping을 허용하지 않음",
+    )
+    parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=None,
+        help="개선 없이 허용할 Validation 평가 횟수",
+    )
+    parser.add_argument(
+        "--early-stopping-min-delta",
+        type=float,
+        default=None,
+        help="의미 있는 개선으로 인정할 최소 loss 감소량",
+    )
+
+    parser.add_argument(
+        "--sid-checkpoint",
+        choices=["best_total", "best_rec", "final"],
+        default="best_rec",
+        help=(
+            "EXP 대표 article_semantic_ids.parquet에 사용할 checkpoint. "
+            "best_total/best_rec은 둘 다 별도 평가되며 이 옵션은 대표 파일만 결정. 기본은 best_rec."
+        ),
+    )
 
     # Stage preset 값을 바꾸거나 custom 파라미터를 실험할 때 사용한다.
     parser.add_argument(
@@ -1101,6 +1699,12 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--epochs는 1 이상이어야 합니다.")
     if args.eval_every_epochs is not None and args.eval_every_epochs <= 0:
         raise ValueError("--eval-every-epochs는 1 이상이어야 합니다.")
+    if args.early_stopping_min_epochs is not None and args.early_stopping_min_epochs < 0:
+        raise ValueError("--early-stopping-min-epochs는 0 이상이어야 합니다.")
+    if args.early_stopping_patience is not None and args.early_stopping_patience <= 0:
+        raise ValueError("--early-stopping-patience는 1 이상이어야 합니다.")
+    if args.early_stopping_min_delta is not None and args.early_stopping_min_delta < 0:
+        raise ValueError("--early-stopping-min-delta는 0 이상이어야 합니다.")
     if args.limit is not None and args.limit <= 0:
         raise ValueError("--limit는 1 이상이어야 합니다.")
     if args.pairs <= 0:
@@ -1112,17 +1716,32 @@ def main() -> None:
     args = parser.parse_args()
     validate_args(args)
 
-    args.rqvae_root = SCRIPT_DIR
+    args.rqvae_root = detect_rqvae_root()
     baseline_config = args.config or DATASET_CONFIGS[args.dataset]
     if not baseline_config.is_absolute():
         baseline_config = args.rqvae_root / baseline_config
     args.baseline_config = baseline_config.resolve()
 
-    experiment_root = args.experiment_root or (args.rqvae_root / "out" / "experiments" / args.dataset)
-    if not experiment_root.is_absolute():
-        experiment_root = args.rqvae_root / experiment_root
+    # 사용자가 --experiment-root를 직접 주면 그 값을 최우선으로 사용한다.
+    # 생략했다면 Colab에서는 Google Drive, 로컬에서는 기존 RQVAE/out 경로를 사용한다.
+    if args.experiment_root is not None:
+        experiment_root = args.experiment_root
+        if not experiment_root.is_absolute():
+            experiment_root = (
+                args.rqvae_root
+                / experiment_root
+            )
+    else:
+        experiment_root = default_experiment_root(
+            args.rqvae_root,
+            args.dataset,
+        )
+
     args.experiment_root = experiment_root.resolve()
-    args.experiment_root.mkdir(parents=True, exist_ok=True)
+    args.experiment_root.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     parent_ids = [item.strip() for item in args.parents.split(",") if item.strip()]
     parents = resolve_parents(args.stage, parent_ids, args.experiment_root, args.baseline_config)
@@ -1140,6 +1759,15 @@ def main() -> None:
     if args.eval_every_epochs is not None:
         global_overrides["train.eval_every_epochs"] = args.eval_every_epochs
 
+    if args.early_stopping is not None:
+        global_overrides["train.early_stopping"] = args.early_stopping == "on"
+    if args.early_stopping_min_epochs is not None:
+        global_overrides["train.early_stopping_min_epochs"] = args.early_stopping_min_epochs
+    if args.early_stopping_patience is not None:
+        global_overrides["train.early_stopping_patience"] = args.early_stopping_patience
+    if args.early_stopping_min_delta is not None:
+        global_overrides["train.early_stopping_min_delta"] = args.early_stopping_min_delta
+
     plans = build_plans(
         stage=args.stage,
         parents=parents,
@@ -1156,12 +1784,18 @@ def main() -> None:
     print("\n" + "=" * 100)
     print("RQ-VAE STAGED EXPERIMENT RUNNER")
     print("=" * 100)
+    print(f"RQ-VAE root     : {args.rqvae_root}")
     print(f"Dataset         : {args.dataset}")
     print(f"Stage           : {args.stage}")
     print(f"Baseline config : {args.baseline_config}")
     print(f"Experiment root : {args.experiment_root}")
+    if str(args.experiment_root).startswith("/content/drive/MyDrive/"):
+        print("Result storage  : Google Drive (persistent)")
+    else:
+        print("Result storage  : Local filesystem")
     print(f"Parents         : {', '.join(parent_ids) if parent_ids else '-'}")
     print(f"Planned EXPs    : {len(plans)}")
+    print(f"SID checkpoint  : {args.sid_checkpoint}")
     print(f"Dry run         : {args.dry_run}")
     print("=" * 100)
 
