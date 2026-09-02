@@ -1208,9 +1208,23 @@ def export_rqvae_inputs() -> dict[str, Any]:
 #
 # 즉 이 함수는 파이프라인 뒤쪽에서 실행된다.
 
-def export_transformer_inputs() -> dict[str, Any]:
+def export_transformer_inputs(
+    export_dir: str | Path | None = None,
+    overwrite: bool = True,
+) -> dict[str, Any]:
     """
     Transformer 팀에 전달할 최종 package를 생성한다.
+
+    Parameters
+    --------------------------------------------------------
+    export_dir:
+      Transformer package를 저장할 경로.
+      None이면 기존 기본 경로인
+      data/output/exports/transformer_inputs 를 사용한다.
+
+    overwrite:
+      True이면 기존 export_dir을 비우고 새 package를 만든다.
+      False이면 export_dir이 이미 비어 있지 않을 때 오류를 발생시킨다.
 
     핵심
     --------------------------------------------------------
@@ -1228,6 +1242,15 @@ def export_transformer_inputs() -> dict[str, Any]:
     category_mapping.parquet
       -> c1/category 해석 보조
     """
+
+    # main.py의 실험별 post-rqvae 경로를 받을 수 있도록
+    # 호출 시 export_dir이 주어지면 그 경로를 사용하고,
+    # 없으면 기존 기본 export 경로를 그대로 사용한다.
+    target_export_dir = (
+        Path(export_dir).expanduser()
+        if export_dir is not None
+        else TRANSFORMER_EXPORT_DIR
+    )
 
     # STEP 12-6-1. Transformer 필수 파일 존재 검사
     required_paths = {
@@ -1251,24 +1274,35 @@ def export_transformer_inputs() -> dict[str, Any]:
         _validate_transformer_inputs()
     )
 
-    # STEP 12-6-3. 과거 트랜스포머 EXPORT 폴더 제거 
-    _reset_directory(
-        TRANSFORMER_EXPORT_DIR
-    )
+    # STEP 12-6-3. Transformer export 폴더 준비
+    # overwrite=True  -> 기존 package를 제거하고 새로 생성
+    # overwrite=False -> 기존 결과가 있으면 실수로 덮어쓰지 않도록 차단
+    if target_export_dir.exists() and any(target_export_dir.iterdir()):
+        if not overwrite:
+            raise FileExistsError(
+                "Transformer export 결과가 이미 존재합니다. "
+                "덮어쓰려면 overwrite=True를 사용하세요. "
+                f"경로={target_export_dir}"
+            )
+
+    if overwrite:
+        _reset_directory(target_export_dir)
+    else:
+        target_export_dir.mkdir(parents=True, exist_ok=True)
 
     # STEP 12-6-4. 트랜스포머 핵심 파일 복사 
     exported_files = [
         _copy_file(
             config.ARTICLE_SEMANTIC_IDS_PATH,
-            TRANSFORMER_EXPORT_DIR,
+            target_export_dir,
         ),
         _copy_file(
             config.TRAIN_SEQUENCES_PATH,
-            TRANSFORMER_EXPORT_DIR,
+            target_export_dir,
         ),
         _copy_file(
             config.VALIDATION_SEQUENCES_PATH,
-            TRANSFORMER_EXPORT_DIR,
+            target_export_dir,
         ),
     ]
 
@@ -1276,7 +1310,7 @@ def export_transformer_inputs() -> dict[str, Any]:
     copied_category_mapping = (
         _copy_optional_file(
             config.CATEGORY_MAPPING_PATH,
-            TRANSFORMER_EXPORT_DIR,
+            target_export_dir,
         )
     )
 
@@ -1288,7 +1322,7 @@ def export_transformer_inputs() -> dict[str, Any]:
 
     # STEP 12-6-5. Transformer package manifest 저장
     manifest_path = _write_manifest(
-        TRANSFORMER_EXPORT_DIR,
+        target_export_dir,
         "transformer_inputs",
         validation_result,
         exported_files,
@@ -1297,7 +1331,7 @@ def export_transformer_inputs() -> dict[str, Any]:
     return {
         "status": "SUCCESS",
         "transformer_export_dir": str(
-            TRANSFORMER_EXPORT_DIR
+            target_export_dir
         ),
         "manifest_path": str(
             manifest_path
