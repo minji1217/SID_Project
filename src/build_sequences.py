@@ -231,7 +231,7 @@ from src import config
 #
 #
 # ------------------------------------------------------------
-# 5. Validation Candidate 정책
+# 5. Train / Validation Candidate 정책
 # ------------------------------------------------------------
 #
 # article_ids_inview:
@@ -300,7 +300,7 @@ VALIDATION_SEQUENCES_PATH = (
 # current를 별도 컬럼으로 저장하지 않고 history의 마지막 문맥으로 포함
 # target은 scalar가 아닌 list
 
-TRAIN_SEQUENCE_COLUMNS = [
+COMMON_SEQUENCE_COLUMNS = [
     "impression_id",
     "user_id",
     "impression_time",
@@ -316,10 +316,9 @@ TRAIN_SEQUENCE_COLUMNS = [
     "target_c2",
     "target_c3",
     "target_c4",
-
 ]
 
-VALIDATION_SEQUENCE_COLUMNS = TRAIN_SEQUENCE_COLUMNS + [
+CANDIDATE_SEQUENCE_COLUMNS = [
     "candidate_article_ids",
     "candidate_c1",
     "candidate_c2",
@@ -327,6 +326,11 @@ VALIDATION_SEQUENCE_COLUMNS = TRAIN_SEQUENCE_COLUMNS + [
     "candidate_c4",
     "candidate_labels",
 ]
+
+# 새 Transformer objective는 Train에서도 각 candidate의 score와 0/1 label을
+# 직접 비교하므로 Train / Validation 모두 candidate 정보를 반드시 가진다.
+TRAIN_SEQUENCE_COLUMNS = COMMON_SEQUENCE_COLUMNS + CANDIDATE_SEQUENCE_COLUMNS
+VALIDATION_SEQUENCE_COLUMNS = COMMON_SEQUENCE_COLUMNS + CANDIDATE_SEQUENCE_COLUMNS
 
 # STEP 11-2. Stable dedup 
 
@@ -338,7 +342,7 @@ def _stable_unique_ints(values: list[Any]) -> list[int]:
     사용 위치
     -------------
     1. article_ids_clicked
-    2. validation article_ids_inview
+    2. train / validation article_ids_inview
 
     주의
     ---------------
@@ -604,7 +608,7 @@ def _load_behaviors(
     정렬 : user_id -> impression_time -> impression_id 
 
     같은 user의 이전 behavior 결과를 다음 behavior의 running history에 계속 누적하기 위해 필요하다. 
-    validation에선 ranking 평가를 위해 article_ids_inview도 추가로 읽는다. 
+    Train / Validation 모두 ranking 학습·평가에 article_ids_inview를 사용한다. 
     
     """
     # STEP 11-5-1. Schema 확인
@@ -616,8 +620,9 @@ def _load_behaviors(
         "impression_id", "user_id", "impression_time", "article_id", "article_ids_clicked"
     }
 
-    if split_name == "validation":
-        required_columns.add("article_ids_inview")
+    # 새 Transformer objective에서는 Train에서도 candidate score를 학습하므로
+    # article_ids_inview가 Train / Validation 모두 필수다.
+    required_columns.add("article_ids_inview")
 
     missing_columns = required_columns - column_names 
     if missing_columns:
@@ -633,8 +638,7 @@ def _load_behaviors(
         "impression_id", "user_id", "impression_time", "article_id", "article_ids_clicked"
     ]
 
-    if split_name == "validation":
-        select_columns.append("article_ids_inview")
+    select_columns.append("article_ids_inview")
 
     behaviors = pl.read_parquet(
         behaviors_path, columns = select_columns,
@@ -790,27 +794,26 @@ def _make_sequence_df(rows: list[dict[str, Any]], split_name :str)-> pl.DataFram
             ),
         }
 
-        if split_name == "validation":
-            schema.update({
-                "candidate_article_ids": (
-                    pl.List(pl.Int64)
-                ),
-                "candidate_c1": (
-                    pl.List(pl.Int32)
-                ),
-                "candidate_c2": (
-                    pl.List(pl.Int32)
-                ),
-                "candidate_c3": (
-                    pl.List(pl.Int32)
-                ),
-                "candidate_c4": (
-                    pl.List(pl.Int32)
-                ),
-                "candidate_labels": (
-                    pl.List(pl.Int32)
-                ),
-            })
+        schema.update({
+            "candidate_article_ids": (
+                pl.List(pl.Int64)
+            ),
+            "candidate_c1": (
+                pl.List(pl.Int32)
+            ),
+            "candidate_c2": (
+                pl.List(pl.Int32)
+            ),
+            "candidate_c3": (
+                pl.List(pl.Int32)
+            ),
+            "candidate_c4": (
+                pl.List(pl.Int32)
+            ),
+            "candidate_labels": (
+                pl.List(pl.Int32)
+            ),
+        })
 
         return (
             pl.DataFrame(
@@ -888,54 +891,18 @@ def _make_sequence_df(rows: list[dict[str, Any]], split_name :str)-> pl.DataFram
         ])
     )
 
-    # STEP 11-8-3. Validation candidate 컬럼 타입 통일
-    if split_name == "validation":
-        sequence_df = (
-            sequence_df
-            .with_columns([
-                pl.col(
-                    "candidate_article_ids"
-                )
-                .cast(
-                    pl.List(pl.Int64)
-                ),
-
-                pl.col(
-                    "candidate_c1"
-                )
-                .cast(
-                    pl.List(pl.Int32)
-                ),
-
-                pl.col(
-                    "candidate_c2"
-                )
-                .cast(
-                    pl.List(pl.Int32)
-                ),
-
-                pl.col(
-                    "candidate_c3"
-                )
-                .cast(
-                    pl.List(pl.Int32)
-                ),
-
-                pl.col(
-                    "candidate_c4"
-                )
-                .cast(
-                    pl.List(pl.Int32)
-                ),
-
-                pl.col(
-                    "candidate_labels"
-                )
-                .cast(
-                    pl.List(pl.Int32)
-                ),
-            ])
-        )
+    # STEP 11-8-3. Train / Validation candidate 컬럼 타입 통일
+    sequence_df = (
+        sequence_df
+        .with_columns([
+            pl.col("candidate_article_ids").cast(pl.List(pl.Int64)),
+            pl.col("candidate_c1").cast(pl.List(pl.Int32)),
+            pl.col("candidate_c2").cast(pl.List(pl.Int32)),
+            pl.col("candidate_c3").cast(pl.List(pl.Int32)),
+            pl.col("candidate_c4").cast(pl.List(pl.Int32)),
+            pl.col("candidate_labels").cast(pl.List(pl.Int32)),
+        ])
+    )
 
     return sequence_df.select(
         columns
@@ -961,7 +928,7 @@ def _validate_sequence_integrity(sequence_df:pl.DataFrame, split_name:str)-> Non
         == len(target_c4)
         >= 1
 
-    Validation Candidate:
+    Train / Validation Candidate:
         len(candidate_article_ids)
         == len(candidate_c1)
         == len(candidate_c2)
@@ -969,7 +936,7 @@ def _validate_sequence_integrity(sequence_df:pl.DataFrame, split_name:str)-> Non
         == len(candidate_c4)
         == len(candidate_labels)
 
-    validation candidate_labels에는 최소 하나 이상의 positive가 있어야함
+    candidate_labels에는 최소 하나 이상의 positive가 있어야 함.
     """
 
     if sequence_df.height == 0: return 
@@ -1004,31 +971,30 @@ def _validate_sequence_integrity(sequence_df:pl.DataFrame, split_name:str)-> Non
             f"문제 행 수={invalid_target_length_count}"
         )
 
-    # STEP 11-9-3. Validation candidate 정합성 검사
-    if split_name == "validation":
-        invalid_candidate_length_count = sequence_df.filter(
-        (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c1").list.len()) | 
+    # STEP 11-9-3. Train / Validation candidate 정합성 검사
+    invalid_candidate_length_count = sequence_df.filter(
+        (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c1").list.len()) |
         (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c2").list.len()) |
         (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c3").list.len()) |
         (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c4").list.len()) |
         (pl.col("candidate_article_ids").list.len() != pl.col("candidate_labels").list.len())
-    ).height 
+    ).height
 
-        if invalid_candidate_length_count != 0:
-            raise ValueError(
-                "validation sequence의 candidate list 길이가 일치하지 않습니다. "
-                f"문제 행 수={invalid_candidate_length_count}"
-            )
+    if invalid_candidate_length_count != 0:
+        raise ValueError(
+            f"{split_name} sequence의 candidate list 길이가 일치하지 않습니다. "
+            f"문제 행 수={invalid_candidate_length_count}"
+        )
 
-        no_positive_candidate_count = sequence_df.filter(
-            pl.col("candidate_labels").list.sum() <= 0
-        ).height 
+    no_positive_candidate_count = sequence_df.filter(
+        pl.col("candidate_labels").list.sum() <= 0
+    ).height
 
-        if no_positive_candidate_count != 0:
-            raise ValueError(
-                "validation sequence에 positive candidate가 없는 행이 존재합니다. "
-                f"문제 행 수={no_positive_candidate_count}"
-            )
+    if no_positive_candidate_count != 0:
+        raise ValueError(
+            f"{split_name} sequence에 positive candidate가 없는 행이 존재합니다. "
+            f"문제 행 수={no_positive_candidate_count}"
+        )
 
 # STEP 11-10. Train / validation 공통 seq 생성 
 def _build_split_sequences(
@@ -1095,7 +1061,7 @@ def _build_split_sequences(
 
     appended_target_article_count = 0
 
-    # Validation 전용 통계
+    # Train / Validation 공통 candidate 통계
    
     candidate_null_or_empty_count = 0
     candidate_null_element_row_count = 0
@@ -1273,34 +1239,21 @@ def _build_split_sequences(
             "target_c4": target_c4,
         }
 
-        # STEP 11-10-4. Train sample 생성
-        if split_name == "train":
-            # current까지 반영된 history + target set 저장
-            rows.append(base_row)
-
-            # sample 생성 후 clicked target은 과거 중복 여부와 상관없이 무조건 append 
-
-            # article_ids_clicked의 원래 list 순서를 stable dedup한 deterministic 순서 그대로 사용
-            # 이 순서를 실제 클릭 timestamp 순서로 가정하진 x (clicked_ids)
-            for target_article_id in target_article_ids:
-                running_history.append(target_article_id)
-
-                appended_target_article_count += 1
-
-            continue 
-
-        # STEP 11-10-5. Validation candidate 처리
+        # STEP 11-10-4. Train / Validation candidate 처리
+        # 새 Transformer objective는 candidate별 teacher forcing score를 계산한 뒤
+        # candidate_labels(positive=1, negative=0)와 비교해 학습/평가한다.
+        # 따라서 두 split 모두 article_ids_inview를 candidate로 변환한다.
         candidate_raw = row["article_ids_inview"]
         should_emit = True # seq row 생성 대상 
 
-        # STEP 11-10-5-1. Candidate list 자체 검사
+        # STEP 11-10-4-1. Candidate list 자체 검사
         if candidate_raw is None or len(candidate_raw) == 0:
             candidate_null_or_empty_count += 1
             should_emit = False 
 
         candidate_article_ids: list[int] = []
 
-        # STEP 11-10-5-2. Candidate 내부 null 제거 + stable dedup
+        # STEP 11-10-4-2. Candidate 내부 null 제거 + stable dedup
         if should_emit:
             if any(article_id is None for article_id in candidate_raw):
                 candidate_null_element_row_count += 1
@@ -1317,7 +1270,7 @@ def _build_split_sequences(
                 if len(candidate_article_ids)!=len(valid_candidate_ids):
                     duplicate_candidate_behavior_row_count += 1
 
-        # STEP 11-10-5-3. 모든 target이 candidate 안에 있는지 ? 
+        # STEP 11-10-4-3. 모든 target이 candidate 안에 있는지 ? 
         if should_emit:
             candidate_set = set(candidate_article_ids)
             targets_missing_from_candidates = [
@@ -1333,7 +1286,7 @@ def _build_split_sequences(
                 should_emit = False 
 
 
-        # STEP 11-10-5-4. Candidate SID 존재 여부 
+        # STEP 11-10-4-4. Candidate SID 존재 여부 
         if should_emit:
             missing_candidate_ids = [
                 candidate_article_id for candidate_article_id in candidate_article_ids if candidate_article_id not in sid_lookup
@@ -1348,7 +1301,7 @@ def _build_split_sequences(
                         missing_candidate_sid_examples.append(missing_id)
                 
                 should_emit = False
-        # STEP 11-10-5-5. Candidate SID + Multi-positive label 생성
+        # STEP 11-10-4-5. Candidate SID + Multi-positive label 생성
         if should_emit:
             (candidate_c1, candidate_c2, candidate_c3, candidate_c4) = _article_ids_to_codes(article_ids=candidate_article_ids, sid_lookup=sid_lookup)
             target_set = set(target_article_ids)
@@ -1365,8 +1318,8 @@ def _build_split_sequences(
             # 실제 click 행동은 발생했기에 history는 진행
             history_only_update_count += 1
 
-        # STEP 11-10-5-6. Validation target을 history에 추가
-        # train과 동일 (실제 새 클릭이므로 과거 중복 여부 확인 x)
+        # STEP 11-10-4-6. Target을 history에 추가
+        # Train / Validation 공통: 실제 새 클릭이므로 과거 중복 여부 확인 x
         for target_article_id in target_article_ids:
             running_history.append(target_article_id)
             appended_target_article_count += 1
@@ -1571,49 +1524,19 @@ def _build_split_sequences(
         **history_stats,
     }
 
-    # Validation 전용 통계
-    if split_name == "validation":
-        result.update({
-            "candidate_null_or_empty_count": int(
-                candidate_null_or_empty_count
-            ),
-
-            "candidate_null_element_row_count": int(
-                candidate_null_element_row_count
-            ),
-
-            "duplicate_candidate_behavior_row_count": int(
-                duplicate_candidate_behavior_row_count
-            ),
-
-            "target_not_in_candidates_sample_count": int(
-                target_not_in_candidates_sample_count
-            ),
-
-            "target_not_in_candidates_article_count": int(
-                target_not_in_candidates_article_count
-            ),
-
-            "target_not_in_candidates_examples": (
-                target_not_in_candidates_examples
-            ),
-
-            "missing_candidate_sid_sample_count": int(
-                missing_candidate_sid_sample_count
-            ),
-
-            "missing_candidate_sid_article_count": int(
-                missing_candidate_sid_article_count
-            ),
-
-            "missing_candidate_sid_examples": (
-                missing_candidate_sid_examples
-            ),
-
-            "history_only_update_count": int(
-                history_only_update_count
-            ),
-        })
+    # Train / Validation 모두 candidate 기반 sample을 사용하므로 공통 통계로 반환
+    result.update({
+        "candidate_null_or_empty_count": int(candidate_null_or_empty_count),
+        "candidate_null_element_row_count": int(candidate_null_element_row_count),
+        "duplicate_candidate_behavior_row_count": int(duplicate_candidate_behavior_row_count),
+        "target_not_in_candidates_sample_count": int(target_not_in_candidates_sample_count),
+        "target_not_in_candidates_article_count": int(target_not_in_candidates_article_count),
+        "target_not_in_candidates_examples": target_not_in_candidates_examples,
+        "missing_candidate_sid_sample_count": int(missing_candidate_sid_sample_count),
+        "missing_candidate_sid_article_count": int(missing_candidate_sid_article_count),
+        "missing_candidate_sid_examples": missing_candidate_sid_examples,
+        "history_only_update_count": int(history_only_update_count),
+    })
 
     return result
 
@@ -1621,8 +1544,9 @@ def _build_split_sequences(
 # STEP 11-11. Train seq 생성 wrapper
 def build_train_sequences(sid_lookup: (dict[int, tuple[int, int, int, int]] | None)= None,)-> dict[str, Any]:
     """
-    train history/behaviors를 이용해 train_sequences.parquet 생성
-    validation running history와 공유 x
+    train history/behaviors를 이용해 train_sequences.parquet 생성.
+    새 ranking objective를 위해 candidate_article_ids / candidate_c1~c4 /
+    candidate_labels도 함께 생성한다. validation running history와 공유하지 않는다.
     """
 
     if sid_lookup is None : sid_lookup = _load_sid_lookup()

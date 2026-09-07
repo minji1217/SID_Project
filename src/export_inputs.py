@@ -737,13 +737,19 @@ def _validate_rqvae_validation_inputs() -> dict[str, Any]:
 #   article_id -> (c1,c2,c3,c4)
 #
 # train_sequences.parquet
-#   history SID sequence -> target SID set
+#   history SID sequence
+#   + target SID set
+#   + candidate SID sequence
+#   + candidate_labels
 #
 # validation_sequences.parquet
 #   history SID sequence
 #   + target SID set
 #   + candidate SID sequence
 #   + candidate_labels
+#
+# 새 Transformer objective는 Train에서도 후보별
+# score(a|H)와 candidate_labels(0/1)를 직접 비교한다.
 #
 # 여기서는 build_sequences.py에서 이미 검사한 내용을
 # "전달 직전" 한 번 더 최소한으로 확인한다.
@@ -804,7 +810,8 @@ def _validate_transformer_inputs() -> dict[str, Any]:
         config.VALIDATION_SEQUENCES_PATH
     )
 
-    # Train / Validation 공통으로 필요한 컬럼
+    # 새 ranking objective에서는 Train / Validation 모두 후보별 score를 계산하므로
+    # candidate SID와 candidate_labels가 두 split 모두 필수다.
     common_columns = {
         "impression_id",
         "user_id",
@@ -819,6 +826,12 @@ def _validate_transformer_inputs() -> dict[str, Any]:
         "target_c2",
         "target_c3",
         "target_c4",
+        "candidate_article_ids",
+        "candidate_c1",
+        "candidate_c2",
+        "candidate_c3",
+        "candidate_c4",
+        "candidate_labels",
     }
 
     _validate_required_columns(
@@ -827,18 +840,9 @@ def _validate_transformer_inputs() -> dict[str, Any]:
         "train_sequences.parquet",
     )
 
-    # Validation에는 ranking candidate 관련 컬럼이 추가로 필요
     _validate_required_columns(
         validation_sequences,
-        common_columns
-        | {
-            "candidate_article_ids",
-            "candidate_c1",
-            "candidate_c2",
-            "candidate_c3",
-            "candidate_c4",
-            "candidate_labels",
-        },
+        common_columns,
         "validation_sequences.parquet",
     )
 
@@ -922,53 +926,29 @@ def _validate_transformer_inputs() -> dict[str, Any]:
             )
 
 
-    # STEP 12-4-4. Validation candidate 정합성 검사
-    # candidate_article_ids와 candidate c1/c2/c3/c4/label도
-    # index 기준 1:1 대응이므로 길이가 모두 같아야 한다.
-    #
-    # 예:
-    # candidate_article_ids = [A,B,C,D]
-    # candidate_labels      = [0,1,0,1]
-    #
-    # target이 candidate에 반드시 포함되도록 build_sequences.py에서
-    # 필터링했으므로 label sum도 최소 1이어야 한다.
+    # STEP 12-4-4. Train / Validation candidate 정합성 검사
+    # candidate_article_ids와 candidate c1/c2/c3/c4/label은 index 기준 1:1 대응.
+    # target이 candidate에 포함되도록 build_sequences.py에서 필터링하므로
+    # candidate_labels의 합은 최소 1이어야 한다.
+    for split_name, dataframe in [
+        ("train", train_sequences),
+        ("validation", validation_sequences),
+    ]:
+        invalid_candidate_count = dataframe.filter(
+            (pl.col("candidate_article_ids").list.len() <= 0)
+            | (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c1").list.len())
+            | (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c2").list.len())
+            | (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c3").list.len())
+            | (pl.col("candidate_article_ids").list.len() != pl.col("candidate_c4").list.len())
+            | (pl.col("candidate_article_ids").list.len() != pl.col("candidate_labels").list.len())
+            | (pl.col("candidate_labels").list.sum() <= 0)
+        ).height
 
-    invalid_candidate_count = validation_sequences.filter(
-        (
-            pl.col("candidate_article_ids").list.len()
-            <= 0
-        )
-        | (
-            pl.col("candidate_article_ids").list.len()
-            != pl.col("candidate_c1").list.len()
-        )
-        | (
-            pl.col("candidate_article_ids").list.len()
-            != pl.col("candidate_c2").list.len()
-        )
-        | (
-            pl.col("candidate_article_ids").list.len()
-            != pl.col("candidate_c3").list.len()
-        )
-        | (
-            pl.col("candidate_article_ids").list.len()
-            != pl.col("candidate_c4").list.len()
-        )
-        | (
-            pl.col("candidate_article_ids").list.len()
-            != pl.col("candidate_labels").list.len()
-        )
-        | (
-            pl.col("candidate_labels").list.sum()
-            <= 0
-        )
-    ).height
-
-    if invalid_candidate_count != 0:
-        raise ValueError(
-            "validation candidate list 정합성 오류가 존재합니다. "
-            f"문제 행 수={invalid_candidate_count}"
-        )
+        if invalid_candidate_count != 0:
+            raise ValueError(
+                f"{split_name} candidate list 정합성 오류가 존재합니다. "
+                f"문제 행 수={invalid_candidate_count}"
+            )
 
     return {
         "status": "PASS",
