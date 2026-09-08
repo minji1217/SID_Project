@@ -1826,6 +1826,7 @@ def train(
                     optimizer=optimizer,
                     epoch=epoch,
                     global_step=global_step,
+                    lambda_uniq=lambda_uniq,
                     lambda_rec=lambda_rec,
                     lambda_cb=lambda_cb,
                     lambda_com=lambda_com,
