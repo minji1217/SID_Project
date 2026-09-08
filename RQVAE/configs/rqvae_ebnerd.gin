@@ -22,6 +22,8 @@ train.vae_codebook_mode = %QuantizeForwardMode.STE
 train.lambda_rec = 1.0
 train.lambda_cb = 1.0
 train.lambda_com = 0.25
+train.lambda_uniq = 0.1
+train.uniqueness_margin = 0.5
 
 train.kmeans_encode_batch_size = 512
 train.kmeans_n_init = 10

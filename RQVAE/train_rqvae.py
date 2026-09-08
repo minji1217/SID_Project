@@ -198,6 +198,8 @@ def print_train_config(
     lambda_rec,
     lambda_cb,
     lambda_com,
+    lambda_uniq,
+    uniqueness_margin,
     gumbel_t0,
     gumbel_min_t,
     gumbel_anneal_rate,
@@ -265,6 +267,8 @@ def print_train_config(
     print(f"lambda_rec                 : {lambda_rec}")
     print(f"lambda_cb                  : {lambda_cb}")
     print(f"lambda_com                 : {lambda_com}")
+    print(f"lambda_uniq                : {lambda_uniq}")
+    print(f"uniqueness_margin          : {uniqueness_margin}")
 
     print("\n[Runtime]")
     print(f"amp                        : {amp}")
@@ -524,6 +528,7 @@ def evaluate(
     - reconstruction_loss
     - codebook_loss
     - commitment_loss
+    - uniqueness_loss
     - rqvae_loss
 
     batch 크기가 마지막에 달라질 수 있으므로
@@ -537,6 +542,7 @@ def evaluate(
         "reconstruction_loss": 0.0,
         "codebook_loss": 0.0,
         "commitment_loss": 0.0,
+        "uniqueness_loss": 0.0,
         "rqvae_loss": 0.0,
     }
 
@@ -596,6 +602,14 @@ def evaluate(
             * batch_size_now
         )
 
+        sums["uniqueness_loss"] += (
+            output.uniqueness_loss
+            .detach()
+            .float()
+            .item()
+            * batch_size_now
+        )
+
         sums["rqvae_loss"] += (
             output.rqvae_loss
             .detach()
@@ -637,6 +651,10 @@ def print_loss_result(
     print(
         "  commitment loss     : "
         f"{result['commitment_loss']:.6f}"
+    )
+    print(
+        "  uniqueness loss     : "
+        f"{result['uniqueness_loss']:.6f}"
     )
     print(
         "  rqvae loss          : "
@@ -681,6 +699,7 @@ def build_checkpoint_state(
     lambda_rec,
     lambda_cb,
     lambda_com,
+    lambda_uniq,
 ):
     unwrapped_model = accelerator.unwrap_model(
         model
@@ -702,6 +721,7 @@ def build_checkpoint_state(
             "lambda_rec": lambda_rec,
             "lambda_cb": lambda_cb,
             "lambda_com": lambda_com,
+            "lambda_uniq": lambda_uniq,
         },
         "gin_config": gin.operative_config_str(),
     }
@@ -752,6 +772,8 @@ def train(
     lambda_rec: float = 1.0,
     lambda_cb: float = 1.0,
     lambda_com: float = 0.25,
+    lambda_uniq: float = 0.1,
+    uniqueness_margin: float = 0.5,
 
     # --------------------------------------------------------
     # Q2 K-means initialization
@@ -907,6 +929,8 @@ def train(
         lambda_rec=lambda_rec,
         lambda_cb=lambda_cb,
         lambda_com=lambda_com,
+        lambda_uniq=lambda_uniq,
+        uniqueness_margin=uniqueness_margin,
         gumbel_t0=gumbel_t0,
         gumbel_min_t=gumbel_min_t,
         gumbel_anneal_rate=(
@@ -1077,6 +1101,8 @@ def train(
         lambda_rec=lambda_rec,
         lambda_cb=lambda_cb,
         lambda_com=lambda_com,
+        lambda_uniq=lambda_uniq,
+        uniqueness_margin=uniqueness_margin,
     )
 
     model = model.to(device)
@@ -1391,6 +1417,7 @@ def train(
             "reconstruction_loss": 0.0,
             "codebook_loss": 0.0,
             "commitment_loss": 0.0,
+            "uniqueness_loss": 0.0,
             "rqvae_loss": 0.0,
         }
 
@@ -1530,6 +1557,17 @@ def train(
             )
 
             epoch_sums[
+                "uniqueness_loss"
+            ] += (
+                model_output
+                .uniqueness_loss
+                .detach()
+                .float()
+                .item()
+                * batch_size_now
+            )
+
+            epoch_sums[
                 "rqvae_loss"
             ] += (
                 model_output
@@ -1595,6 +1633,8 @@ def train(
                 f"{epoch_result['codebook_loss']:.6f} | "
                 "com="
                 f"{epoch_result['commitment_loss']:.6f} | "
+                "uniq="
+                f"{epoch_result['uniqueness_loss']:.6f} | "
                 "rqvae="
                 f"{epoch_result['rqvae_loss']:.6f} | "
                 f"t={last_gumbel_t:.6f} | "
@@ -1627,6 +1667,11 @@ def train(
                 "train/commitment_loss": (
                     epoch_result[
                         "commitment_loss"
+                    ]
+                ),
+                "train/uniqueness_loss": (
+                    epoch_result[
+                        "uniqueness_loss"
                     ]
                 ),
                 "train/rqvae_loss": (
@@ -1702,6 +1747,8 @@ def train(
                     f"{eval_result['codebook_loss']:.6f} | "
                     "com="
                     f"{eval_result['commitment_loss']:.6f} | "
+                    "uniq="
+                    f"{eval_result['uniqueness_loss']:.6f} | "
                     "rqvae="
                     f"{eval_result['rqvae_loss']:.6f}"
                 )
@@ -1729,6 +1776,11 @@ def train(
                             "eval/commitment_loss": (
                                 eval_result[
                                     "commitment_loss"
+                                ]
+                            ),
+                            "eval/uniqueness_loss": (
+                                eval_result[
+                                    "uniqueness_loss"
                                 ]
                             ),
                             "eval/rqvae_loss": (
@@ -1892,6 +1944,7 @@ def train(
                     lambda_rec=lambda_rec,
                     lambda_cb=lambda_cb,
                     lambda_com=lambda_com,
+                    lambda_uniq=lambda_uniq,
                 )
 
                 checkpoint_path = os.path.join(
@@ -1973,6 +2026,10 @@ def train(
                 "commitment_loss",
                 "commitment",
             ),
+            (
+                "uniqueness_loss",
+                "uniqueness",
+            ),
             ("rqvae_loss", "rqvae"),
         ]:
             before = initial_train_result[key]
@@ -2002,6 +2059,10 @@ def train(
                 (
                     "commitment_loss",
                     "commitment",
+                ),
+                (
+                    "uniqueness_loss",
+                    "uniqueness",
                 ),
                 ("rqvae_loss", "rqvae"),
             ]:
@@ -2037,6 +2098,7 @@ def train(
             lambda_rec=lambda_rec,
             lambda_cb=lambda_cb,
             lambda_com=lambda_com,
+            lambda_uniq=lambda_uniq,
         )
 
         final_path = os.path.join(
