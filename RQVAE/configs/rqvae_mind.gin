@@ -8,19 +8,19 @@ train.dataset_folder = "datasets/mind"
 
 train.vae_input_dim = 768
 train.vae_hidden_dims = [512, 256]
-train.vae_embed_dim = 128
+train.vae_embed_dim = 32
 
 train.vae_num_categories = 18
-train.vae_c2_codebook_size = 128
+train.vae_c2_codebook_size = 256
 train.vae_c3_codebook_size = 512
 
 train.vae_codebook_normalize = False
 train.vae_sim_vq = False
-train.vae_codebook_mode = %QuantizeForwardMode.GUMBEL_SOFTMAX
+train.vae_codebook_mode = %QuantizeForwardMode.STE
 
 train.lambda_rec = 1.0
-train.lambda_cb = 1.0
-train.lambda_com = 0.25
+train.lambda_cb = 2
+train.lambda_com = 1
 train.lambda_uniq = 0.1
 train.uniqueness_margin = 0.5
 
@@ -51,7 +51,7 @@ train.early_stopping_patience = 10
 train.early_stopping_min_delta = 0.001
 
 train.pretrained_rqvae_path = None
-train.save_dir_root = "out/rqvae/mind/"
+train.save_dir_root = "out/rqvae/mind_revalidation_grid/lambda_cb/lambda_cb_2__embed_dim32_c3512_quantizerSTE_normalizeFalse_lambda_com1/"
 train.save_model_every_epochs = 10
 
 # Logging
