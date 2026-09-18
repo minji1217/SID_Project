@@ -71,6 +71,10 @@ CANDIDATE_COLUMNS = (
 )
 
 
+# RQ-VAE 실험 폴더 안의 SID 파일 이름
+SEMANTIC_ID_FILE_NAME = "article_semantic_ids.parquet"
+
+
 # article_semantic_ids.parquet에서 읽을 컬럼
 SEMANTIC_ID_COLUMNS = [
     "article_id",
@@ -175,6 +179,40 @@ def _explode_candidates(
     )
 
 
+def resolve_semantic_ids_path(
+    semantic_ids_path: Path,
+) -> Path:
+    """
+    실험 폴더 경로를 줘도 되도록 한다.
+
+    폴더를 주면 그 안의 article_semantic_ids.parquet을 찾는다.
+    VS Code에서 실험 폴더를 그대로 복사해 붙여넣는 경우가 많다.
+    """
+
+    semantic_ids_path = Path(semantic_ids_path)
+
+    if semantic_ids_path.is_dir():
+        candidate_path = (
+            semantic_ids_path
+            / SEMANTIC_ID_FILE_NAME
+        )
+
+        if not candidate_path.exists():
+            raise FileNotFoundError(
+                f"{semantic_ids_path} 안에 "
+                f"{SEMANTIC_ID_FILE_NAME}이 없습니다."
+            )
+
+        return candidate_path
+
+    if not semantic_ids_path.exists():
+        raise FileNotFoundError(
+            f"경로를 찾을 수 없습니다: {semantic_ids_path}"
+        )
+
+    return semantic_ids_path
+
+
 def _load_sid_lookup(
     semantic_ids_path: Path,
 ) -> pl.DataFrame:
@@ -186,6 +224,8 @@ def _load_sid_lookup(
     sequences를 다시 빌드하지 않고
     이 파일만 바꿔서 실험 간 비교를 할 수 있다.
     """
+
+    semantic_ids_path = resolve_semantic_ids_path(semantic_ids_path)
 
     semantic_id_df = pl.read_parquet(semantic_ids_path)
 
@@ -239,6 +279,8 @@ def analyze_semantic_id_usage(
     codebook 사용률과 SID당 기사 수 분포를 같이 봐야
     충돌 비율의 원인을 알 수 있다.
     """
+
+    semantic_ids_path = resolve_semantic_ids_path(semantic_ids_path)
 
     semantic_id_df = pl.read_parquet(semantic_ids_path)
 
@@ -669,6 +711,11 @@ def analyze_candidate_sid_collision(
 
     use_external_sid = semantic_ids_path is not None
 
+    if use_external_sid:
+        semantic_ids_path = resolve_semantic_ids_path(
+            semantic_ids_path
+        )
+
     sid_lookup_df = (
         _load_sid_lookup(semantic_ids_path)
         if use_external_sid
@@ -1024,7 +1071,9 @@ def main() -> None:
         type=Path,
         default=None,
         help=(
-            "RQ-VAE 실험 폴더의 article_semantic_ids.parquet 경로. "
+            "RQ-VAE 실험 폴더 경로 또는 그 안의 "
+            "article_semantic_ids.parquet 경로. "
+            "폴더를 주면 안에서 파일을 찾는다. "
             "지정하면 sequences의 SID 컬럼 대신 이 파일의 SID를 사용한다. "
             "sequences를 다시 빌드하지 않고 실험별 비교를 할 때 쓴다."
         ),
