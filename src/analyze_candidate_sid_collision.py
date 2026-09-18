@@ -1,4 +1,5 @@
 import argparse
+import inspect
 import json
 import math
 
@@ -69,6 +70,16 @@ SID_CANDIDATE_COLUMNS = [
 CANDIDATE_COLUMNS = (
     BASE_CANDIDATE_COLUMNS
     + SID_CANDIDATE_COLUMNS
+)
+
+
+# polars 2.0부터 explode의 empty_as_null 기본값이 바뀐다.
+# 빈 candidate list는 candidate 0개로 보는 것이 맞으므로
+# (null candidate 1개가 아니라) False를 명시한다.
+# 구버전 polars에는 인자가 없으므로 지원 여부를 확인하고 넘긴다.
+_EXPLODE_SUPPORTS_EMPTY_AS_NULL = (
+    "empty_as_null"
+    in inspect.signature(pl.DataFrame.explode).parameters
 )
 
 
@@ -193,11 +204,17 @@ def _explode_candidates(
     if columns is None:
         columns = list(CANDIDATE_COLUMNS)
 
+    explode_options = (
+        {"empty_as_null": False}
+        if _EXPLODE_SUPPORTS_EMPTY_AS_NULL
+        else {}
+    )
+
     return (
         sequence_df
         .select(columns)
         .with_row_index("row_index")
-        .explode(columns)
+        .explode(columns, **explode_options)
     )
 
 
