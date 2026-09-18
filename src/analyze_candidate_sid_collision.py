@@ -36,6 +36,12 @@ from src import config
 # ============================================================
 
 
+# 한 번에 메모리에 올릴 impression 수.
+# candidate list를 펼치면 행 수가 수십 배로 늘어나므로
+# 파일 전체를 올리지 않고 이 단위로 나눠서 누적한다.
+DEFAULT_CHUNK_SIZE = 200_000
+
+
 CANDIDATE_COLUMNS = [
     "candidate_article_ids",
     "candidate_c1",
@@ -65,6 +71,26 @@ PREFIX_LEVELS: list[tuple[str, list[str]]] = [
 ]
 
 
+def _validate_candidate_columns(
+    column_names: list[str],
+) -> None:
+    """
+    candidate 분석에 필요한 컬럼이 모두 있는지 검사한다.
+    """
+
+    missing_columns = [
+        column_name
+        for column_name in CANDIDATE_COLUMNS
+        if column_name not in column_names
+    ]
+
+    if missing_columns:
+        raise ValueError(
+            "candidate 컬럼이 없습니다: "
+            + ", ".join(missing_columns)
+        )
+
+
 def _explode_candidates(
     sequence_df: pl.DataFrame,
 ) -> pl.DataFrame:
@@ -75,17 +101,7 @@ def _explode_candidates(
     row_index = 원래 impression 식별자
     """
 
-    missing_columns = [
-        column_name
-        for column_name in CANDIDATE_COLUMNS
-        if column_name not in sequence_df.columns
-    ]
-
-    if missing_columns:
-        raise ValueError(
-            "candidate 컬럼이 없습니다: "
-            + ", ".join(missing_columns)
-        )
+    _validate_candidate_columns(sequence_df.columns)
 
     return (
         sequence_df
@@ -95,17 +111,39 @@ def _explode_candidates(
     )
 
 
-def _collision_stats(
+def _new_level_counter() -> dict[str, float]:
+    """
+    prefix level 하나에 대한 누적 counter를 만든다.
+
+    chunk 단위로 값을 더해도 결과가 같도록
+    비율이 아니라 원시 count만 누적한다.
+    """
+
+    return {
+        "negative_count": 0,
+        "collided_negative_count": 0,
+        "row_with_negative_count": 0,
+        "row_with_collision_count": 0,
+        # impression별 충돌 비율의 합 (macro 평균 계산용)
+        "ratio_sum": 0.0,
+    }
+
+
+def _accumulate_level(
+    counter: dict[str, float],
     candidate_df: pl.DataFrame,
     sid_columns: list[str],
-) -> dict[str, Any]:
+) -> None:
     """
-    하나의 prefix level에 대한 충돌 통계를 계산한다.
+    chunk 하나의 충돌 결과를 counter에 더한다.
 
     충돌 정의:
     같은 impression 안에서
     negative candidate의 SID prefix가
     positive candidate의 SID prefix 중 하나와 완전히 같은 경우.
+
+    chunk는 impression 단위로 자르므로
+    한 impression의 candidate가 두 chunk로 쪼개지지 않는다.
     """
 
     # STEP 13-1. positive SID 집합
@@ -117,26 +155,14 @@ def _collision_stats(
         .unique()
     )
 
-    # STEP 13-2. negative에 충돌 여부 플래그 부여
     negative_df = (
         candidate_df
         .filter(pl.col("candidate_labels") == 0)
         .select(["row_index"] + sid_columns)
     )
 
-    negative_count = negative_df.height
-
-    collided_df = negative_df.join(
-        positive_sid_df,
-        on=["row_index"] + sid_columns,
-        how="semi",
-    )
-
-    collided_count = collided_df.height
-
-    # STEP 13-3. impression(row)별 비율
-    # macro 비율은 negative가 0개인 impression을 제외하고 평균낸다.
-    per_row_df = (
+    # STEP 13-2. negative에 충돌 여부 플래그 부여
+    flagged_df = (
         negative_df
         .join(
             positive_sid_df.with_columns(
@@ -148,6 +174,12 @@ def _collision_stats(
         .with_columns(
             pl.col("is_collided").fill_null(False)
         )
+    )
+
+    # STEP 13-3. impression(row)별 비율
+    # negative가 0개인 impression은 비율을 정의할 수 없으므로 제외된다.
+    per_row_df = (
+        flagged_df
         .group_by("row_index")
         .agg([
             pl.len().alias("negative_count"),
@@ -161,19 +193,36 @@ def _collision_stats(
         )
     )
 
-    row_with_negative_count = per_row_df.height
+    counter["negative_count"] += negative_df.height
 
-    row_with_collision_count = (
+    counter["collided_negative_count"] += int(
+        flagged_df.get_column("is_collided").sum()
+    )
+
+    counter["row_with_negative_count"] += per_row_df.height
+
+    counter["row_with_collision_count"] += (
         per_row_df
         .filter(pl.col("collided_count") > 0)
         .height
     )
 
-    macro_ratio = (
-        per_row_df
-        .get_column("collided_ratio")
-        .mean()
+    counter["ratio_sum"] += float(
+        per_row_df.get_column("collided_ratio").sum()
     )
+
+
+def _finalize_level(
+    counter: dict[str, float],
+) -> dict[str, Any]:
+    """
+    누적 counter를 최종 비율로 바꾼다.
+    """
+
+    negative_count = int(counter["negative_count"])
+    collided_count = int(counter["collided_negative_count"])
+    row_with_negative_count = int(counter["row_with_negative_count"])
+    row_with_collision_count = int(counter["row_with_collision_count"])
 
     return {
         "negative_count": negative_count,
@@ -186,8 +235,8 @@ def _collision_stats(
         ),
         # macro: impression마다 비율을 구한 뒤 평균
         "collided_negative_ratio_macro": (
-            float(macro_ratio)
-            if macro_ratio is not None
+            counter["ratio_sum"] / row_with_negative_count
+            if row_with_negative_count > 0
             else 0.0
         ),
         "row_with_negative_count": row_with_negative_count,
@@ -203,70 +252,120 @@ def _collision_stats(
 def analyze_candidate_sid_collision(
     sequences_path: Path,
     split_name: str,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """
     sequences parquet 하나를 읽어서
     prefix level별 candidate SID 충돌 통계를 만든다.
+
+    파일 전체를 한 번에 올리지 않고
+    impression chunk 단위로 읽어서 누적하므로
+    candidate 수가 많아도 메모리 사용량이 일정하다.
     """
 
-    sequence_df = pl.read_parquet(sequences_path)
-
-    candidate_df = _explode_candidates(sequence_df)
-
-    # STEP 13-4. 기본 candidate 통계
-    total_candidate_count = candidate_df.height
-
-    positive_count = (
-        candidate_df
-        .filter(pl.col("candidate_labels") == 1)
-        .height
-    )
-
-    negative_count = (
-        candidate_df
-        .filter(pl.col("candidate_labels") == 0)
-        .height
-    )
-
-    # STEP 13-5. article_id 자체가 겹치는 경우
-    # SID 문제가 아니라 candidate 생성 문제이므로 따로 센다.
-    positive_article_df = (
-        candidate_df
-        .filter(pl.col("candidate_labels") == 1)
-        .select(["row_index", "candidate_article_ids"])
-        .unique()
-    )
-
-    same_article_negative_count = (
-        candidate_df
-        .filter(pl.col("candidate_labels") == 0)
-        .select(["row_index", "candidate_article_ids"])
-        .join(
-            positive_article_df,
-            on=["row_index", "candidate_article_ids"],
-            how="semi",
+    if chunk_size <= 0:
+        raise ValueError(
+            "chunk_size는 1 이상의 정수여야 합니다."
         )
-        .height
+
+    lazy_frame = pl.scan_parquet(sequences_path)
+
+    _validate_candidate_columns(lazy_frame.collect_schema().names())
+
+    total_row_count = (
+        lazy_frame
+        .select(pl.len())
+        .collect()
+        .item()
     )
 
-    # STEP 13-6. prefix level별 충돌 통계
-    level_results: dict[str, Any] = {}
+    if limit is not None:
+        total_row_count = min(total_row_count, limit)
 
-    for level_name, sid_columns in PREFIX_LEVELS:
-        level_results[level_name] = _collision_stats(
-            candidate_df,
-            sid_columns,
+    # STEP 13-4. 누적 counter 준비
+    impression_count = 0
+    total_candidate_count = 0
+    positive_count = 0
+    negative_count = 0
+    same_article_negative_count = 0
+
+    level_counters = {
+        level_name: _new_level_counter()
+        for level_name, _ in PREFIX_LEVELS
+    }
+
+    for offset in range(0, total_row_count, chunk_size):
+        current_chunk_size = min(
+            chunk_size,
+            total_row_count - offset,
         )
+
+        chunk_df = (
+            lazy_frame
+            .slice(offset, current_chunk_size)
+            .select(CANDIDATE_COLUMNS)
+            .collect()
+        )
+
+        candidate_df = _explode_candidates(chunk_df)
+
+        impression_count += chunk_df.height
+        total_candidate_count += candidate_df.height
+
+        positive_count += (
+            candidate_df
+            .filter(pl.col("candidate_labels") == 1)
+            .height
+        )
+
+        negative_count += (
+            candidate_df
+            .filter(pl.col("candidate_labels") == 0)
+            .height
+        )
+
+        # STEP 13-5. article_id 자체가 겹치는 경우
+        # SID 해상도 문제가 아니라 candidate 생성 문제이므로 따로 센다.
+        positive_article_df = (
+            candidate_df
+            .filter(pl.col("candidate_labels") == 1)
+            .select(["row_index", "candidate_article_ids"])
+            .unique()
+        )
+
+        same_article_negative_count += (
+            candidate_df
+            .filter(pl.col("candidate_labels") == 0)
+            .select(["row_index", "candidate_article_ids"])
+            .join(
+                positive_article_df,
+                on=["row_index", "candidate_article_ids"],
+                how="semi",
+            )
+            .height
+        )
+
+        # STEP 13-6. prefix level별 충돌 누적
+        for level_name, sid_columns in PREFIX_LEVELS:
+            _accumulate_level(
+                level_counters[level_name],
+                candidate_df,
+                sid_columns,
+            )
 
     return {
         "split_name": split_name,
         "sequences_path": str(sequences_path),
-        "impression_count": sequence_df.height,
+        "impression_count": impression_count,
         "total_candidate_count": total_candidate_count,
         "positive_count": positive_count,
         "negative_count": negative_count,
         "same_article_negative_count": same_article_negative_count,
-        "levels": level_results,
+        "levels": {
+            level_name: _finalize_level(level_counters[level_name])
+            for level_name, _ in PREFIX_LEVELS
+        },
     }
 
 
@@ -337,6 +436,27 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=DEFAULT_CHUNK_SIZE,
+        help=(
+            "한 번에 처리할 impression 수. "
+            "메모리가 부족하면 줄인다. "
+            f"기본값 {DEFAULT_CHUNK_SIZE:,}"
+        ),
+    )
+
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help=(
+            "앞에서부터 이 개수의 impression만 분석한다. "
+            "빠른 확인용."
+        ),
+    )
+
+    parser.add_argument(
         "--report",
         type=Path,
         default=None,
@@ -362,6 +482,8 @@ def main() -> None:
         result = analyze_candidate_sid_collision(
             sequences_path,
             split_name,
+            chunk_size=args.chunk_size,
+            limit=args.limit,
         )
 
         _print_result(result)
