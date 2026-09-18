@@ -49,13 +49,35 @@ from src import config
 DEFAULT_CHUNK_SIZE = 100_000
 
 
-CANDIDATE_COLUMNS = [
+# SID 없이도 항상 필요한 컬럼
+BASE_CANDIDATE_COLUMNS = [
     "candidate_article_ids",
+    "candidate_labels",
+]
+
+
+# sequences parquet 안에 들어 있는 SID 컬럼
+SID_CANDIDATE_COLUMNS = [
     "candidate_c1",
     "candidate_c2",
     "candidate_c3",
     "candidate_c4",
-    "candidate_labels",
+]
+
+
+CANDIDATE_COLUMNS = (
+    BASE_CANDIDATE_COLUMNS
+    + SID_CANDIDATE_COLUMNS
+)
+
+
+# article_semantic_ids.parquet에서 읽을 컬럼
+SEMANTIC_ID_COLUMNS = [
+    "article_id",
+    "c1",
+    "c2",
+    "c3",
+    "c4",
 ]
 
 
@@ -92,8 +114,25 @@ COLLISION_BUCKETS = [
 ]
 
 
+def _required_candidate_columns(
+    use_external_sid: bool,
+) -> list[str]:
+    """
+    분석에 필요한 candidate 컬럼 목록.
+
+    외부 article_semantic_ids.parquet에서 SID를 붙일 때는
+    sequences 쪽 SID 컬럼이 없어도 된다.
+    """
+
+    if use_external_sid:
+        return list(BASE_CANDIDATE_COLUMNS)
+
+    return list(CANDIDATE_COLUMNS)
+
+
 def _validate_candidate_columns(
     column_names: list[str],
+    use_external_sid: bool = False,
 ) -> None:
     """
     candidate 분석에 필요한 컬럼이 모두 있는지 검사한다.
@@ -101,7 +140,9 @@ def _validate_candidate_columns(
 
     missing_columns = [
         column_name
-        for column_name in CANDIDATE_COLUMNS
+        for column_name in _required_candidate_columns(
+            use_external_sid
+        )
         if column_name not in column_names
     ]
 
@@ -114,6 +155,7 @@ def _validate_candidate_columns(
 
 def _explode_candidates(
     sequence_df: pl.DataFrame,
+    columns: list[str] | None = None,
 ) -> pl.DataFrame:
     """
     impression 단위 list 컬럼을 candidate 단위 long format으로 편다.
@@ -122,14 +164,121 @@ def _explode_candidates(
     row_index = 원래 impression 식별자
     """
 
-    _validate_candidate_columns(sequence_df.columns)
+    if columns is None:
+        columns = list(CANDIDATE_COLUMNS)
 
     return (
         sequence_df
-        .select(CANDIDATE_COLUMNS)
+        .select(columns)
         .with_row_index("row_index")
-        .explode(CANDIDATE_COLUMNS)
+        .explode(columns)
     )
+
+
+def _load_sid_lookup(
+    semantic_ids_path: Path,
+) -> pl.DataFrame:
+    """
+    article_semantic_ids.parquet을 읽어서
+    candidate에 join할 수 있는 lookup table로 만든다.
+
+    RQ-VAE 실험 폴더마다 SID가 다르므로
+    sequences를 다시 빌드하지 않고
+    이 파일만 바꿔서 실험 간 비교를 할 수 있다.
+    """
+
+    semantic_id_df = pl.read_parquet(semantic_ids_path)
+
+    missing_columns = [
+        column_name
+        for column_name in SEMANTIC_ID_COLUMNS
+        if column_name not in semantic_id_df.columns
+    ]
+
+    if missing_columns:
+        raise ValueError(
+            f"{semantic_ids_path}에 컬럼이 없습니다: "
+            + ", ".join(missing_columns)
+        )
+
+    duplicate_count = (
+        semantic_id_df.height
+        - semantic_id_df.get_column("article_id").n_unique()
+    )
+
+    if duplicate_count != 0:
+        raise ValueError(
+            f"{semantic_ids_path}의 article_id가 중복입니다. "
+            f"중복 행 수={duplicate_count}"
+        )
+
+    return (
+        semantic_id_df
+        .select(SEMANTIC_ID_COLUMNS)
+        .with_columns(
+            pl.col("article_id").cast(pl.Int64)
+        )
+        .rename({
+            "article_id": "candidate_article_ids",
+            "c1": "candidate_c1",
+            "c2": "candidate_c2",
+            "c3": "candidate_c3",
+            "c4": "candidate_c4",
+        })
+    )
+
+
+def analyze_semantic_id_usage(
+    semantic_ids_path: Path,
+) -> dict[str, Any]:
+    """
+    article_semantic_ids.parquet 자체의 SID 사용 현황을 본다.
+
+    candidate 충돌은 결국
+    "몇 개의 기사가 같은 (c1,c2,c3)를 공유하는가"에서 나오므로
+    codebook 사용률과 SID당 기사 수 분포를 같이 봐야
+    충돌 비율의 원인을 알 수 있다.
+    """
+
+    semantic_id_df = pl.read_parquet(semantic_ids_path)
+
+    article_count = semantic_id_df.height
+
+    sid_group_df = (
+        semantic_id_df
+        .group_by(["c1", "c2", "c3"])
+        .agg(pl.len().alias("article_count"))
+    )
+
+    shared_article_count = int(
+        sid_group_df
+        .filter(pl.col("article_count") >= 2)
+        .get_column("article_count")
+        .sum()
+    )
+
+    return {
+        "semantic_ids_path": str(semantic_ids_path),
+        "article_count": article_count,
+        "distinct_c1_count": semantic_id_df.get_column("c1").n_unique(),
+        "distinct_c2_count": semantic_id_df.get_column("c2").n_unique(),
+        "distinct_c3_count": semantic_id_df.get_column("c3").n_unique(),
+        "distinct_c1c2c3_count": sid_group_df.height,
+        # 같은 (c1,c2,c3)를 다른 기사와 공유하는 기사 수
+        "shared_sid_article_count": shared_article_count,
+        "shared_sid_article_ratio": _safe_ratio(
+            shared_article_count,
+            article_count,
+        ),
+        # 하나의 (c1,c2,c3)에 몰린 최대 기사 수 (= max c4 + 1)
+        "max_article_per_sid": int(
+            sid_group_df.get_column("article_count").max() or 0
+        ),
+        "mean_article_per_sid": _safe_ratio(
+            article_count,
+            sid_group_df.height,
+        ),
+    }
 
 
 def _new_level_counter() -> dict[str, Any]:
@@ -497,6 +646,7 @@ def analyze_candidate_sid_collision(
     split_name: str,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     limit: int | None = None,
+    semantic_ids_path: Path | None = None,
 ) -> dict[str, Any]:
     """
     sequences parquet 하나를 읽어서
@@ -505,6 +655,11 @@ def analyze_candidate_sid_collision(
     파일 전체를 한 번에 올리지 않고
     impression chunk 단위로 읽어서 누적하므로
     candidate 수가 많아도 메모리 사용량이 일정하다.
+
+    semantic_ids_path를 주면
+    sequences 안의 SID 컬럼을 무시하고
+    그 파일의 SID를 candidate_article_ids에 붙여서 분석한다.
+    RQ-VAE 실험별 SID를 sequences 재생성 없이 비교할 때 쓴다.
     """
 
     if chunk_size <= 0:
@@ -512,9 +667,22 @@ def analyze_candidate_sid_collision(
             "chunk_size는 1 이상의 정수여야 합니다."
         )
 
+    use_external_sid = semantic_ids_path is not None
+
+    sid_lookup_df = (
+        _load_sid_lookup(semantic_ids_path)
+        if use_external_sid
+        else None
+    )
+
+    read_columns = _required_candidate_columns(use_external_sid)
+
     lazy_frame = pl.scan_parquet(sequences_path)
 
-    _validate_candidate_columns(lazy_frame.collect_schema().names())
+    _validate_candidate_columns(
+        lazy_frame.collect_schema().names(),
+        use_external_sid=use_external_sid,
+    )
 
     total_row_count = (
         lazy_frame
@@ -532,6 +700,7 @@ def analyze_candidate_sid_collision(
     negative_count = 0
     same_article_negative_count = 0
     multi_positive_row_count = 0
+    missing_sid_candidate_count = 0
 
     level_counters = {
         level_name: _new_level_counter()
@@ -547,13 +716,37 @@ def analyze_candidate_sid_collision(
         chunk_df = (
             lazy_frame
             .slice(offset, current_chunk_size)
-            .select(CANDIDATE_COLUMNS)
+            .select(read_columns)
             .collect()
         )
 
-        candidate_df = _explode_candidates(chunk_df)
+        candidate_df = _explode_candidates(chunk_df, read_columns)
 
         impression_count += chunk_df.height
+
+        # STEP 13-5-1. 외부 SID 붙이기
+        # article_semantic_ids.parquet에 없는 기사는 SID가 null이 되므로
+        # 따로 세고 분석에서는 제외한다.
+        if use_external_sid:
+            candidate_df = candidate_df.with_columns(
+                pl.col("candidate_article_ids").cast(pl.Int64)
+            ).join(
+                sid_lookup_df,
+                on="candidate_article_ids",
+                how="left",
+            )
+
+            missing_df = candidate_df.filter(
+                pl.col("candidate_c1").is_null()
+            )
+
+            missing_sid_candidate_count += missing_df.height
+
+            if missing_df.height > 0:
+                candidate_df = candidate_df.filter(
+                    pl.col("candidate_c1").is_not_null()
+                )
+
         total_candidate_count += candidate_df.height
 
         positive_df = candidate_df.filter(
@@ -614,6 +807,12 @@ def analyze_candidate_sid_collision(
             impression_count,
         ),
         "same_article_negative_count": same_article_negative_count,
+        "semantic_ids_path": (
+            str(semantic_ids_path)
+            if semantic_ids_path is not None
+            else None
+        ),
+        "missing_sid_candidate_count": missing_sid_candidate_count,
         "levels": {
             level_name: _finalize_level(level_counters[level_name])
             for level_name, _ in PREFIX_LEVELS
@@ -634,6 +833,15 @@ def _print_result(
     print("=" * 78)
 
     print(f"파일                 : {result['sequences_path']}")
+
+    if result.get("semantic_ids_path"):
+        print(f"SID 출처             : {result['semantic_ids_path']}")
+
+        print(
+            "SID를 찾지 못한 candidate : "
+            f"{result['missing_sid_candidate_count']:,} (분석에서 제외)"
+        )
+
     print(f"impression 수        : {result['impression_count']:,}")
     print(f"candidate 총 개수    : {result['total_candidate_count']:,}")
     print(
@@ -754,6 +962,43 @@ def _print_result(
     print()
 
 
+def _print_usage(
+    usage: dict[str, Any],
+) -> None:
+    """
+    article_semantic_ids.parquet 자체의 SID 사용 현황을 출력한다.
+    """
+
+    print()
+    print("=" * 78)
+    print("[0] SID 사용 현황 (article_semantic_ids.parquet 기준)")
+    print("=" * 78)
+
+    print(f"파일                     : {usage['semantic_ids_path']}")
+    print(f"기사 수                  : {usage['article_count']:,}")
+    print(f"사용된 c1 코드 수        : {usage['distinct_c1_count']:,}")
+    print(f"사용된 c2 코드 수        : {usage['distinct_c2_count']:,}")
+    print(f"사용된 c3 코드 수        : {usage['distinct_c3_count']:,}")
+    print(
+        "서로 다른 (c1,c2,c3) 수  : "
+        f"{usage['distinct_c1c2c3_count']:,}"
+    )
+    print(
+        "SID를 공유하는 기사 수   : "
+        f"{usage['shared_sid_article_count']:,} "
+        f"({usage['shared_sid_article_ratio']:.4%})"
+    )
+    print(
+        "SID당 평균 기사 수       : "
+        f"{usage['mean_article_per_sid']:.3f}"
+    )
+    print(
+        "SID당 최대 기사 수       : "
+        f"{usage['max_article_per_sid']:,} "
+        "(= max c4 + 1)"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -771,6 +1016,17 @@ def main() -> None:
             "분석할 sequences parquet 경로. "
             "여러 번 지정 가능. "
             "생략하면 config의 train/validation sequences를 사용한다."
+        ),
+    )
+
+    parser.add_argument(
+        "--semantic-ids",
+        type=Path,
+        default=None,
+        help=(
+            "RQ-VAE 실험 폴더의 article_semantic_ids.parquet 경로. "
+            "지정하면 sequences의 SID 컬럼 대신 이 파일의 SID를 사용한다. "
+            "sequences를 다시 빌드하지 않고 실험별 비교를 할 때 쓴다."
         ),
     )
 
@@ -815,6 +1071,11 @@ def main() -> None:
             ("validation", config.VALIDATION_SEQUENCES_PATH),
         ]
 
+    if args.semantic_ids is not None:
+        _print_usage(
+            analyze_semantic_id_usage(args.semantic_ids)
+        )
+
     results = []
 
     for split_name, sequences_path in targets:
@@ -823,6 +1084,7 @@ def main() -> None:
             split_name,
             chunk_size=args.chunk_size,
             limit=args.limit,
+            semantic_ids_path=args.semantic_ids,
         )
 
         _print_result(result)
