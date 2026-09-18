@@ -121,6 +121,15 @@ SIZE_TARGETS = [
 ]
 
 
+# 같은 SID를 공유하는 negative 묶음의 크기 구간
+NEGATIVE_GROUP_BUCKETS = [
+    ("2", 2, 2),
+    ("3-4", 3, 4),
+    ("5-9", 5, 9),
+    ("10+", 10, None),
+]
+
+
 # positive 하나가 몇 개의 negative와 겹치는지에 대한 분포 구간
 COLLISION_BUCKETS = [
     ("0", 0, 0),
@@ -371,6 +380,25 @@ def _new_level_counter() -> dict[str, Any]:
             for bucket_name, _, _ in COLLISION_BUCKETS
         },
 
+        # --- negative끼리 충돌 ---
+        # 같은 impression 안에서 다른 negative와 SID가 같은 negative 수
+        "negative_in_negative_collision_count": 0,
+        # 그룹당 1개만 남긴다고 할 때 없어지는 negative 수
+        "redundant_negative_count": 0,
+        # negative가 2개 이상 뭉친 SID 그룹 수
+        "negative_duplicate_group_count": 0,
+        # 한 SID에 뭉친 최대 negative 수
+        "negative_collision_max": 0,
+        # 중복 negative를 가진 impression 수
+        "row_with_negative_duplicate_count": 0,
+        # impression별 중복 negative 비율의 합
+        "negative_duplicate_ratio_sum": 0.0,
+        # negative 묶음 크기 분포
+        "negative_group_histogram": {
+            bucket_name: 0
+            for bucket_name, _, _ in NEGATIVE_GROUP_BUCKETS
+        },
+
         # --- candidate 전체 기준 ---
         "candidate_count": 0,
         # 같은 SID를 가진 candidate가 2개 이상인 그룹에 속한 candidate 수
@@ -380,16 +408,23 @@ def _new_level_counter() -> dict[str, Any]:
     }
 
 
-def _bucket_expression() -> pl.Expr:
+def _bucket_expression(
+    buckets: list[tuple[str, int, int | None]],
+) -> pl.Expr:
     """
-    충돌 negative 개수를 분포 구간 이름으로 바꾸는 식.
+    negative_count를 분포 구간 이름으로 바꾸는 식.
+
+    buckets는 (이름, 하한, 상한) 목록이고 오름차순이어야 한다.
+    상한이 None이면 마지막 구간이다.
     """
 
-    expression = pl.when(pl.col("negative_count") == 0).then(
-        pl.lit("0")
-    )
+    first_name, _, first_upper = buckets[0]
 
-    for bucket_name, lower_bound, upper_bound in COLLISION_BUCKETS[1:]:
+    expression = pl.when(
+        pl.col("negative_count") <= first_upper
+    ).then(pl.lit(first_name))
+
+    for bucket_name, lower_bound, upper_bound in buckets[1:]:
         if upper_bound is None:
             expression = expression.when(
                 pl.col("negative_count") >= lower_bound
@@ -399,7 +434,7 @@ def _bucket_expression() -> pl.Expr:
                 pl.col("negative_count") <= upper_bound
             ).then(pl.lit(bucket_name))
 
-    return expression.otherwise(pl.lit("10+"))
+    return expression.otherwise(pl.lit(buckets[-1][0]))
 
 
 def _accumulate_level(
@@ -459,10 +494,17 @@ def _accumulate_level(
             .filter(pl.col("positive_count") > 0)
             .sum()
             .alias("row_collided_negative_count"),
+
+            # 다른 negative와 SID가 같은 negative 수
+            pl.col("negative_count")
+            .filter(pl.col("negative_count") >= 2)
+            .sum()
+            .alias("row_duplicate_negative_count"),
         ])
-        .with_columns(
-            pl.col("row_collided_negative_count").fill_null(0)
-        )
+        .with_columns([
+            pl.col("row_collided_negative_count").fill_null(0),
+            pl.col("row_duplicate_negative_count").fill_null(0),
+        ])
     )
 
     row_with_negative_df = row_df.filter(
@@ -495,6 +537,74 @@ def _accumulate_level(
         )
         .item()
     )
+
+    # STEP 13-2-1. negative끼리 충돌 집계
+    # positive 유무와 무관하게 negative가 2개 이상 뭉친 SID 그룹을 본다.
+    # positive와도 겹치는 negative가 여기에 같이 잡힐 수 있는데,
+    # 서로 다른 관점의 지표이므로 중복 계상이 맞다.
+    negative_group_df = group_df.filter(
+        pl.col("negative_count") >= 2
+    )
+
+    counter["negative_in_negative_collision_count"] += int(
+        negative_group_df.get_column("negative_count").sum()
+    )
+
+    counter["redundant_negative_count"] += int(
+        negative_group_df
+        .select(
+            (pl.col("negative_count") - 1).sum()
+        )
+        .item()
+        or 0
+    )
+
+    counter["negative_duplicate_group_count"] += (
+        negative_group_df.height
+    )
+
+    chunk_negative_max = (
+        negative_group_df
+        .get_column("negative_count")
+        .max()
+    )
+
+    if chunk_negative_max is not None:
+        counter["negative_collision_max"] = max(
+            counter["negative_collision_max"],
+            int(chunk_negative_max),
+        )
+
+    counter["row_with_negative_duplicate_count"] += (
+        row_df
+        .filter(pl.col("row_duplicate_negative_count") > 0)
+        .height
+    )
+
+    counter["negative_duplicate_ratio_sum"] += float(
+        row_with_negative_df
+        .select(
+            (
+                pl.col("row_duplicate_negative_count")
+                / pl.col("row_negative_count")
+            ).sum()
+        )
+        .item()
+        or 0.0
+    )
+
+    negative_histogram_df = (
+        negative_group_df
+        .group_by(
+            _bucket_expression(NEGATIVE_GROUP_BUCKETS).alias("bucket")
+        )
+        .agg(pl.len().alias("count"))
+    )
+
+    for bucket_name, bucket_count in negative_histogram_df.iter_rows():
+        counter["negative_group_histogram"][bucket_name] += int(
+            bucket_count
+        )
 
     # STEP 13-3. positive 기준 집계
     # 그룹의 negative 수가 곧 그 그룹에 속한 positive 각각의 충돌 개수다.
@@ -568,7 +678,9 @@ def _accumulate_level(
     # STEP 13-4. positive별 충돌 개수 분포
     histogram_df = (
         positive_group_df
-        .group_by(_bucket_expression().alias("bucket"))
+        .group_by(
+            _bucket_expression(COLLISION_BUCKETS).alias("bucket")
+        )
         .agg(
             pl.col("positive_count").sum().alias("count")
         )
@@ -845,6 +957,45 @@ def _finalize_level(
         ),
         "collision_histogram": dict(
             counter["collision_histogram"]
+        ),
+
+        # --- negative끼리 충돌 ---
+        "negative_in_negative_collision_count": int(
+            counter["negative_in_negative_collision_count"]
+        ),
+        # 다른 negative와 SID가 같은 negative의 비율
+        "negative_in_negative_collision_ratio": _safe_ratio(
+            counter["negative_in_negative_collision_count"],
+            negative_count,
+        ),
+        "redundant_negative_count": int(
+            counter["redundant_negative_count"]
+        ),
+        # 그룹당 1개만 남길 때 사라지는 negative 비율
+        "redundant_negative_ratio": _safe_ratio(
+            counter["redundant_negative_count"],
+            negative_count,
+        ),
+        "negative_duplicate_group_count": int(
+            counter["negative_duplicate_group_count"]
+        ),
+        "negative_collision_max": int(
+            counter["negative_collision_max"]
+        ),
+        "row_with_negative_duplicate_count": int(
+            counter["row_with_negative_duplicate_count"]
+        ),
+        "row_with_negative_duplicate_ratio": _safe_ratio(
+            counter["row_with_negative_duplicate_count"],
+            counter["row_with_negative_count"],
+        ),
+        # impression별 중복 negative 비율의 평균
+        "negative_duplicate_ratio_macro": _safe_ratio(
+            counter["negative_duplicate_ratio_sum"],
+            counter["row_with_negative_count"],
+        ),
+        "negative_group_histogram": dict(
+            counter["negative_group_histogram"]
         ),
 
         # --- candidate 전체 기준 ---
@@ -1194,6 +1345,62 @@ def _print_result(
             f"{level['collided_negative_ratio_micro']:>11.4%}"
             f"{level['collided_negative_ratio_macro']:>11.4%}"
             f"{level['row_with_collision_ratio']:>15.4%}"
+        )
+
+    # --- negative끼리 충돌 ---
+    print()
+    print("[1-1] negative끼리 : negative 중 다른 negative와 SID가 겹치는 비율")
+    print(
+        f"{'level':<10}{'중복 negative':>15}{'비율':>10}"
+        f"{'macro':>10}{'제거 대상':>12}{'비율':>10}"
+        f"{'묶음 수':>10}{'최대':>7}{'중복 포함 행':>15}"
+    )
+    print("-" * 99)
+
+    for level_name, _ in PREFIX_LEVELS:
+        level = result["levels"][level_name]
+
+        print(
+            f"{level_name:<10}"
+            f"{level['negative_in_negative_collision_count']:>15,}"
+            f"{level['negative_in_negative_collision_ratio']:>10.4%}"
+            f"{level['negative_duplicate_ratio_macro']:>10.4%}"
+            f"{level['redundant_negative_count']:>12,}"
+            f"{level['redundant_negative_ratio']:>10.4%}"
+            f"{level['negative_duplicate_group_count']:>10,}"
+            f"{level['negative_collision_max']:>7,}"
+            f"{level['row_with_negative_duplicate_ratio']:>15.4%}"
+        )
+
+    print()
+    print(
+        "  * 중복 negative : 같은 impression 안에서 "
+        "다른 negative와 SID가 같은 negative"
+    )
+    print(
+        "  * 제거 대상     : SID 묶음마다 1개만 남길 때 "
+        "사라지는 negative 수"
+    )
+    print(
+        "  * 묶음 수       : negative가 2개 이상 뭉친 SID 그룹 수"
+    )
+
+    primary_level = result["levels"][PRIMARY_LEVEL]
+
+    print()
+    print(f"  negative 묶음 크기 분포 ({PRIMARY_LEVEL})")
+
+    group_count = primary_level["negative_duplicate_group_count"]
+
+    for bucket_name, _, _ in NEGATIVE_GROUP_BUCKETS:
+        bucket_count = primary_level["negative_group_histogram"][
+            bucket_name
+        ]
+
+        print(
+            f"    {bucket_name:<5}개 묶음 : "
+            f"{bucket_count:>10,} "
+            f"({_safe_ratio(bucket_count, group_count):>8.4%})"
         )
 
     # --- positive 기준 ---
