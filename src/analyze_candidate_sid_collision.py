@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 
 from pathlib import Path
 from typing import Any
@@ -106,6 +107,18 @@ PREFIX_LEVELS: list[tuple[str, list[str]]] = [
 
 # positive별 충돌 개수 분포를 자세히 볼 level
 PRIMARY_LEVEL = "c1c2c3"
+
+
+# impression별 candidate 수 분포에서 볼 백분위
+SIZE_QUANTILES = [0.01, 0.05, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
+
+
+# 분포를 낼 대상
+SIZE_TARGETS = [
+    ("candidate", "candidate 수"),
+    ("positive", "positive 수"),
+    ("negative", "negative 수"),
+]
 
 
 # positive 하나가 몇 개의 negative와 겹치는지에 대한 분포 구간
@@ -579,6 +592,176 @@ def _accumulate_level(
     counter["distinct_sid_count"] += group_df.height
 
 
+def _new_size_counter() -> dict[str, dict[int, int]]:
+    """
+    impression별 candidate 수 분포를 담을 빈도표를 만든다.
+
+    candidate 수는 작은 정수라서
+    "값 -> 등장 횟수" 빈도표를 누적하면
+    chunk로 나눠 읽어도 중앙값과 백분위를 정확히 구할 수 있다.
+    (평균만 누적하면 분포를 복원할 수 없다.)
+    """
+
+    return {
+        target_key: {}
+        for target_key, _ in SIZE_TARGETS
+    }
+
+
+def _accumulate_sizes(
+    size_counter: dict[str, dict[int, int]],
+    chunk_df: pl.DataFrame,
+) -> None:
+    """
+    chunk의 impression별 candidate / positive / negative 수를
+    빈도표에 더한다.
+
+    candidate_labels는 0/1 list이므로
+    길이가 candidate 수, 합이 positive 수다.
+    """
+
+    size_df = (
+        chunk_df
+        .select([
+            pl.col("candidate_labels")
+            .list.len()
+            .cast(pl.Int64)
+            .alias("candidate"),
+
+            pl.col("candidate_labels")
+            .list.sum()
+            .cast(pl.Int64)
+            .alias("positive"),
+        ])
+        .with_columns(
+            (
+                pl.col("candidate")
+                - pl.col("positive")
+            ).alias("negative")
+        )
+    )
+
+    for target_key, _ in SIZE_TARGETS:
+        value_count_df = (
+            size_df
+            .get_column(target_key)
+            .value_counts()
+        )
+
+        for value, count in value_count_df.iter_rows():
+            size_counter[target_key][int(value)] = (
+                size_counter[target_key].get(int(value), 0)
+                + int(count)
+            )
+
+
+def _quantile_from_histogram(
+    sorted_values: list[int],
+    cumulative_counts: list[int],
+    total_count: int,
+    quantile: float,
+) -> int:
+    """
+    빈도표에서 백분위 값을 구한다.
+
+    nearest-rank 방식:
+    정렬했을 때 ceil(quantile * N)번째 값을 그대로 쓴다.
+    보간하지 않으므로 항상 실제로 존재하는 값이 나온다.
+    """
+
+    if total_count <= 0:
+        return 0
+
+    target_rank = max(
+        1,
+        math.ceil(quantile * total_count),
+    )
+
+    for index, cumulative_count in enumerate(cumulative_counts):
+        if cumulative_count >= target_rank:
+            return sorted_values[index]
+
+    return sorted_values[-1]
+
+
+def _finalize_size(
+    histogram: dict[int, int],
+) -> dict[str, Any]:
+    """
+    빈도표를 분포 통계로 바꾼다.
+    """
+
+    if not histogram:
+        return {
+            "impression_count": 0,
+            "total": 0,
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0,
+            "max": 0,
+            "zero_count": 0,
+            "zero_ratio": 0.0,
+            "quantiles": {},
+            "most_common": [],
+        }
+
+    sorted_values = sorted(histogram.keys())
+
+    cumulative_counts = []
+    running_total = 0
+
+    for value in sorted_values:
+        running_total += histogram[value]
+        cumulative_counts.append(running_total)
+
+    total_count = running_total
+
+    value_sum = sum(
+        value * histogram[value]
+        for value in sorted_values
+    )
+
+    mean = value_sum / total_count
+
+    variance = sum(
+        histogram[value] * (value - mean) ** 2
+        for value in sorted_values
+    ) / total_count
+
+    most_common = sorted(
+        histogram.items(),
+        key=lambda item: (-item[1], item[0]),
+    )[:5]
+
+    return {
+        "impression_count": total_count,
+        "total": value_sum,
+        "mean": mean,
+        "std": math.sqrt(variance),
+        "min": sorted_values[0],
+        "max": sorted_values[-1],
+        # 해당 값이 0인 impression (negative가 없는 행 등)
+        "zero_count": histogram.get(0, 0),
+        "zero_ratio": _safe_ratio(
+            histogram.get(0, 0),
+            total_count,
+        ),
+        "quantiles": {
+            f"p{int(quantile * 100)}": _quantile_from_histogram(
+                sorted_values,
+                cumulative_counts,
+                total_count,
+                quantile,
+            )
+            for quantile in SIZE_QUANTILES
+        },
+        "most_common": [
+            {"value": value, "count": count}
+            for value, count in most_common
+        ],
+    }
+
+
 def _safe_ratio(
     numerator: float,
     denominator: float,
@@ -754,6 +937,8 @@ def analyze_candidate_sid_collision(
         for level_name, _ in PREFIX_LEVELS
     }
 
+    size_counter = _new_size_counter()
+
     for offset in range(0, total_row_count, chunk_size):
         current_chunk_size = min(
             chunk_size,
@@ -770,6 +955,11 @@ def analyze_candidate_sid_collision(
         candidate_df = _explode_candidates(chunk_df, read_columns)
 
         impression_count += chunk_df.height
+
+        # STEP 13-5-0. impression별 candidate 구성 분포
+        # SID를 못 찾아 제외되는 candidate가 있어도
+        # 여기서는 원래 candidate list 기준으로 센다.
+        _accumulate_sizes(size_counter, chunk_df)
 
         # STEP 13-5-1. 외부 SID 붙이기
         # article_semantic_ids.parquet에 없는 기사는 SID가 null이 되므로
@@ -860,11 +1050,89 @@ def analyze_candidate_sid_collision(
             else None
         ),
         "missing_sid_candidate_count": missing_sid_candidate_count,
+        "size_distribution": {
+            target_key: _finalize_size(size_counter[target_key])
+            for target_key, _ in SIZE_TARGETS
+        },
         "levels": {
             level_name: _finalize_level(level_counters[level_name])
             for level_name, _ in PREFIX_LEVELS
         },
     }
+
+
+def _print_size_distribution(
+    size_distribution: dict[str, Any],
+) -> None:
+    """
+    impression별 candidate / positive / negative 수 분포를 출력한다.
+    """
+
+    quantile_names = [
+        f"p{int(quantile * 100)}"
+        for quantile in SIZE_QUANTILES
+    ]
+
+    print()
+    print("[0-1] impression별 candidate 구성 분포")
+
+    header = (
+        f"{'항목':<14}{'평균':>9}{'표준편차':>10}{'최소':>7}"
+    )
+
+    for quantile_name in quantile_names:
+        header += f"{quantile_name:>7}"
+
+    header += f"{'최대':>8}"
+
+    print(header)
+    print("-" * (40 + 7 * len(quantile_names) + 8))
+
+    for target_key, target_label in SIZE_TARGETS:
+        stats = size_distribution[target_key]
+
+        line = (
+            f"{target_label:<14}"
+            f"{stats['mean']:>9.3f}"
+            f"{stats['std']:>10.3f}"
+            f"{stats['min']:>7,}"
+        )
+
+        for quantile_name in quantile_names:
+            line += f"{stats['quantiles'][quantile_name]:>7,}"
+
+        line += f"{stats['max']:>8,}"
+
+        print(line)
+
+    print()
+
+    for target_key, target_label in SIZE_TARGETS:
+        stats = size_distribution[target_key]
+
+        print(
+            f"  {target_label}가 0인 impression : "
+            f"{stats['zero_count']:>10,} "
+            f"({stats['zero_ratio']:.4%})"
+        )
+
+    print()
+    print("  가장 흔한 candidate 수 (상위 5개)")
+
+    candidate_stats = size_distribution["candidate"]
+
+    for entry in candidate_stats["most_common"]:
+        print(
+            f"    {entry['value']:>5,}개 : "
+            f"{entry['count']:>10,} impression "
+            f"({_safe_ratio(entry['count'], candidate_stats['impression_count']):>8.4%})"
+        )
+
+    print()
+    print(
+        "  * 백분위는 보간 없이 실제 존재하는 값으로 계산한다 "
+        "(nearest-rank)"
+    )
 
 
 def _print_result(
@@ -904,6 +1172,9 @@ def _print_result(
         "positive와 article_id가 같은 negative : "
         f"{result['same_article_negative_count']:,}"
     )
+
+    # --- impression별 candidate 구성 ---
+    _print_size_distribution(result["size_distribution"])
 
     # --- negative 기준 ---
     print()
