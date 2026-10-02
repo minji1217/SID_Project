@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>c1/c2 그룹 전처리</title>
+<style>
+:root {
+  --bg: #fbfaf8;
+  --surface: #ffffff;
+  --text: #1f1e1c;
+  --muted: #66625c;
+  --border: #e4e0d9;
+  --accent: #2f5d8a;
+  --accent-soft: #e8eff6;
+  --c1: #2f6f4f;
+  --c1-soft: #e6f2ec;
+  --c2: #8a4b2f;
+  --c2-soft: #f6ebe4;
+  --warn: #8a6a12;
+  --warn-soft: #fbf3dc;
+  --code-bg: #f3f1ed;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171716;
+    --surface: #1f1f1d;
+    --text: #ecebe8;
+    --muted: #a39f97;
+    --border: #34322f;
+    --accent: #8db6dd;
+    --accent-soft: #1f2b37;
+    --c1: #8fd0ad;
+    --c1-soft: #1c2b23;
+    --c2: #e3a988;
+    --c2-soft: #2f231d;
+    --warn: #e2c26b;
+    --warn-soft: #2e2817;
+    --code-bg: #262523;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171716;
+  --surface: #1f1f1d;
+  --text: #ecebe8;
+  --muted: #a39f97;
+  --border: #34322f;
+  --accent: #8db6dd;
+  --accent-soft: #1f2b37;
+  --c1: #8fd0ad;
+  --c1-soft: #1c2b23;
+  --c2: #e3a988;
+  --c2-soft: #2f231d;
+  --warn: #e2c26b;
+  --warn-soft: #2e2817;
+  --code-bg: #262523;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 40px 16px 80px; }
+header { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 28px; }
+header .eyebrow { color: var(--muted); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+h1 { font-size: 28px; line-height: 1.3; margin: 6px 0 10px; }
+h2 { font-size: 21px; margin: 44px 0 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+h3 { font-size: 17px; margin: 28px 0 8px; }
+p, li { overflow-wrap: anywhere; }
+ul, ol { padding-left: 22px; }
+li { margin: 3px 0; }
+a { color: var(--accent); }
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .88em;
+  background: var(--code-bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+.table-wrap { overflow-x: auto; margin: 12px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; background: var(--surface); }
+th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); font-weight: 600; }
+.lede { color: var(--muted); margin: 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 18px 0; }
+.card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--surface); }
+.card .tag { display: inline-block; font-weight: 700; font-size: 13px; padding: 1px 8px; border-radius: 999px; }
+.card.c1 .tag { background: var(--c1-soft); color: var(--c1); }
+.card.c2 .tag { background: var(--c2-soft); color: var(--c2); }
+.card h4 { margin: 8px 0 4px; font-size: 16px; }
+.card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.note {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 10px 14px;
+  border-radius: 0 8px 8px 0;
+  margin: 14px 0;
+  font-size: 15px;
+}
+.note.warn { border-color: var(--warn); background: var(--warn-soft); }
+.label { font-weight: 700; }
+.c1t { color: var(--c1); font-weight: 700; }
+.c2t { color: var(--c2); font-weight: 700; }
+.src { color: var(--muted); font-size: 13.5px; }
+nav.toc { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; background: var(--surface); font-size: 15px; }
+nav.toc ol { margin: 4px 0; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0; font-size: 14px; }
+.flow span.step { border: 1px solid var(--border); background: var(--surface); padding: 4px 10px; border-radius: 6px; }
+.flow span.step.c1 { border-color: var(--c1); color: var(--c1); }
+.flow span.step.c2 { border-color: var(--c2); color: var(--c2); }
+.flow span.arrow { color: var(--muted); }
+footer { margin-top: 56px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); padding-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">SID_Project · EB-NeRD 전처리</div>
+  <h1>c1 / c2 코드북 그룹 생성 방식</h1>
+  <p class="lede">RQ-VAE 학습 <strong>이전</strong> 전처리(<code>src/</code>) 단계에서 Semantic ID의 c1, c2 그룹 기준을 만드는 방식을 정리한 문서입니다. RQ-VAE 내부(코드북 초기화, SID 생성)는 다루지 않습니다.</p>
+</header>
+
+<div class="cards">
+  <div class="card c1">
+    <span class="tag">c1</span>
+    <h4><code>model_category_id</code></h4>
+    <p>원본 <code>category_str</code>을 train 기준으로 정수 매핑. 카테고리 1개 = 그룹 1개.</p>
+  </div>
+  <div class="card c2">
+    <span class="tag">c2</span>
+    <h4><code>event_id</code></h4>
+    <p>Entity 기반 사건 클러스터. IDF 가중 Jaccard + 72시간 창 + Union-Find.</p>
+  </div>
+</div>
+
+<nav class="toc">
+  <strong>목차</strong>
+  <ol start="0">
+    <li><a href="#flow">실행 순서와 공통 원칙</a></li>
+    <li><a href="#c1">c1: 카테고리 그룹</a></li>
+    <li><a href="#c2">c2: 사건 그룹</a></li>
+    <li><a href="#export">RQ-VAE 전달 형태</a></li>
+    <li><a href="#issues">확인이 필요한 점</a></li>
+  </ol>
+</nav>
+
+<h2 id="flow">0. 실행 순서와 공통 원칙</h2>
+<p><code>src/run_article_build.py</code>의 <code>main()</code>이 아래 순서로 실행합니다.</p>
+<div class="flow">
+  <span class="step">유효 기사 선별</span><span class="arrow">→</span>
+  <span class="step">train 사용 기사 ID</span><span class="arrow">→</span>
+  <span class="step c1">카테고리 매핑 생성</span><span class="arrow">→</span>
+  <span class="step c1">매핑 적용</span><span class="arrow">→</span>
+  <span class="step">E5 임베딩</span><span class="arrow">→</span>
+  <span class="step c2">train 사건 생성</span><span class="arrow">→</span>
+  <span class="step">train article master</span>
+</div>
+<pre><code>build_valid_articles()               # STEP 2  유효 기사 선별 → articles_base.parquet
+collect_train_used_article_ids()     # STEP 3  train 사용 기사 ID
+build_category_mapping()             # STEP 4  ┐ c1
+apply_category_mapping_to_articles() # STEP 5  ┘
+build_article_embedding_input()      # STEP 6
+generate_article_embeddings()        # STEP 6  (E5, 768d)
+build_article_events()               # STEP 7  c2 (train event)
+build_train_article_master()         # STEP 8</code></pre>
+<p>이후 <code>src/main.py</code>에서 <code>build_validation()</code>(validation 사건 배정)과 <code>export_rqvae_inputs()</code>를 호출합니다.</p>
+
+<div class="note"><span class="label">공통 원칙</span> — c1·c2 매핑은 모두 <strong>train에서 실제 사용하는 기사만으로 만들고</strong>, validation에는 적용만 합니다.</div>
+<div class="note warn"><span class="label">선행 조건</span> — c2에서 쓰는 <code>article_entities.parquet</code>은 <code>build_article_entities()</code>가 만듭니다. 이 함수는 <code>run_article_build</code>에 포함되어 있지 않으므로 <code>src/run_entity_experiment.py</code>로 먼저 생성해야 합니다. 없으면 사건 생성 단계에서 에러가 납니다.</div>
+
+<h3>Train 사용 기사</h3>
+<p class="src"><code>collect_train_used_article_ids</code> · <code>src/build_train.py:276</code></p>
+<ul>
+  <li>train history의 <code>article_id_fixed</code></li>
+  <li>조건 7개를 통과한 클릭 behavior의 현재 기사와 클릭 target 기사</li>
+  <li>위 합집합 ∩ <code>articles_base</code>의 유효 article_id</li>
+</ul>
+
+<h2 id="c1"><span class="c1t">1. c1</span>: 카테고리 그룹 (<code>model_category_id</code>)</h2>
+
+<h3>1-1. 매핑 생성</h3>
+<p class="src"><code>build_category_mapping()</code> · <code>src/build_train.py:601</code></p>
+<ol>
+  <li>train 사용 기사에 <code>category_str</code> 연결</li>
+  <li>정리: 문자열 변환 → null은 <code>""</code> → 앞뒤 공백 제거 (<code>" sport "</code>와 <code>"sport"</code>는 같은 카테고리)</li>
+  <li>비어 있지 않은 카테고리만 중복 제거 후 <strong>문자열 기준 정렬</strong></li>
+  <li>정렬 순서대로 <strong>1부터 연속 ID</strong> 부여, <strong><code>&lt;UNK&gt;</code> = 0</strong> 예약 (원본에 <code>&lt;UNK&gt;</code> 문자열이 있으면 에러)</li>
+  <li>저장: <code>category_mapping.parquet</code></li>
+</ol>
+<div class="table-wrap"><table>
+  <tr><th>category_str</th><th>model_category_id</th></tr>
+  <tr><td><code>&lt;UNK&gt;</code></td><td>0</td></tr>
+  <tr><td>culture</td><td>1</td></tr>
+  <tr><td>economy</td><td>2</td></tr>
+  <tr><td>…</td><td>…</td></tr>
+</table></div>
+
+<h3>1-2. 전체 기사 적용</h3>
+<p class="src"><code>apply_category_mapping_to_articles()</code> · <code>src/build_train.py:805</code></p>
+<ul>
+  <li>전체 유효 기사의 정리된 <code>category_str</code>을 기준으로 left join</li>
+  <li>매칭이 안 되면 <strong>0</strong> (빈 카테고리, train에 없던 카테고리)</li>
+  <li>리포트: 빈 카테고리 기사 수, train에 없던 카테고리의 기사 수·종류 수·예시(최대 10개)</li>
+  <li>validation도 같은 frozen 매핑을 사용 (<code>src/main.py:390</code>)</li>
+</ul>
+<div class="note">카테고리 병합이나 희소 카테고리 통합은 하지 않습니다. 원본 카테고리 1개가 그대로 c1 그룹 1개입니다.</div>
+
+<h2 id="c2"><span class="c2t">2. c2</span>: 사건 그룹 (<code>event_id</code>)</h2>
+
+<h3>2-1. Entity 표현</h3>
+<p class="src"><code>src/entity_processing.py</code></p>
+<pre><code>ENTITY_PROCESSING_MODE = "normalize_only"
+ENTITY_NORMALIZATION_VERSION = "v2"</code></pre>
+<p>사건 클러스터링은 <code>load_canonical_entity_lookup()</code>으로 <code>article_id → set[canonical_entity_key]</code>를 읽어 사용합니다.</p>
+<div class="table-wrap"><table>
+  <tr><th>단계</th><th>처리</th><th>예</th></tr>
+  <tr><td>baseline</td><td>NFKC → 공백 축약 → 소문자, <code>TYPE::text</code> 키</td><td><code>PER::vladimir putin</code></td></tr>
+  <tr><td>v1 소유격</td><td>끝 <code>-s</code>를 떼어 원형으로 병합</td><td><code>ekstra bladets</code> → <code>ekstra bladet</code></td></tr>
+  <tr><td>v2 하이픈</td><td>하이픈을 공백으로 바꿔 병합</td><td><code>jyllands - posten</code> → <code>jyllands posten</code></td></tr>
+</table></div>
+<p><strong>v1 오병합 방지 조건</strong></p>
+<ul>
+  <li>PER / ORG / LOC만 대상</li>
+  <li>원형이 같은 TYPE의 train 어휘에 실제로 존재</li>
+  <li>원형 길이 ≥ 3, 원형 df ≥ 2, 원형 df ≥ <code>-s</code>형 df</li>
+  <li><code>Andreas → Andrea</code>, <code>Sky Sports → Sky Sport</code> 같은 잘못된 변환 방지</li>
+</ul>
+<p><strong>v2 오병합 방지 조건</strong></p>
+<ul>
+  <li>같은 TYPE 안에서만 매핑</li>
+  <li>변환 결과가 같은 TYPE의 train 어휘에 존재</li>
+  <li><code>midt -</code>처럼 시작·끝에 매달린 하이픈은 제외</li>
+  <li>끝 구두점(<code>allan j.</code>)은 처리하지 않음</li>
+</ul>
+<p>정규화 매핑은 train 사용 기사로만 만들고 전체 유효 기사에 적용합니다.</p>
+
+<h3>2-2. Train 사건 생성</h3>
+<p class="src"><code>build_article_events()</code> · <code>src/build_train.py:1884</code></p>
+<div class="table-wrap"><table>
+  <tr><th>파라미터</th><th>환경변수</th><th>기본값</th></tr>
+  <tr><td>유사도 임계값 θ</td><td><code>SID_EVENT_SIMILARITY_THRESHOLD</code></td><td>0.3</td></tr>
+  <tr><td>시간창</td><td><code>SID_EVENT_TIME_WINDOW_HOURS</code></td><td>72</td></tr>
+  <tr><td>흔한 엔티티 제외 비율</td><td><code>SID_EVENT_MAX_ENTITY_DF_RATIO</code></td><td>0.01</td></tr>
+</table></div>
+<ol>
+  <li>train 사용 기사를 <code>(published_time, article_id)</code> 순으로 정렬</li>
+  <li><strong>Entity IDF</strong> (<code>_build_train_entity_idf</code>)
+    <ul>
+      <li><code>idf(e) = log((N+1) / (df(e)+1)) + 1</code></li>
+      <li>train에 없던 엔티티: <code>log(N+1) + 1</code></li>
+    </ul>
+  </li>
+  <li><strong>흔한 엔티티 제외</strong>: train 기사의 1% 이상에 나오는 엔티티(예: <code>ORG::ekstra bladet</code>)를 뺀 <code>clustering_entity_set</code> 생성. 원본 엔티티 집합은 보존</li>
+  <li><strong>연결</strong>: 정렬된 기사를 순회하며 72시간 이내 쌍만 비교, 72시간을 넘으면 <code>break</code>
+    <pre><code>sim(A, B) = Σ_{e ∈ A∩B} idf(e) / Σ_{e ∈ A∪B} idf(e)    # IDF 가중 Jaccard</code></pre>
+    <ul>
+      <li>한쪽이 비어 있거나 교집합이 없으면 0</li>
+      <li><code>sim ≥ θ</code>이면 Union-Find로 합침</li>
+    </ul>
+  </li>
+  <li><strong>사건 확정</strong>: 연결된 기사 묶음(connected component) 1개 = 사건 1개
+    <ul>
+      <li>연결되지 않은 기사(엔티티 없는 기사 포함)는 혼자 사건 하나</li>
+      <li>연결이 전이되므로 A–B, B–C만 연결돼도 A·C가 같은 사건이 되고, 사건 지속 기간이 72시간을 넘을 수 있음</li>
+    </ul>
+  </li>
+  <li><strong>ID 부여</strong>: 사건을 <code>(event_start_time, first_article_id)</code> 순으로 정렬해 <code>0, 1, 2, …</code>. 각 사건에 엔티티 합집합, 시작 시각, 마지막 기사 시각, 기사 수 저장</li>
+  <li><strong>출력</strong>: <code>article_events.parquet</code>, <code>event_master.parquet</code>, <code>entity_idf.parquet</code> (<code>entity, document_frequency, document_frequency_ratio, idf, is_high_df</code>)</li>
+</ol>
+
+<h3>2-3. Validation 사건 배정</h3>
+<p class="src"><code>_assign_validation_events()</code> · <code>src/build_validation.py:370</code></p>
+<p>train 사건은 다시 클러스터링하지 않습니다. validation에만 있는 기사를 <code>(published_time, article_id)</code> 순으로 하나씩 처리합니다.</p>
+<ol>
+  <li>엔티티는 같은 canonical key를 쓰고, 흔한 엔티티 목록과 IDF는 train 결과를 재사용</li>
+  <li>후보 사건: <code>0 ≤ 기사 시각 − 사건의 마지막 기사 시각 ≤ 72h</code> (미래 정보 차단)</li>
+  <li>후보 사건의 엔티티 합집합과 IDF 가중 Jaccard 계산</li>
+  <li><code>sim ≥ θ</code>인 후보 중 <strong>가장 유사한 사건</strong>에 배정 (동점이면 작은 <code>event_id</code>). 배정 후 사건의 엔티티 합집합, 마지막 기사 시각, 기사 수를 갱신하므로 이후 기사의 매칭에 영향을 줌</li>
+  <li>맞는 사건이 없으면 <strong>validation에서 새로 생긴 사건</strong>으로 새 ID 부여</li>
+  <li><strong>출력</strong>: <code>validation_article_events.parquet</code>, <code>event_master_with_validation.parquet</code> (train용 <code>event_master.parquet</code>은 덮어쓰지 않음), <code>validation_article_master.parquet</code></li>
+</ol>
+
+<h3>2-4. Entity Linking 실험 변형</h3>
+<p class="src"><code>event_entity_linking/</code></p>
+<p>엔티티 표현만 GPT/Wikidata entity linking 결과(<code>article_linked_entities.parquet</code>)로 바꾸고, 같은 사건 정책(0.3 / 72h / 0.01)으로 사건을 다시 만드는 실험용 패키지입니다. 자세한 내용은 <code>event_entity_linking/README.md</code>를 참고하세요.</p>
+
+<h2 id="export">3. RQ-VAE 전달 형태</h2>
+<p><code>build_train_article_master()</code> / <code>build_validation_article_master()</code> → <code>export_rqvae_inputs()</code>가 필수 컬럼과 ID 중복·null 여부를 검사한 뒤 내보냅니다.</p>
+<pre><code>article_id | embedding_row | model_category_id (c1) | event_id (c2)</code></pre>
+<p>RQ-VAE 쪽 <code>RQVAE/data/news.py</code>의 <code>NewsArticleDataset</code>이 이 네 컬럼을 필수로 요구합니다.</p>
+
+<h2 id="issues">4. 확인이 필요한 점</h2>
+<ol>
+  <li><strong>연결의 전이성</strong>: 직접 비교하지 않은 기사도 같은 사건이 되므로 큰 사건 하나가 비정상적으로 커질 수 있습니다. 사건 크기 분포를 확인할 필요가 있습니다.</li>
+  <li><strong>train과 validation의 방식 차이</strong>: train은 기사끼리 연결하고, validation은 기사를 사건의 엔티티 합집합과 비교해 가장 가까운 하나에 붙입니다. 사건의 엔티티 합집합이 커질수록 Jaccard 분모가 커져, 큰 사건에는 새 기사가 붙기 어려워질 수 있습니다.</li>
+  <li><strong>엔티티가 없는 기사</strong>는 모두 혼자 사건 하나가 됩니다. 1개짜리 사건 비율을 리포트로 확인하는 것이 좋습니다.</li>
+  <li><strong>카테고리를 원본 그대로 사용</strong>: 희소 카테고리 병합이 없습니다. RQ-VAE의 <code>vae_num_categories</code>(현재 gin 설정 25)가 <code>max(model_category_id) + 1</code> 이상인지 확인해야 합니다.</li>
+</ol>
+
+<footer>원본 Markdown: <code>docs/preprocessing_c1_c2_grouping.md</code></footer>
+</div>
+</body>
+</html>
