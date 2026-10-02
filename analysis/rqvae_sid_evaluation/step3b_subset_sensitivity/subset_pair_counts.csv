@@ -1,0 +1,10 @@
+﻿analysis_set,condition,sampling_method,n_pairs,exact_body_dup,exact_body_dup_pct,touches_repetitive,touches_repetitive_pct
+large_and_balanced,prefix_3_same,exhaustive,1534,7,0.456,261,17.01
+large,prefix_2_same,group_balanced,50000,0,0.0,2010,4.02
+large,semantic_different,group_balanced,50000,0,0.0,3123,6.25
+large,prefix_2_same,uniform,50000,0,0.0,2439,4.88
+large,semantic_different,uniform,50000,0,0.0,4757,9.51
+balanced,prefix_2_same,group_balanced,1534,0,0.0,43,2.8
+balanced,semantic_different,group_balanced,1534,0,0.0,94,6.13
+balanced,prefix_2_same,uniform,1534,0,0.0,65,4.24
+balanced,semantic_different,uniform,1534,0,0.0,136,8.87

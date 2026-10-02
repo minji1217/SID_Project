@@ -1,0 +1,25 @@
+﻿subset,metric,stat,semantic_different,prefix_2_same,prefix_3_same,order_holds,no_inversion,relation
+main,title_jaccard,mean,0.010408,0.044822,0.205908,True,True,semantic_different < prefix_2_same < prefix_3_same
+main,title_jaccard,median,0.0,0.0,0.111111,False,True,semantic_different = prefix_2_same < prefix_3_same
+main,body_jaccard,mean,0.097839,0.133764,0.216822,True,True,semantic_different < prefix_2_same < prefix_3_same
+main,body_jaccard,median,0.099678,0.125828,0.172457,True,True,semantic_different < prefix_2_same < prefix_3_same
+main,body_tfidf_cosine,mean,0.029117,0.079911,0.248391,True,True,semantic_different < prefix_2_same < prefix_3_same
+main,body_tfidf_cosine,median,0.025899,0.056362,0.187914,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_exact_dup,title_jaccard,mean,0.010408,0.044822,0.205733,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_exact_dup,title_jaccard,median,0.0,0.0,0.111111,False,True,semantic_different = prefix_2_same < prefix_3_same
+no_exact_dup,body_jaccard,mean,0.097839,0.133764,0.213232,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_exact_dup,body_jaccard,median,0.099678,0.125828,0.171779,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_exact_dup,body_tfidf_cosine,mean,0.029117,0.079911,0.244946,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_exact_dup,body_tfidf_cosine,median,0.025899,0.056362,0.186455,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_repetitive,title_jaccard,mean,0.010525,0.034481,0.143788,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_repetitive,title_jaccard,median,0.0,0.0,0.083333,False,True,semantic_different = prefix_2_same < prefix_3_same
+no_repetitive,body_jaccard,mean,0.099752,0.135987,0.225378,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_repetitive,body_jaccard,median,0.100179,0.126067,0.171674,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_repetitive,body_tfidf_cosine,mean,0.029637,0.080737,0.230147,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_repetitive,body_tfidf_cosine,median,0.026287,0.056615,0.182608,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_both,title_jaccard,mean,0.010525,0.034481,0.143115,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_both,title_jaccard,median,0.0,0.0,0.083333,False,True,semantic_different = prefix_2_same < prefix_3_same
+no_both,body_jaccard,mean,0.099752,0.135987,0.224769,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_both,body_jaccard,median,0.100179,0.126067,0.171611,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_both,body_tfidf_cosine,mean,0.029637,0.080737,0.229542,True,True,semantic_different < prefix_2_same < prefix_3_same
+no_both,body_tfidf_cosine,median,0.026287,0.056615,0.182482,True,True,semantic_different < prefix_2_same < prefix_3_same
