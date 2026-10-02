@@ -1,0 +1,10 @@
+﻿analysis_set,condition,sampling_method,metric,n_pairs,count,mean,median,std,q1,q3,min,max
+large_and_balanced,prefix_3_same,exhaustive,original_embedding_cosine,1534,1534,0.907035,0.905095,0.041431,0.876336,0.934032,0.788968,1.0
+large,prefix_2_same,group_balanced,original_embedding_cosine,50000,50000,0.847038,0.843859,0.028016,0.827681,0.863002,0.738328,0.990106
+large,semantic_different,group_balanced,original_embedding_cosine,50000,50000,0.798637,0.798426,0.019002,0.785844,0.811085,0.691357,0.891792
+large,prefix_2_same,uniform,original_embedding_cosine,50000,50000,0.85323,0.850559,0.028757,0.83259,0.871376,0.727498,0.984509
+large,semantic_different,uniform,original_embedding_cosine,50000,50000,0.7981,0.797713,0.01895,0.78539,0.810382,0.68274,0.919398
+balanced,prefix_2_same,group_balanced,original_embedding_cosine,1534,1534,0.843708,0.840784,0.027427,0.824983,0.858831,0.766219,0.990106
+balanced,semantic_different,group_balanced,original_embedding_cosine,1534,1534,0.797762,0.797934,0.018971,0.785546,0.809787,0.713635,0.864405
+balanced,prefix_2_same,uniform,original_embedding_cosine,1534,1534,0.852931,0.849384,0.029093,0.831629,0.872224,0.766792,0.950709
+balanced,semantic_different,uniform,original_embedding_cosine,1534,1534,0.798504,0.797901,0.018314,0.785754,0.811029,0.699408,0.872627

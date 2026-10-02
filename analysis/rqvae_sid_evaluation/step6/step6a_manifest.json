@@ -1,0 +1,45 @@
+{
+  "status": "partial — original_embedding_cosine만 계산. reconstruction은 RQ-VAE checkpoint 확보 후 Step 6-B에서 추가.",
+  "inputs": {
+    "article_embeddings.npy": {
+      "source": "git: origin/experiment/entity-linking-event :data/output/exports/rqvae_train_inputs/article_embeddings.npy (브랜치 내 6개 사본 모두 byte-identical, blob 0dde4c9f...)",
+      "bytes": 63648896,
+      "sha256": "89f8046d21df11342157b0ad1ecf32afe69ca74e5f7a7e5fc64d005f3b7b8e42",
+      "shape": [
+        20719,
+        768
+      ],
+      "dtype": "float32"
+    },
+    "article_master.parquet": {
+      "source": "git: origin/experiment/entity-linking-event:data/output/model_inputs/article_master.parquet",
+      "bytes": 750468,
+      "sha256": "4b44f6fe118063190b654a9d6a39fdcb7e792f3844556f6c51c1a2cbe9a85c8c"
+    },
+    "validation_article_master.parquet": {
+      "source": "git: origin/experiment/entity-linking-event:data/output/model_inputs/validation_article_master.parquet",
+      "bytes": 243457,
+      "sha256": "738c167d66d583a7fd57e88956c81b09103d026b01e0c0115f6a68e5661bd4e7"
+    },
+    "article_semantic_ids.parquet": {
+      "source": "/root/.claude/uploads/f5109944-18fd-59ef-9d42-2e3b01694dcf/57f50fe6-article_semantic_ids.parquet",
+      "bytes": 282443,
+      "sha256": "ce7dfb0fae679301dc1c239e0517d940de83d093141f6e958c458636fc276f15"
+    }
+  },
+  "master_variant_selection": {
+    "method": "SID 파일의 (embedding_row, c1, event_id, split)과 대조",
+    "model_inputs": "12,860/12,860 전부 일치 → 채택",
+    "exports/rqvae_*_inputs": "event_id 2,012/12,860만 일치 → 다른 event-linking 변종",
+    "experiments/normalize_only": "event_id 2,490/12,860만 일치 → 변종",
+    "note": "normalize_v2/model_inputs의 master는 model_inputs와 동일 blob이므로 최종 파이프라인은 normalize_v2로 보인다."
+  },
+  "still_missing_for_reconstruction": [
+    "selected_checkpoint.json",
+    "checkpoint_best_rec.pt (또는 선택된 variant)",
+    "validation_event_c2_mapping.parquet (선택)"
+  ],
+  "pair_set": "Step 3 quantitative_pairs.parquet 그대로 재사용 (재샘플링 없음)",
+  "n_pairs": 207670,
+  "n_articles": 12860
+}
