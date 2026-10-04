@@ -283,10 +283,19 @@ color:var(--ink3);font-size:12.6px}}
 </ol></nav>
 
 <div class="box key"><h4>이 보고서의 결론</h4>
-<p><b>더 긴 SID prefix를 공유하는 기사 쌍일수록 원본 임베딩 유사도와 reconstruction 유사도가
-모두 더 높게 나타났으며, 이 경향은 텍스트 기반 지표(Jaccard · TF-IDF)에서도 같은 방향으로
-관찰되었다.</b> 네 단계(Different → Prefix-1 → Prefix-2 → Prefix-3)에서 평균과 중앙값 모두
-단조 증가했고, 표본 수를 맞추거나 중복·템플릿 기사를 제거해도 순서 역전은 없었다.</p>
+<p><b>더 긴 SID prefix를 공유하는 기사 쌍일수록 유사도가 더 높게 나타났다.</b>
+두 종류의 분석이 서로 다른 조건 수로 수행되었으므로 아래와 같이 구분해 서술한다.</p>
+<ul>
+<li><b>텍스트 기반 지표</b> (Title Jaccard · Body Jaccard · Body TF-IDF cosine) —
+<b style="font-family:ui-monospace,Menlo,monospace">Different &lt; Prefix-2 &lt; Prefix-3</b>
+의 <b>3조건</b> 순서가 관찰되었다. 표본 수를 맞추거나 중복·템플릿 기사를 제거해도
+순서 역전은 없었다. <b>Prefix-1의 텍스트 지표는 계산하지 않았다.</b></li>
+<li><b>원본 embedding과 reconstruction</b> —
+<b style="font-family:ui-monospace,Menlo,monospace">Different &lt; Prefix-1 &lt; Prefix-2 &lt; Prefix-3</b>
+의 <b>4단계 단조 증가</b>가 평균과 중앙값 모두에서 관찰되었다.</li>
+</ul>
+<p>두 분석은 포함한 조건 수가 다르지만, <b>“더 긴 SID prefix 공유가 더 높은 유사도와
+연관된다”는 동일한 방향의 근거를 제공한다.</b></p>
 <p>다만 <b>Prefix-3의 reconstruction cosine = 1.0은 모델 구조에서 자동으로 따라오는 값</b>이므로
 성능 근거로 쓰지 않는다. 그 값을 제외하고 Different → Prefix-1 → Prefix-2만 보아도
 <b>0.9294 &lt; 0.9522 &lt; 0.9810</b>으로 증가한다는 점이 핵심 근거다.
@@ -342,6 +351,19 @@ missing·unexpected 모두 0). 따라서 reconstruction 경로는 base 모델과
 </div>
 <p><code>c4</code>는 의미 단계가 아니라 <b>동일 <code>(c1,c2,c3)</code>를 받은 기사를 구분하기 위한
 suffix</b>이므로 어떤 조건에도 쓰지 않는다.</p>
+<div class="box"><h4>조건별 분석 범위 — 텍스트와 임베딩의 조건 수가 다르다</h4>
+<div class="tw"><table><thead><tr><th>조건</th>
+<th>텍스트 지표 (Jaccard · TF-IDF)</th><th>임베딩 지표 (original · reconstruction)</th>
+</tr></thead><tbody>
+<tr><td>Different</td><td>○ 계산함</td><td>○ 계산함</td></tr>
+<tr><td><b>Prefix-1</b></td><td><b>계산하지 않음</b></td><td>○ 계산함</td></tr>
+<tr><td>Prefix-2</td><td>○ 계산함</td><td>○ 계산함</td></tr>
+<tr><td>Prefix-3</td><td>○ 계산함</td><td>○ 계산함</td></tr>
+</tbody></table></div>
+<p>따라서 <b>§4~§8의 텍스트 정량평가는 Different / Prefix-2 / Prefix-3의 3조건</b>이고,
+<b>§9~§10의 임베딩 정량평가는 Prefix-1을 포함한 4단계</b>다. 두 절의 결과를 읽을 때
+조건 수를 혼동하지 않도록 주의한다.</p></div>
+
 <h3>모집단 내 전체 pair 수 (body-valid train 9,338, 포함배제로 정확 계산)</h3>
 <div class="tw"><table><thead><tr><th>조건</th><th>전체 pair 수</th><th>본 분석 표본</th>
 <th>추출 방식</th></tr></thead><tbody>
@@ -463,17 +485,20 @@ TF-IDF cosine에 대해서는 이 비교로 아무것도 말할 수 없다.</p><
     heads4 = ["공유 prefix", "조건", "n", "original mean", "median", "std",
               "reconstruction mean", "median", "std", "delta mean", "Pearson", "Spearman"]
     A(f"""<h2 id="s9"><span class="no">9</span>임베딩 정량평가 — 4단계<span class="fb fb3">피드백 #3</span></h2>
-<p class="lead">§4까지는 텍스트를 근거로 했다. 여기서는 RQ-VAE가 실제로 양자화한 대상인
-<b>기사 임베딩</b>과 그것을 decoder로 복원한 <b>reconstructed vector</b>를 직접 비교한다.</p>
+<p class="lead">§4~§8은 텍스트를 근거로 한 <b>3조건</b>(Different / Prefix-2 / Prefix-3) 분석이었다.
+여기서는 RQ-VAE가 실제로 양자화한 대상인 <b>기사 임베딩</b>과 그것을 decoder로 복원한
+<b>reconstructed vector</b>를 직접 비교하며, <b>Prefix-1을 포함한 4단계</b>로 수행한다.</p>
 <p><code>x̂ = decoder(Q1[c1] + Q2[c2] + Q3[c3])</code>로 기사별 reconstruction을 만들고,
 Step의 동일 pair set에 두 cosine을 계산했다 (재샘플링 없음).</p>
 {table(f4, cols4, heads4, fmt={"pearson": nan, "spearman": nan})}
 {img("fig13")}
-<div class="box key"><h4>핵심 결과 — 네 단계 모두 단조 증가</h4>
+<div class="box key"><h4>핵심 결과 — 임베딩 지표에서 네 단계 모두 단조 증가</h4>
 <p style="font-family:ui-monospace,Menlo,monospace;font-size:13.5px;line-height:2">
 original&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.7986 &lt; 0.8180 &lt; 0.8470 &lt; 0.9070<br>
 reconstruction&nbsp;0.9294 &lt; 0.9522 &lt; 0.9810 &lt; 1.0000</p>
-<p>평균과 중앙값 모두에서 성립한다 (4/4 조합, <code>monotonicity_check.csv</code>).</p></div>
+<p>평균과 중앙값 모두에서 성립한다 (4/4 조합, <code>monotonicity_check.csv</code>).
+이 4단계 단조 증가는 <b>임베딩 지표에 한정된 결과</b>이며, 텍스트 지표는 Prefix-1을
+포함하지 않은 3조건으로 측정했다 (§4).</p></div>
 <div class="box warn"><h4>Prefix-3의 reconstruction cosine = 1.0은 성능 근거가 아니다</h4>
 <p>두 기사가 <code>(c1,c2,c3)</code>를 공유하면 <code>q1, q2, q3</code>가 같고 → decoder 입력이
 같고 → <code>x̂</code>가 비트 단위로 동일하다. 따라서 <b>1.0은 모델 구조에서 자동으로 따라오는
@@ -570,9 +595,18 @@ semantic consistency를 직접 측정하지는 않는다.</p></div>""")
     # ---------------------------------------------------------------- §12
     A(f"""<h2 id="s12"><span class="no">12</span>정성평가와 정량평가의 역할 연결<span class="fb fb2">피드백 #2</span></h2>
 <ul>
-<li><b>정량평가 (§4~§10)</b> — 모집단 전체에서 <b>경향</b>을 확인한다. 더 긴 SID prefix 공유가
-더 높은 텍스트·임베딩 유사도와 연관된다는 것, 그 순서가 표본 구성·샘플링 방식·중복/템플릿
-제거에 흔들리지 않는다는 것까지 말할 수 있다. 하지만 평균값은 <b>어떤 기사가 왜 묶였는지</b>를
+<li><b>정량평가 (§4~§10)</b> — 모집단 전체에서 <b>경향</b>을 확인한다.
+두 갈래의 결과를 조건 수까지 구분해 정리하면 다음과 같다.
+<ul>
+<li><b>텍스트 지표 (§4~§8, 3조건)</b> — <code>Different &lt; Prefix-2 &lt; Prefix-3</code>의
+순서가 관찰되었고, 표본 수를 맞추거나 샘플링 방식을 바꾸거나 중복·템플릿 기사를
+제거해도 순서 역전이 없었다. <b>Prefix-1의 텍스트 지표는 계산하지 않았으므로
+이 갈래를 4단계로 서술해서는 안 된다.</b></li>
+<li><b>임베딩 지표 (§9~§10, 4단계)</b> — <code>Different &lt; Prefix-1 &lt; Prefix-2 &lt;
+Prefix-3</code>의 단조 증가가 평균과 중앙값 모두에서 관찰되었다.</li>
+</ul>
+포함한 조건 수는 다르지만 두 갈래 모두 <b>더 긴 SID prefix 공유가 더 높은 유사도와
+연관된다</b>는 같은 방향을 가리킨다. 다만 평균값은 <b>어떤 기사가 왜 묶였는지</b>를
 말해주지 않는다.</li>
 <li><b>정성평가 (아래)</b> — prefix_3 내부의 큰 분산이 구체적으로 어떤 모습인지, <b>실패 사례</b>가
 어떻게 생겼는지를 실제 title/body로 확인한다. 평균이 0.230이어도 group 평균이 0.000인 group과
