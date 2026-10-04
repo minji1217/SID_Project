@@ -37,7 +37,8 @@ from step3_quantitative import (                                   # noqa: E402
 )
 
 CKPT = Path("/root/.claude/uploads/f5109944-18fd-59ef-9d42-2e3b01694dcf/"
-            "9d16b47b-checkpoint_best_rec_1.pt")
+            "8de3d7c3-checkpoint_best_rec_3.pt")
+EXPERIMENT = "WD-001-UNI-lu0.05-m0.5"   # uniqueness loss lambda_uniq=0.05, margin=0.5
 SP = Path("/tmp/claude-0/-home-user-SID-Project/f5109944-18fd-59ef-9d42-2e3b01694dcf/"
           "scratchpad/step6_inputs")
 COND_LABEL = {"prefix_3_same": "prefix_3\n(c1,c2,c3 동일)",
@@ -92,8 +93,16 @@ def main():
     print("checkpoint 로드 ...")
     ck = torch.load(CKPT, map_location="cpu", weights_only=False)
     cfg = dict(ck["model_config"])
-    model = RqVae(**cfg)
-    missing, unexpected = model.load_state_dict(ck["model"], strict=True), None
+    # uniqueness loss 파라미터(lambda_uniq, uniqueness_margin)는 학습 전용이며
+    # encoder/decoder/quantizer 구조를 바꾸지 않는다. base RqVae 생성 시 제외한다.
+    import inspect as _inspect
+    accepted = set(_inspect.signature(RqVae.__init__).parameters) - {"self"}
+    train_only = {k: v for k, v in cfg.items() if k not in accepted}
+    model = RqVae(**{k: v for k, v in cfg.items() if k in accepted})
+    missing, unexpected = model.load_state_dict(ck["model"], strict=True)
+    assert not missing and not unexpected, (missing, unexpected)
+    if train_only:
+        print(f"  (학습 전용 파라미터 제외: {train_only})")
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
@@ -259,12 +268,15 @@ def main():
     manifest = {
         "checkpoint": {
             "selected_variant": "best_rec",
-            "experiment": "WD-001-7d3a10",
+            "experiment": EXPERIMENT,
+            "training_only_params_excluded_from_model": {k: str(v) for k, v in
+                                                         train_only.items()},
             "uploaded_path": str(CKPT),
             "bytes": CKPT.stat().st_size,
             "sha256": sha256(CKPT),
             "epoch": int(ck["epoch"]), "global_step": int(ck["global_step"]),
             "model_config": {k: str(v) for k, v in cfg.items()},
+            "validation_state": {k: float(v) for k, v in ck["validation_state"].items()},
             "state_dict_shapes": {k: list(v.shape) for k, v in ck["model"].items()},
             "note": "base gin의 c3=256은 사용하지 않았다. checkpoint의 model_config가 권위.",
         },
