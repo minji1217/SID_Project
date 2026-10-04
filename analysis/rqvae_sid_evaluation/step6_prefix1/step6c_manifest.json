@@ -1,0 +1,42 @@
+{
+  "purpose": "Prefix-1 조건을 추가해 Different -> Prefix-1 -> Prefix-2 -> Prefix-3 4단계로 재구성",
+  "prefix_1_definition": "c1_A == c1_B AND c2_A != c2_B",
+  "population": {
+    "description": "Step 3 main과 동일한 body-valid train",
+    "n_articles": 9338,
+    "exact_pair_counts": {
+      "total_pairs": 43594453,
+      "same_c1": 6913228,
+      "same_c1_c2": 129698,
+      "same_c1_c2_c3": 1534,
+      "prefix_1_same": 6783530,
+      "prefix_2_same": 128164,
+      "prefix_3_same": 1534
+    },
+    "c1_groups": 23,
+    "c1_groups_with_2plus_c2": 23
+  },
+  "sampling": {
+    "method": "group_balanced (Prefix-2 main과 동일 구조를 c1/c2로 올린 것)",
+    "target": 50000,
+    "seed": 42,
+    "note": "가능한 pair 6,783,530개 중 50,000개를 group-balanced로 추출했다.",
+    "control": "pair-weighted uniform 대조군도 함께 생성"
+  },
+  "reused_readonly": [
+    "step6/reconstruction_index.parquet",
+    "step6/original_embeddings.npy",
+    "step6/reconstructed_embeddings.npy",
+    "step6/pair_similarity_preservation.parquet"
+  ],
+  "existing_outputs_untouched": true,
+  "prefix1_uniform_control_correlation": {
+    "pearson_r": 0.4218847155570984,
+    "spearman_rho": 0.41189005519212474
+  },
+  "structural_note": "Prefix-3의 reconstruction cosine = 1.0은 동일 (c1,c2,c3)이면 동일한 q1+q2+q3를 decoder에 넣기 때문에 구조적으로 자명한 값이며, 모델 성능의 근거로 사용하지 않는다.",
+  "wording_rules": [
+    "cosine 0.93을 '93% 유사'로 표현하지 않는다.",
+    "Pearson 0.33을 '33% 정확'으로 해석하지 않는다."
+  ]
+}
