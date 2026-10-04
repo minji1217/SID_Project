@@ -1,0 +1,10 @@
+﻿analysis_set,condition,sampling_method,n_pairs,pearson_r,pearson_p,spearman_rho,spearman_p,note
+large_and_balanced,prefix_3_same,exhaustive,1534,-0.01798632,0.48146985,-0.0078007,0.76015266,
+large,prefix_2_same,group_balanced,50000,0.04054056,0.0,0.04268708,0.0,
+large,semantic_different,group_balanced,50000,0.11470562,0.0,0.10528461,0.0,
+large,prefix_2_same,uniform,50000,0.05043484,0.0,0.05459224,0.0,
+large,semantic_different,uniform,50000,0.11912684,0.0,0.11154442,0.0,
+balanced,prefix_2_same,group_balanced,1534,0.02901549,0.2560643,0.02703619,0.28994698,
+balanced,semantic_different,group_balanced,1534,0.07932312,0.00187619,0.06449202,0.011521,
+balanced,prefix_2_same,uniform,1534,0.03006469,0.23926371,0.03072535,0.22909173,
+balanced,semantic_different,uniform,1534,0.10812233,2.198e-05,0.09879485,0.00010629,

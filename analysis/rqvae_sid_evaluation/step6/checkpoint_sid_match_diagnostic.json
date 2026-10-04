@@ -1,0 +1,48 @@
+{
+  "verdict": "저장된 SID는 이 checkpoint가 생성한 것이 아니다. train c2/c3 재현율이 무작위 수준이다.",
+  "checkpoint": {
+    "path": "/root/.claude/uploads/f5109944-18fd-59ef-9d42-2e3b01694dcf/9d16b47b-checkpoint_best_rec_1.pt",
+    "bytes": 12044557,
+    "sha256": "ac05742aa0ef97868eb83e6fb68747d72961d30f3751272c6bcd3a0d7fea5fe7",
+    "epoch": 209,
+    "experiment": "WD-001-7d3a10",
+    "variant": "best_rec",
+    "model_config": {
+      "input_dim": "768",
+      "embed_dim": "128",
+      "hidden_dims": "[512]",
+      "num_categories": "25",
+      "c2_codebook_size": "128",
+      "c3_codebook_size": "512",
+      "codebook_normalize": "False",
+      "codebook_sim_vq": "False",
+      "codebook_mode": "QuantizeForwardMode.STE",
+      "lambda_rec": "1.0",
+      "lambda_cb": "0.25",
+      "lambda_com": "0.1"
+    }
+  },
+  "embedding_verified": {
+    "recorded_best_valid_rec_loss": 0.14984519341525018,
+    "recomputed_validation_rec_loss": 0.14984995732889353,
+    "abs_diff": 4.763913643346385e-06,
+    "conclusion": "임베딩은 이 모델의 학습/검증에 쓰인 파일이 맞다."
+  },
+  "sid_reproduction_train_only": {
+    "c1": {
+      "train_match_rate": 1.0,
+      "chance": 0.04
+    },
+    "c2": {
+      "train_match_rate": 0.018484288354898338,
+      "chance": 0.0078125
+    },
+    "c3": {
+      "train_match_rate": 0.0021565003080714724,
+      "chance": 0.001953125
+    }
+  },
+  "note_c1": "c1은 모델이 선택하지 않고 model_category_id를 그대로 쓰므로 100% 일치는 모델 일치의 근거가 되지 않는다.",
+  "self_reconstruction_own_quantization_valid": true,
+  "required_to_proceed": "업로드된 article_semantic_ids.parquet와 같은 EXP 폴더의 checkpoint"
+}
