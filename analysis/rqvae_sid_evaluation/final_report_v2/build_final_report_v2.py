@@ -451,8 +451,12 @@ MIND 참고자료의 18/8/4 구성을 재현할 수 없어 15/10/5로 조정했�
     # ---------------------------------------------------------------- §4~§8
     A(f"""<h2 id="s4"><span class="no">4</span>텍스트 정량평가 — Jaccard / TF-IDF<span class="fb fb2">피드백 #2</span></h2>
 <p class="lead">정성 표본과 <b>무관하게</b> 9,338 모집단에서 별도로 뽑은 pair에 측정했다.
-TF-IDF는 9,338 body corpus에 <b>단 한 번만 fit</b>(vocab {s3man["tfidf"]["vocabulary_size"]:,},
-<code>norm='l2'</code>)한 뒤 전 기사를 같은 공간으로 transform했다.</p>
+이 절에는 TF-IDF가 둘 등장하며 <b>서로 다른 vectorizer</b>를 쓴다 —
+기존 <b>Body TF-IDF</b>는 9,338 body corpus에 1회 fit
+(vocab {s3man["tfidf"]["vocabulary_size"]:,})했고, 신규 <b>Full-text TF-IDF</b>는 동일 설정으로
+9,338 title+subtitle+body corpus에 <b>별도로</b> 1회 fit
+(vocab {ftman["tfidf"]["vocabulary_size"]:,})했다.
+각 text scope 안에서는 모든 기사를 동일한 TF-IDF 공간으로 transform했다.</p>
 {table(wide3(MAIN3), cols3, heads3)}
 {img("fig1")}{img("fig2")}
 <div class="box key"><h4>순서</h4>
