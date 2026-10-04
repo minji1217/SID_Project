@@ -1,0 +1,51 @@
+{
+  "purpose": "정성평가와 동일한 텍스트 범위(title+subtitle+body)로 수행한 추가 텍스트 정량분석. 기존 Title/Body 지표를 교체하지 않고 병렬로 둔다.",
+  "why_this_is_external_validation": "RQ-VAE의 article embedding은 src/build_train.py:158-190의 model_text, 즉 title + '\\n' + subtitle로 만들어졌고 body는 임베딩 입력이 아니다. 따라서 이 분석은 'title+subtitle로 생성된 SID가 모델이 직접 입력으로 사용하지 않은 body까지 포함한 기사 전체 내용과도 일관되는가'를 보는 외부 semantic consistency 검증이다. full-text 결과가 좋더라도 'RQ-VAE가 body를 학습했다'는 해석은 성립하지 않는다.",
+  "full_text_definition": "title + ' ' + subtitle + ' ' + body (strip 후 연결)",
+  "subtitle_empty_handling": "빈 문자열로 처리 (해당 기사는 title + body만 연결)",
+  "subtitle_empty_count": 305,
+  "language": "덴마크어 원문만 사용. 번역문은 정량계산에 일절 사용하지 않았다.",
+  "population": {
+    "description": "Step 3 main과 동일한 body-valid train",
+    "n_articles": 9338
+  },
+  "pair_set": {
+    "source": "step3/quantitative_pairs.parquet (재샘플링 없음)",
+    "conditions": [
+      "semantic_different",
+      "prefix_2_same",
+      "prefix_3_same"
+    ],
+    "prefix_1_excluded": "Prefix-1은 embedding/reconstruction hierarchy 분석용으로만 유지하며 텍스트 정량에는 추가하지 않는다.",
+    "n_pairs_used": 207670,
+    "one_to_one_key": "pair_id는 Step 3의 pair_id와 동일하다."
+  },
+  "tokenization": "Step 3의 tokenize()를 그대로 재사용 (lowercase -> 구두점 제거 -> 공백 분할)",
+  "tfidf": {
+    "lowercase": false,
+    "analyzer": "<function <lambda> at 0x7f86bd4a5b20>",
+    "min_df": 2,
+    "max_df": 0.6,
+    "sublinear_tf": true,
+    "norm": "l2",
+    "vocabulary_size": 60243,
+    "fit_corpus": "full_text corpus 9,338에 새로 1회 fit",
+    "note": "body용 기존 vectorizer를 재사용하지 않았다."
+  },
+  "metrics_new": [
+    "fulltext_jaccard",
+    "fulltext_tfidf_cosine"
+  ],
+  "metrics_preserved": [
+    "title_jaccard",
+    "body_jaccard",
+    "body_tfidf_cosine"
+  ],
+  "readonly_inputs": [
+    "step3/",
+    "step6/",
+    "step6_prefix1/",
+    "final_report/"
+  ],
+  "seed": 42
+}
