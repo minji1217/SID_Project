@@ -280,7 +280,7 @@ color:var(--ink3);font-size:12.6px}}
 <li><a href="#s10">self-reconstruction과 거리 압축</a></li>
 <li><a href="#s11">caveat</a></li>
 <li><a href="#s12">정성·정량 연결 + 실제 group</a></li>
-<li><a href="#s13">남은 작업</a></li>
+<li><a href="#s13">남은 작업 및 추가 분석</a></li>
 </ol></nav>
 
 <div class="box key"><h4>이 보고서의 결론</h4>
@@ -637,14 +637,22 @@ Prefix-3</code>의 단조 증가가 평균과 중앙값 모두에서 관찰되�
 <div class="glist" id="glist"></div>
 <script id="data" type="application/json">{payload_json}</script>
 
-<h2 id="s13"><span class="no">13</span>남은 작업</h2>
+<h2 id="s13"><span class="no">13</span>남은 작업 및 추가 분석</h2>
+<p class="lead">교수님 요청 범위 기준으로 <b>정량평가는 완료되었다.</b> 아래는 필수로 남은 작업과,
+현재 요청 범위 밖의 추가 분석을 구분한 것이다.</p>
+
+<h3>필수 남은 작업</h3>
 <ul>
-<li><b>정성평가 판정</b> — §12의 30 / 15 / 30 group에 대한 높음·중간·낮음 판정.
+<li><b>정성 판정</b> — §12의 30 / 15 / 30 group에 대한 <b>높음 / 중간 / 낮음</b> 판정.
 판정이 끝나면 group 평균 TF-IDF cosine과 사람 판정의 일치도를 볼 수 있다.</li>
+</ul>
+<p><b>이 정성 판정이 완료되면 현재 교수님이 요청한 정성·정량 검증 범위는 마무리된다.</b></p>
+
+<h3>추가 분석 — 현재 교수님 요청 범위 밖</h3>
+<ul>
 <li><b>validation split 분석</b> — 동일 코드로 validation 3,122개에 대한 분석.</li>
-<li><b>추가 실험(분리)</b> — uniqueness loss 유무 비교
-(<code>WD-001-UNI-lu0.05-m0.5</code> vs uniqueness loss 없는 baseline).
-본 보고서 범위 밖으로 분리해 둔다.</li>
+<li><b>uniqueness loss 유무 baseline 비교</b> —
+<code>WD-001-UNI-lu0.05-m0.5</code> vs uniqueness loss 없는 baseline.</li>
 </ul>
 
 <footer>
