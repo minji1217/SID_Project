@@ -260,7 +260,8 @@ color:var(--ink3);font-size:12.6px}}
 <span class="chip">모델 <b>WD-001-UNI-lu0.05-m0.5</b></span>
 <span class="chip">body-valid train <b>9,338</b></span>
 <span class="chip">정성 group 30 / 15 / 30</span>
-<span class="chip">정량 pair <b>307,670</b></span>
+<span class="chip">Main 4-condition pair <b>151,534</b></span>
+<span class="chip">Total evaluated pair rows <b>307,670</b></span>
 <span class="chip">seed 42</span>
 <span class="chip">입력 read-only</span>
 <span class="chip">덴마크어 원문 무번역</span>
