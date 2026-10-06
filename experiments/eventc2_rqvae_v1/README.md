@@ -60,10 +60,18 @@ python generate_semantic_ids.py \
 | 전체 Train same-event C2 consistency = 100% | 매 epoch snapshot assert, `train.same_event_c2_consistency` |
 | epoch별 EventCode churn | `event_code_churn`, `event_code_churn_article_weighted`, `in_epoch_vs_snapshot_code_agreement` |
 | Q2 code usage / dead code | `q2_codes_used_by_events`, `q2_codes_used_by_articles`, `q2_dead_codes`, `q2_article_entropy_bits`, `q2_top10_article_share` |
+| Q3 code usage / dead code | `q3_codes_used_by_articles`, `q3_dead_codes`, `q3_article_entropy_bits`, `q3_top10_article_share` |
 | reconstruction / codebook / commitment / uniqueness loss | `train_loss` (`codebook_q1/q2/q3`, `commitment_q1/q2/q3` 포함), `validation_loss` |
 | c123 collision, c4 최대값 | `train`, `validation`, `train_validation`의 `c123_collision_rate`, `max_c4` |
 
 checkpoint에는 저장 시점의 `event_code_table`과 `c2_mode`가 함께 들어간다.
+
+## CPU 진단 실행
+
+`cpu_diagnostic_60ep/`는 구조 확인용 CPU 60 epoch 진단 결과다 (공식 결과 아님).
+Q3 code usage 감소, c123 collision 증가, r2와 −q1 방향 정렬이 관찰되었고,
+이는 현재 설계(z(E)=mean(h))의 진단 결과로만 보존한다. Q2 공간 변경 등 대안은
+공식 재학습 결과를 교수님과 공유한 뒤 결정한다.
 
 ## 검증
 

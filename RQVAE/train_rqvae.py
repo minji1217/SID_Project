@@ -18,6 +18,7 @@ from tqdm import tqdm
 
 from data.news import NewsArticleDataset
 from event_c2_utils import (
+    q3_code_usage,
     EventC2Logger,
     assert_complete_events,
     assert_one_c2_per_event,
@@ -1220,6 +1221,10 @@ def train(
             "epoch": epoch_number,
             "train": sid_statistics(train_snapshot),
             **q2_code_usage(train_snapshot, num_codes),
+            **q3_code_usage(
+                train_snapshot,
+                unwrapped.c3_codebook_size,
+            ),
             **event_code_churn(
                 previous_train_code_table,
                 current_train_code_table,
@@ -2061,6 +2066,9 @@ def train(
                     f"{event_record['q2_codes_used_by_events']}/"
                     f"{event_record['q2_codes_used_by_articles']} | "
                     f"dead={event_record['q2_dead_codes']} | "
+                    "q3_used="
+                    f"{event_record['q3_codes_used_by_articles']} | "
+                    f"q3_dead={event_record['q3_dead_codes']} | "
                     "same_event_c2="
                     f"{train_stats['same_event_c2_consistency']} | "
                     "c123_collision="

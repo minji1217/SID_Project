@@ -259,6 +259,26 @@ def q2_code_usage(
     }
 
 
+def q3_code_usage(
+    snapshot: pd.DataFrame,
+    num_codes: int,
+) -> dict:
+    article_counts = np.bincount(
+        snapshot["c3"].to_numpy(),
+        minlength=num_codes,
+    )
+    probs = article_counts[article_counts > 0] / article_counts.sum()
+
+    return {
+        "q3_codes_used_by_articles": int((article_counts > 0).sum()),
+        "q3_dead_codes": int(num_codes - (article_counts > 0).sum()),
+        "q3_article_entropy_bits": float(-(probs * np.log2(probs)).sum()),
+        "q3_top10_article_share": float(
+            np.sort(article_counts)[::-1][:10].sum() / article_counts.sum()
+        ),
+    }
+
+
 def event_code_churn(
     previous: Optional[Dict[int, int]],
     current: Dict[int, int],
