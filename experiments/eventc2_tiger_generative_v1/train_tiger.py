@@ -85,6 +85,41 @@ def load_split(path: Path, max_history: int, limit: int | None, need_candidates:
     return out
 
 
+def load_train_targets(path: Path, max_history: int, limit: int | None) -> dict:
+    """post-RQ-VAE train_sequences.parquet (1pos4neg 이전)에서 학습 예시를 만든다.
+
+    impression의 candidate 중 label == 1인 기사 하나하나가 target (1pos4neg와 같은 positive 정의).
+    negative 개수나 SID 중복 때문에 1pos4neg에서 빠진 impression도 그대로 학습에 쓴다.
+    """
+    cols = ["impression_id", "user_id", "candidate_labels"]
+    cols += [f"history_{l}" for l in LEVELS] + [f"candidate_{l}" for l in LEVELS]
+    df = pl.read_parquet(path, columns=cols)
+    if limit:
+        df = df.head(limit)
+    n_impressions = df.height
+    df = (df.with_row_index("row")
+            .explode(["candidate_labels"] + [f"candidate_{l}" for l in LEVELS])
+            .filter(pl.col("candidate_labels") == 1))
+    n_positive = df.height
+    df = df.filter(pl.col("history_c1").list.len() > 0)      # V1과 같이 history가 빈 예시 제외
+    n = df.height
+
+    lengths = df["history_c1"].list.len().clip(upper_bound=max_history).to_numpy()
+    hist = np.zeros((n, max_history, NUM_LEVELS), dtype=np.int64)
+    for k, l in enumerate(LEVELS):
+        for i, t in enumerate(df[f"history_{l}"].list.tail(max_history).to_list()):
+            hist[i, : len(t), k] = t
+    mask = np.arange(max_history)[None, :] < lengths[:, None]
+    target = np.stack([df[f"candidate_{l}"].to_numpy() for l in LEVELS], axis=1).astype(np.int64)
+    return {
+        "n_raw": n_positive, "n": n, "n_impressions": n_impressions,
+        "history_sids": torch.from_numpy(hist),
+        "history_mask": torch.from_numpy(mask),
+        "user_bucket": torch.from_numpy(df["user_id"].to_numpy().astype(np.int64) % 2000),
+        "target_sids": torch.from_numpy(target),
+    }
+
+
 def batch_of(data: dict, idx, device, keys) -> dict:
     return {k: data[k][idx].to(device, non_blocking=True) for k in keys}
 
@@ -163,7 +198,8 @@ def lr_at(step: int, base: float, warmup: int) -> float:
 # ============================================================ main
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--train", type=Path, required=True)
+    p.add_argument("--train", type=Path, required=True,
+                   help="post-RQ-VAE train_sequences.parquet (1pos4neg 이전)")
     p.add_argument("--val", type=Path, required=True)
     p.add_argument("--test", type=Path, required=True)
     p.add_argument("--out-dir", type=Path, required=True)
@@ -196,7 +232,8 @@ def main() -> None:
     log(f"device {device}  amp(bf16) {amp}")
 
     log("데이터 로드 ...")
-    train = load_split(args.train, args.max_history, args.limit, need_candidates=False)
+    train = load_train_targets(args.train, args.max_history, args.limit)
+    log(f"  train            impression {train['n_impressions']:,} -> positive target {train['n_raw']:,}")
     val = load_split(args.val, args.max_history, args.limit, need_candidates=True)
     test = load_split(args.test, args.max_history, args.limit, need_candidates=True)
     for name, d in (("train", train), ("validation_half", val), ("test", test)):
@@ -219,6 +256,8 @@ def main() -> None:
     config = {**{k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
               "level_sizes": level_sizes, "num_parameters": n_params, "optimizer": "Adafactor",
               "selection_metric": "val_top1_accuracy",
+              "train_source": "post-RQ-VAE train_sequences (candidate_labels == 1 -> target)",
+              "train_impressions": train["n_impressions"],
               "rows": {k: {"raw": d["n_raw"], "used": d["n"]} for k, d in
                        (("train", train), ("validation_half", val), ("test", test))}}
     (out / "config.json").write_text(json.dumps(config, indent=2, ensure_ascii=False))

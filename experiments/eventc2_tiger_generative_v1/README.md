@@ -7,14 +7,21 @@ EventC2 SID / post-RQ-VAE sequence / 1pos4neg / shuffled validation·test는 읽
 
 | 항목 | 현재 V1 (`Transformer/modules/model.py`) | TIGER (논문 + 공개 재현 구현) | 이번 구현 |
 |---|---|---|---|
-| 모델 | T5 encoder + T5 decoder (4층, d384) | T5 encoder-decoder (논문: 4층씩, 6 head × 64, MLP 1024, d128, dropout 0.1) | TIGER 설정 |
+| 모델 | T5 encoder + T5 decoder. EventC2 V1 run은 `run_transformer.py` FINAL_CONFIG: d256, 8 head, 2층, d_ff 1024, dropout 0 (base gin의 d384/4층은 이 값으로 덮어써짐) | T5 encoder-decoder (논문: 4층씩, 6 head × 64, MLP 1024, d128, dropout 0.1) | TIGER 설정 |
 | history 입력 | 기사마다 c1 c2 c3 c4 (+SEP)를 시간순으로 펼침, history 50 | 기사 SID token을 시간순으로 펼침 + 맨 앞 user ID token (hashing 2,000), history 최대 20 | TIGER와 같게 (user token, history 20, SEP 없음) |
 | token vocabulary | level마다 별도 embedding table | level offset을 둔 하나의 vocabulary (level별로 다른 token) | 하나의 vocabulary, level offset |
 | decoder 입력 / target | [BOS, c1, c2] → c1, c2, c3 (c4 없음) | BOS부터 SID 전체를 autoregressive 생성 (collision token 포함) | [BOS, c1, c2, c3] → c1, c2, c3, c4 |
 | 출력 head | level별 head 3개 | 하나의 softmax (재현 구현은 level별 head) | SID vocabulary 전체 하나의 softmax |
 | loss | 후보 5개 점수(log P 합)에 listwise CE | 실제 다음 아이템 SID token의 cross-entropy (teacher forcing) | target token CE의 평균 (negative 사용 안 함) |
-| optimizer | AdamW lr 5e-5, wd 0 | 논문: lr 0.01 처음 10k step 상수 후 inverse sqrt decay, batch 256 (T5X 기본 Adafactor) | Adafactor, lr 0.01, 10k step 후 inverse sqrt, batch 256 |
+| optimizer | AdamW lr 5e-5, wd 0, batch 128 | 논문: lr 0.01 처음 10k step 상수 후 inverse sqrt decay, batch 256 (T5X 기본 Adafactor) | Adafactor, lr 0.01, 10k step 후 inverse sqrt, batch 256 |
 | 추론 | 후보 5개 log-prob 합 | beam search로 corpus 전체에서 생성 (유효하지 않은 ID 제거) | 후보 5개를 같은 생성 likelihood로 채점 (1pos4neg 평가 유지) |
+
+학습 데이터: V1은 1pos4neg train의 positive만 target으로 쓴다. TIGER는 negative가 필요 없으므로
+**1pos4neg 이전** `post_rqvae/train_sequences.parquet`에서 `candidate_labels == 1`인 기사 전부를 target으로 쓴다
+(1pos4neg에서 negative 부족 등으로 빠진 impression도 학습에 포함).
+Validation/Test는 V1과 같은 1pos4neg 후보 5개를 쓴다.
+
+V1의 실제 설정은 비교 리포트가 V1 `run_summary.json`의 `gin_config`(실제 학습에 쓰인 최종 binding)에서 읽어 표로 남긴다.
 
 학습 예산은 V1과 같게 둔다: 최대 30 epoch, early stopping patience 5, validation Top-1 기준 best checkpoint, seed 42.
 history가 빈 row는 V1(`drop_empty_history=True`)처럼 제외한다.
