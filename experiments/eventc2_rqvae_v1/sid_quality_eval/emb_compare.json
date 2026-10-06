@@ -1,0 +1,78 @@
+{
+  "UNI": {
+    "prefix_3": {
+      "population_pairs": 1886,
+      "sampled": 1886,
+      "cos_mean": 0.9153937184056793,
+      "cos_median": 0.9122594194118052,
+      "same_event_ratio": 0.026511134676564158,
+      "cos_mean_same_event": 0.9278171835584803,
+      "cos_mean_diff_event": 0.9150553887446554
+    },
+    "prefix_2": {
+      "population_pairs": 140097,
+      "sampled": 50000,
+      "cos_mean": 0.8473149159391568,
+      "cos_median": 0.8438402539655525,
+      "same_event_ratio": 0.0058,
+      "cos_mean_same_event": 0.8954423595347213,
+      "cos_mean_diff_event": 0.847034148314077
+    },
+    "prefix_1": {
+      "population_pairs": 7323941,
+      "sampled": 50000,
+      "cos_mean": 0.8184731392649626,
+      "cos_median": 0.8158106173550705,
+      "same_event_ratio": 0.00078,
+      "cos_mean_same_event": 0.8814394057218289,
+      "cos_mean_diff_event": 0.8184239872385456
+    },
+    "different": {
+      "population_pairs": 39625898,
+      "sampled": 50000,
+      "cos_mean": 0.7988863648278655,
+      "cos_median": 0.7985955294737594,
+      "same_event_ratio": 0.0,
+      "cos_mean_same_event": null,
+      "cos_mean_diff_event": 0.7988863648278655
+    }
+  },
+  "EventC2": {
+    "prefix_3": {
+      "population_pairs": 9916,
+      "sampled": 9916,
+      "cos_mean": 0.8847233973014647,
+      "cos_median": 0.8822123154659043,
+      "same_event_ratio": 0.06141589350544575,
+      "cos_mean_same_event": 0.8983225702891864,
+      "cos_mean_diff_event": 0.8838335405968849
+    },
+    "prefix_2": {
+      "population_pairs": 226279,
+      "sampled": 50000,
+      "cos_mean": 0.8452919722046444,
+      "cos_median": 0.8421485657140879,
+      "same_event_ratio": 0.00484,
+      "cos_mean_same_event": 0.8796673402933078,
+      "cos_mean_diff_event": 0.8451247862430411
+    },
+    "prefix_1": {
+      "population_pairs": 7229729,
+      "sampled": 50000,
+      "cos_mean": 0.8134641635110519,
+      "cos_median": 0.8109037764732074,
+      "same_event_ratio": 0.0,
+      "cos_mean_same_event": null,
+      "cos_mean_diff_event": 0.8134641635110519
+    },
+    "different": {
+      "population_pairs": 39681571,
+      "sampled": 50000,
+      "cos_mean": 0.7996632542330454,
+      "cos_median": 0.7993580218243306,
+      "same_event_ratio": 0.0,
+      "cos_mean_same_event": null,
+      "cos_mean_diff_event": 0.7996632542330454
+    }
+  }
+}
