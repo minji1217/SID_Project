@@ -1,13 +1,15 @@
-"""같은 RQ-VAE checkpoint에서 만든 두 SID 결과(A: article-level Train c2, B: event-level Train c2)를 비교한다.
+"""같은 RQ-VAE checkpoint에서 만든 SID 결과들(A, B, B-r1 ...)을 첫 번째(A) 기준으로 비교한다.
 
-입력 폴더는 generate_semantic_ids.py의 --output_dir이다. 두 폴더 모두 읽기만 한다.
+입력 폴더는 generate_semantic_ids.py의 --output_dir이며 모두 읽기만 한다.
 
     python experiments/eventc2_train_v1/compare_sid_ab.py \
-        --a-dir <A semantic_ids 폴더> \
-        --b-dir <exp>/semantic_ids \
+        --variant A=<A semantic_ids> \
+        --variant B=<B semantic_ids> \
+        --variant B-r1=<B-r1 semantic_ids> \
         --out-dir <exp>/reports/sid_ab \
         [--checkpoint <final checkpoint> --data-dir <RQ-VAE data_dir>]   # reconstruction 지표
 
+(--a-dir / --b-dir는 --variant A= / --variant B=와 같다.)
 --checkpoint/--data-dir를 주면 저장된 (c1,c2,c3)로
 x_hat = decoder(Q1[c1] + Q2[c2] + Q3[c3])를 만들어 reconstruction을 따로 계산한다.
 """
@@ -170,18 +172,33 @@ def sid_metrics(frames: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
     }
 
 
-def change_metrics(a: Dict[str, pd.DataFrame], b: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
-    result = {}
+def change_metrics(base: Dict[str, pd.DataFrame], other: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
+    """baseline(A) 대비 기사별 code 변경. Train은 singleton / multi-article event로 나눠 센다."""
+    result: Dict[str, Any] = {}
     for split in ("train", "validation", "all"):
-        merged = a[split].merge(
-            b[split], on="article_id", suffixes=("_a", "_b"), how="inner", validate="one_to_one"
+        merged = base[split].merge(
+            other[split], on="article_id", suffixes=("_a", "_b"), how="inner", validate="one_to_one"
         )
-        if len(merged) != len(a[split]) or len(merged) != len(b[split]):
-            raise RuntimeError(f"{split}: A/B article set이 다릅니다.")
-        result[split] = {
-            f"{col}_changed_ratio": float((merged[f"{col}_a"] != merged[f"{col}_b"]).mean())
-            for col in ("c1", "c2", "c3", "c4")
-        }
+        if len(merged) != len(base[split]) or len(merged) != len(other[split]):
+            raise RuntimeError(f"{split}: article set이 다릅니다.")
+
+        entry: Dict[str, Any] = {"articles": int(len(merged))}
+        for col in ("c1", "c2", "c3", "c4"):
+            changed = merged[f"{col}_a"] != merged[f"{col}_b"]
+            entry[f"{col}_changed_count"] = int(changed.sum())
+            entry[f"{col}_changed_ratio"] = float(changed.mean())
+
+        if split == "train":
+            event_size = merged.groupby("event_id_a")["article_id"].transform("size")
+            c2_changed = merged["c2_a"] != merged["c2_b"]
+            for name, mask in (("singleton", event_size == 1), ("multi_article", event_size >= 2)):
+                entry[f"{name}_event_articles"] = int(mask.sum())
+                entry[f"{name}_event_c2_changed_count"] = int((c2_changed & mask).sum())
+                entry[f"{name}_event_c2_changed_ratio"] = (
+                    float((c2_changed & mask).sum() / mask.sum()) if mask.sum() > 0 else None
+                )
+
+        result[split] = entry
     return result
 
 
@@ -250,30 +267,54 @@ def fmt(value: Any) -> str:
     return str(value)
 
 
+VARIANT_ROLES = {
+    "A": "기존: article-level Q2 nearest (r1 = h - q1)",
+    "B": "교수님 설계: event-level Q2(mean(h))",
+    "B-r1": "진단용: event-level Q2(mean(h - q1))",
+}
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SID A/B 비교 (article-level vs event-level Train c2)")
-    parser.add_argument("--a-dir", type=Path, required=True)
-    parser.add_argument("--b-dir", type=Path, required=True)
+    parser = argparse.ArgumentParser(description="SID 비교 (A 대비 B, B-r1 등)")
+    parser.add_argument(
+        "--variant", action="append", default=[], metavar="NAME=DIR",
+        help="비교할 SID 폴더. 첫 번째가 기준(A). 예: --variant A=dir --variant B=dir",
+    )
+    parser.add_argument("--a-dir", type=Path, default=None, help="--variant A=DIR와 같음")
+    parser.add_argument("--b-dir", type=Path, default=None, help="--variant B=DIR와 같음")
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, default=None)
     parser.add_argument("--data-dir", type=Path, default=None)
     args = parser.parse_args()
 
-    a = load_sid_dir(args.a_dir)
-    b = load_sid_dir(args.b_dir)
+    variants: list[tuple[str, Path]] = []
+    if args.a_dir is not None:
+        variants.append(("A", args.a_dir))
+    if args.b_dir is not None:
+        variants.append(("B", args.b_dir))
+    for item in args.variant:
+        name, _, path = item.partition("=")
+        variants.append((name, Path(path)))
+
+    if len(variants) < 2:
+        parser.error("비교할 SID 폴더가 두 개 이상 필요합니다.")
+
+    names = [name for name, _ in variants]
+    frames = {name: load_sid_dir(path) for name, path in variants}
+    base_name = names[0]
 
     report: Dict[str, Any] = {
-        "a_dir": str(args.a_dir),
-        "b_dir": str(args.b_dir),
-        "A": sid_metrics(a),
-        "B": sid_metrics(b),
-        "A_to_B_change": change_metrics(a, b),
+        "variants": {name: {"dir": str(path), "role": VARIANT_ROLES.get(name)} for name, path in variants},
+        "baseline": base_name,
+        "sid_metrics": {name: sid_metrics(frames[name]) for name in names},
+        "change_vs_baseline": {
+            name: change_metrics(frames[base_name], frames[name]) for name in names[1:]
+        },
     }
 
     if args.checkpoint is not None and args.data_dir is not None:
-        report["reconstruction (별도 지표)"] = {
-            "A": reconstruction_metrics(a, args.checkpoint, args.data_dir),
-            "B": reconstruction_metrics(b, args.checkpoint, args.data_dir),
+        report["reconstruction"] = {
+            name: reconstruction_metrics(frames[name], args.checkpoint, args.data_dir) for name in names
         }
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -281,26 +322,27 @@ def main() -> None:
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    flat_a: Dict[str, Any] = {}
-    flat_b: Dict[str, Any] = {}
-    flatten("", report["A"], flat_a)
-    flatten("", report["B"], flat_b)
+    def section(title: str, columns: list[str], per_column: Dict[str, Any]) -> list[str]:
+        flat = {}
+        for column in columns:
+            flat[column] = {}
+            flatten("", per_column[column], flat[column])
+        keys = list(flat[columns[0]])
+        lines = [f"### {title}", "", "| metric | " + " | ".join(columns) + " |",
+                 "|---|" + "---|" * len(columns)]
+        lines += [
+            f"| {key} | " + " | ".join(fmt(flat[column].get(key)) for column in columns) + " |"
+            for key in keys
+        ]
+        return lines + [""]
 
-    lines = ["| metric | A (article c2) | B (event c2) |", "|---|---|---|"]
-    lines += [f"| {key} | {fmt(flat_a.get(key))} | {fmt(flat_b.get(key))} |" for key in flat_a]
-
-    lines += ["", "| A→B change | ratio |", "|---|---|"]
-    flat_change: Dict[str, Any] = {}
-    flatten("", report["A_to_B_change"], flat_change)
-    lines += [f"| {key} | {fmt(value)} |" for key, value in flat_change.items()]
-
-    if "reconstruction (별도 지표)" in report:
-        flat_ra: Dict[str, Any] = {}
-        flat_rb: Dict[str, Any] = {}
-        flatten("", report["reconstruction (별도 지표)"]["A"], flat_ra)
-        flatten("", report["reconstruction (별도 지표)"]["B"], flat_rb)
-        lines += ["", "| reconstruction (별도) | A | B |", "|---|---|---|"]
-        lines += [f"| {key} | {fmt(flat_ra[key])} | {fmt(flat_rb[key])} |" for key in flat_ra]
+    lines = ["| variant | role |", "|---|---|"]
+    lines += [f"| {name} | {VARIANT_ROLES.get(name, '-')} |" for name in names]
+    lines.append("")
+    lines += section("SID 지표", names, report["sid_metrics"])
+    lines += section(f"{base_name} 대비 변경", names[1:], report["change_vs_baseline"])
+    if "reconstruction" in report:
+        lines += section("reconstruction (별도 지표, 저장된 c1,c2,c3로 decode)", names, report["reconstruction"])
 
     table = "\n".join(lines)
     (args.out_dir / "sid_ab_report.md").write_text(table + "\n", encoding="utf-8")

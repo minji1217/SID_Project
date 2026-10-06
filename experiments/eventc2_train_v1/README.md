@@ -1,5 +1,15 @@
 # eventc2_train_v1: Train c2를 event-level로 고정한 SID 실험
 
+| variant | 의미 | 옵션 |
+|---|---|---|
+| A | 기존: article-level Q2 nearest (r1 = h − q1) | (기본값) |
+| B | 교수님 설계: event-level Q2(mean(h)) | `--train_c2_policy event` |
+| B-r1 | 원인 분리 진단용: event-level Q2(mean(h − q1)) | `--train_c2_policy event --event_repr mean_r1` |
+
+B-r1에서는 기사 1개짜리 event의 c2/c3가 A와 같다. 따라서 A 대비 변화는
+"같은 event를 같은 c2로 묶은 효과"만 남는다. 단 event representation은
+Validation 새 event에도 같이 적용되므로 Validation-only 기사의 c2도 r1 공간 기준으로 바뀐다.
+
 RQ-VAE는 재학습하지 않는다. 기존 final checkpoint를 그대로 쓰고,
 최종 Train SID를 만드는 방식만 바꾼 뒤 downstream 전체를 새 실험 폴더에 다시 만든다.
 
@@ -32,6 +42,9 @@ A_SID_DIR=<A의 generate_semantic_ids output_dir> \
 A_RUN_DIR=<A의 Transformer seed42 run 폴더 (run_summary.json 있는 곳)> \
 bash experiments/eventc2_train_v1/run_pipeline.sh
 ```
+
+B-r1은 같은 명령에 `EVENT_REPR=mean_r1`을 붙인다
+(출력: `normalize_v2_uni_lu005_m05_eventc2r1_train_v1/`).
 
 A의 post-rqvae를 `SID_OUTPUT_DIR`를 지정해서 돌렸다면 같은 값을 함께 준다.
 

@@ -21,7 +21,9 @@
 #   TRANSFORMER_ROOT : sid_project-transformer/Transformer 폴더 (claude/hopeful-mendel-fhc2n4 브랜치)
 #
 # 선택 환경변수
-#   EXP              : 실험 이름 (기본 normalize_v2_uni_lu005_m05_eventc2_train_v1)
+#   EVENT_REPR       : mean_h (B, 교수님 설계, 기본) | mean_r1 (B-r1, 원인 분리 진단용)
+#   EXP              : 실험 이름 (기본 B: normalize_v2_uni_lu005_m05_eventc2_train_v1,
+#                                   B-r1: normalize_v2_uni_lu005_m05_eventc2r1_train_v1)
 #   SID_OUTPUT_DIR   : A의 post-rqvae를 돌릴 때와 같은 값 (src/config.py의 OUTPUT_DIR)
 #   A_SID_DIR        : A의 generate_semantic_ids --output_dir (주면 SID A/B 리포트 생성)
 #   A_RUN_DIR        : A의 Transformer seed42 run 폴더 (주면 Transformer A/B 리포트 생성)
@@ -40,7 +42,13 @@ set -euo pipefail
 : "${CKPT:?CKPT를 지정하세요}"
 : "${TRANSFORMER_ROOT:?TRANSFORMER_ROOT를 지정하세요}"
 
-EXP="${EXP:-normalize_v2_uni_lu005_m05_eventc2_train_v1}"
+EVENT_REPR="${EVENT_REPR:-mean_h}"
+case "$EVENT_REPR" in
+    mean_h)  DEFAULT_EXP="normalize_v2_uni_lu005_m05_eventc2_train_v1" ;;
+    mean_r1) DEFAULT_EXP="normalize_v2_uni_lu005_m05_eventc2r1_train_v1" ;;
+    *) echo "EVENT_REPR는 mean_h 또는 mean_r1이어야 합니다: $EVENT_REPR" >&2; exit 1 ;;
+esac
+EXP="${EXP:-$DEFAULT_EXP}"
 SEEDS="${SEEDS:-42}"
 NUM_WORKERS="${NUM_WORKERS:-4}"
 PYTHON="${PYTHON:-python}"
@@ -73,7 +81,7 @@ mkdir -p "$REPORT_DIR"
 cd "$REPO_ROOT"
 
 # ------------------------------------------------------------
-step "1. SID 생성 (train_c2_policy=event, 기존 checkpoint 그대로)"
+step "1. SID 생성 (train_c2_policy=event, event_repr=$EVENT_REPR, 기존 checkpoint 그대로)"
 # ------------------------------------------------------------
 if [ -f "$SID_DIR/article_semantic_ids.parquet" ]; then
     echo "이미 존재: $SID_DIR (건너뜀)"
@@ -82,7 +90,8 @@ else
         --data_dir "$(realpath "$RQVAE_DATA_DIR")" \
         --checkpoint "$(realpath "$CKPT")" \
         --output_dir "$SID_DIR" \
-        --train_c2_policy event) 2>&1 | tee "$REPORT_DIR/01_generate_semantic_ids.log"
+        --train_c2_policy event \
+        --event_repr "$EVENT_REPR") 2>&1 | tee "$REPORT_DIR/01_generate_semantic_ids.log"
 fi
 
 if [ -n "${A_SID_DIR:-}" ] && [ ! -f "$REPORT_DIR/sid_ab/sid_ab_report.json" ]; then

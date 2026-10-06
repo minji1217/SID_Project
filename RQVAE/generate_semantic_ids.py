@@ -100,6 +100,21 @@ TRAIN_C2_POLICIES = (
     "event",
 )
 
+# ============================================================
+# Event representation
+#
+# mean_h  : z(E) = mean h(a)          (교수님 설계, 기본값)
+# mean_r1 : z(E) = mean (h(a) - q1(a)) (원인 분리 진단용)
+#           Q2가 학습 중 실제로 받은 입력 r1과 같은 공간에서
+#           event c2를 찾는다. singleton event의 c2는
+#           article-level nearest c2와 같아진다.
+# ============================================================
+
+EVENT_REPRS = (
+    "mean_h",
+    "mean_r1",
+)
+
 
 # ============================================================
 # Dataset
@@ -868,11 +883,13 @@ def compute_event_c2_from_mean_h(
     batch_size: int = 512,
     num_workers: int = 0,
     source: str = "mean_h_frozen_q2",
+    event_repr: str = "mean_h",
 ) -> pd.DataFrame:
     """
     event별 representation:
 
-        z(E) = mean_{a in E} h(a)
+        event_repr="mean_h"  : z(E) = mean_{a in E} h(a)
+        event_repr="mean_r1" : z(E) = mean_{a in E} (h(a) - q1(a))
 
     를 만든 뒤 학습 완료된 frozen Q2 codebook에서
     nearest search하여 event-level C2를 결정한다.
@@ -1007,9 +1024,25 @@ def compute_event_c2_from_mean_h(
         # event representation은 h(a)를 평균
         # ----------------------------------------------------
 
-        h = model.encode(
-            x
-        )
+        if event_repr == "mean_r1":
+            # 진단용: Q2 입력과 같은 r1 = h - Q1[category]
+            category_ids = (
+                batch[
+                    "category_id"
+                ][
+                    position_tensor
+                ]
+            )
+
+            h = model.get_c2_residual(
+                x=x,
+                category_ids=category_ids,
+            )
+
+        else:
+            h = model.encode(
+                x
+            )
 
         h_cpu = (
             h
@@ -1235,6 +1268,7 @@ def build_train_event_c2_mapping(
     device: torch.device,
     batch_size: int = 512,
     num_workers: int = 0,
+    event_repr: str = "mean_h",
 ) -> pd.DataFrame:
 
     train_dataset = (
@@ -1257,8 +1291,9 @@ def build_train_event_c2_mapping(
             batch_size=batch_size,
             num_workers=num_workers,
             source=(
-                "train_mean_h_frozen_q2"
+                f"train_{event_repr}_frozen_q2"
             ),
+            event_repr=event_repr,
         )
     )
 
@@ -1299,6 +1334,7 @@ def build_validation_event_c2_mapping(
     device: torch.device,
     batch_size: int = 512,
     num_workers: int = 0,
+    event_repr: str = "mean_h",
 ) -> pd.DataFrame:
 
     train_event_to_c2 = {
@@ -1377,8 +1413,9 @@ def build_validation_event_c2_mapping(
             num_workers=num_workers,
             source=(
                 "validation_new_"
-                "event_mean_h_frozen_q2"
+                f"event_{event_repr}_frozen_q2"
             ),
+            event_repr=event_repr,
         )
     )
 
@@ -1491,6 +1528,7 @@ def generate_validation_semantic_ids(
     device: torch.device,
     batch_size: int = 512,
     num_workers: int = 0,
+    event_repr: str = "mean_h",
 ):
     """
     Validation 처리:
@@ -1579,6 +1617,7 @@ def generate_validation_semantic_ids(
             device=device,
             batch_size=batch_size,
             num_workers=num_workers,
+            event_repr=event_repr,
         )
     )
 
@@ -2613,7 +2652,15 @@ def generate_semantic_ids(
     batch_size: int = 512,
     num_workers: int = 0,
     train_c2_policy: str = "article",
+    event_repr: str = "mean_h",
 ):
+
+    if event_repr not in EVENT_REPRS:
+        raise ValueError(
+            "event_repr must be one of "
+            f"{EVENT_REPRS}. "
+            f"Got {event_repr!r}."
+        )
 
     if train_c2_policy not in TRAIN_C2_POLICIES:
         raise ValueError(
@@ -2640,7 +2687,10 @@ def generate_semantic_ids(
     # --------------------------------------------------------
 
     if (
-        train_c2_policy == "event"
+        (
+            train_c2_policy == "event"
+            or event_repr != "mean_h"
+        )
         and (
             output_dir
             / "article_semantic_ids.parquet"
@@ -2723,6 +2773,11 @@ def generate_semantic_ids(
     )
 
     print(
+        "Event repr        : "
+        f"{event_repr}"
+    )
+
+    print(
         "=" * 70
         + "\n"
     )
@@ -2775,6 +2830,7 @@ def generate_semantic_ids(
             device=device,
             batch_size=batch_size,
             num_workers=num_workers,
+            event_repr=event_repr,
         )
     )
 
@@ -2895,6 +2951,7 @@ def generate_semantic_ids(
             device=device,
             batch_size=batch_size,
             num_workers=num_workers,
+            event_repr=event_repr,
         )
     )
 
@@ -3013,6 +3070,7 @@ def generate_semantic_ids(
     sid_generation_meta = {
         "checkpoint": str(checkpoint_path),
         "train_c2_policy": train_c2_policy,
+        "event_repr": event_repr,
         "train_articles": int(len(train_result)),
         "validation_articles": int(len(validation_result)),
         "unique_articles": int(len(all_result)),
@@ -3203,6 +3261,18 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--event_repr",
+        type=str,
+        choices=EVENT_REPRS,
+        default="mean_h",
+        help=(
+            "event c2를 찾을 event representation. "
+            "mean_h: mean(h) (교수님 설계, 기본). "
+            "mean_r1: mean(h - q1) (원인 분리 진단용)."
+        ),
+    )
+
+    parser.add_argument(
         "--num_workers",
         type=int,
         default=0,
@@ -3230,5 +3300,8 @@ if __name__ == "__main__":
         ),
         train_c2_policy=(
             args.train_c2_policy
+        ),
+        event_repr=(
+            args.event_repr
         ),
     )
