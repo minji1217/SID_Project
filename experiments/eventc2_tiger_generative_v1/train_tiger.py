@@ -254,10 +254,12 @@ def main() -> None:
     log(f"  parameters {n_params:,}")
 
     from transformers.optimization import Adafactor
-    opt = Adafactor(model.parameters(), lr=args.lr, scale_parameter=False, relative_step=False, warmup_init=False)
+    # T5X Adafactor 기본값과 같이 multiply_by_parameter_scale(scale_parameter)=True:
+    # lr 0.01은 parameter RMS에 곱해지는 상대 step이다. False면 모든 weight가 0.01씩 움직여 발산한다.
+    opt = Adafactor(model.parameters(), lr=args.lr, scale_parameter=True, relative_step=False, warmup_init=False)
 
     config = {**{k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
-              "level_sizes": level_sizes, "num_parameters": n_params, "optimizer": "Adafactor",
+              "level_sizes": level_sizes, "num_parameters": n_params, "optimizer": "Adafactor(scale_parameter=True, relative_step=False, clip_threshold=1.0)",
               "selection_metric": "val_top1_accuracy",
               "train_source": "post-RQ-VAE train_sequences (candidate_labels == 1 -> target)",
               "train_impressions": train["n_impressions"],
