@@ -1,0 +1,14 @@
+{
+  "checkpoint": "out/rqvae/ebnerd/eventc2_lu0.05_m0.5/checkpoint_best_rec.pt",
+  "train_c2_policy": "event",
+  "event_repr": "mean_h",
+  "train_articles": 9738,
+  "validation_articles": 3122,
+  "unique_articles": 12860,
+  "train_c2_event_match_ratio": 1.0,
+  "train_same_event_c2_consistency": 1.0,
+  "validation_same_event_c2_consistency": 1.0,
+  "max_c4": 31,
+  "checkpoint_c2_mode": "event",
+  "checkpoint_event_code_table_agreement": 1.0
+}

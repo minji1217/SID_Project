@@ -1,0 +1,56 @@
+Device: cuda
+Train Rec Loss : 0.144328
+Valid Rec Loss : 0.157125
+======================================================================
+C2 Event Consistency          : 1.000000
+Evaluated Multi-article Events: 402
+======================================================================
+======================================================================
+Total Articles                : 12860
+Q2 Used Codes                 : 128
+Q2 Utilization                : 100.00%
+Q3 Used Codes                 : 260
+Q3 Utilization                : 50.78%
+======================================================================
+======================================================================
+Total Articles                : 12860
+Unique c123                   : 8048
+Collision Articles            : 6738
+Collision Rate                : 52.40%
+======================================================================
+[C2]
+Same c1+c2 cosine      : 0.841988
+Same c1, diff c2 cosine: 0.813363
+ΔC2 Semantic Similarity: 0.028625
+
+[C3]
+Same c1+c2+c3 cosine   : 0.868910
+Same c1+c2, diff c3    : 0.840883
+ΔC3 Semantic Similarity: 0.028028
+======================================================================
+C1 Category Accuracy          : 1.000000
+======================================================================
+
+##########################################################################################
+RUN: /home/ubuntu/minji/SID_Project/.venv/bin/python /home/ubuntu/minji/SID_Project/RQVAE/evaluate/eval_reconstruction.py --data-dir datasets/ebnerd --checkpoint out/rqvae/ebnerd/eventc2_lu0.05_m0.5/checkpoint_best_rec.pt
+##########################################################################################
+
+##########################################################################################
+RUN: /home/ubuntu/minji/SID_Project/.venv/bin/python /home/ubuntu/minji/SID_Project/RQVAE/evaluate/eval_c2_event_consistency.py --sid out/semantic_ids/eventc2_lu0.05_m0.5/article_semantic_ids.parquet --data-dir datasets/ebnerd --split all
+##########################################################################################
+
+##########################################################################################
+RUN: /home/ubuntu/minji/SID_Project/.venv/bin/python /home/ubuntu/minji/SID_Project/RQVAE/evaluate/eval_codebook_usage.py --sid out/semantic_ids/eventc2_lu0.05_m0.5/article_semantic_ids.parquet --data-dir datasets/ebnerd --split all --q2-size 128 --q3-size 512
+##########################################################################################
+
+##########################################################################################
+RUN: /home/ubuntu/minji/SID_Project/.venv/bin/python /home/ubuntu/minji/SID_Project/RQVAE/evaluate/eval_sid_collision.py --sid out/semantic_ids/eventc2_lu0.05_m0.5/article_semantic_ids.parquet --data-dir datasets/ebnerd --split all
+##########################################################################################
+
+##########################################################################################
+RUN: /home/ubuntu/minji/SID_Project/.venv/bin/python /home/ubuntu/minji/SID_Project/RQVAE/evaluate/eval_semantic_similarity.py --sid out/semantic_ids/eventc2_lu0.05_m0.5/article_semantic_ids.parquet --data-dir datasets/ebnerd --split all --pairs 50000
+##########################################################################################
+
+##########################################################################################
+RUN: /home/ubuntu/minji/SID_Project/.venv/bin/python /home/ubuntu/minji/SID_Project/RQVAE/evaluate/eval_c1_sanity.py --sid out/semantic_ids/eventc2_lu0.05_m0.5/article_semantic_ids.parquet --data-dir datasets/ebnerd --split all
+##########################################################################################
