@@ -98,9 +98,12 @@ def run(command: List[str], cwd: Path, log_path: Path) -> None:
             text=True,
             bufsize=1,
         )
+        # 줄마다 flush해야 tail -f로 실시간으로 보인다 (안 하면 8KB씩 몰아서 기록됨)
         for line in process.stdout:
             sys.stdout.write(line)
+            sys.stdout.flush()
             log.write(line)
+            log.flush()
         return_code = process.wait()
 
     if return_code != 0:
