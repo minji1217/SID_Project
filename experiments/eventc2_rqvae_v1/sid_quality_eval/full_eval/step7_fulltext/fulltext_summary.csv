@@ -1,0 +1,16 @@
+﻿analysis_set,condition,text_scope,metric,is_new,count,mean,median,std,q1,q3,min,max
+large_group_balanced,semantic_different,title-only,title_jaccard,False,50000,0.01028186,0.0,0.02808871,0.0,0.0,0.0,0.375
+large_group_balanced,semantic_different,body-only,body_jaccard,False,50000,0.10022019,0.1011236,0.02616436,0.08653846,0.11612903,0.0,0.2075
+large_group_balanced,semantic_different,body-only,body_tfidf_cosine,False,50000,0.02970576,0.02656512,0.01808158,0.01726795,0.03853829,0.0,0.27235789
+large_group_balanced,semantic_different,title+subtitle+body,fulltext_jaccard,True,50000,0.10076949,0.1012987,0.02469796,0.08686869,0.11605058,0.0,0.20642202
+large_group_balanced,semantic_different,title+subtitle+body,fulltext_tfidf_cosine,True,50000,0.02881377,0.02555426,0.01762792,0.01660102,0.03732996,0.0,0.27929389
+large_group_balanced,prefix_2_same,title-only,title_jaccard,False,50000,0.04172083,0.0,0.0904454,0.0,0.0625,0.0,1.0
+large_group_balanced,prefix_2_same,body-only,body_jaccard,False,50000,0.13103672,0.12470588,0.05796346,0.10596026,0.14649682,0.0,1.0
+large_group_balanced,prefix_2_same,body-only,body_tfidf_cosine,False,50000,0.0765861,0.05526386,0.07658629,0.03424213,0.08910778,0.0,1.0
+large_group_balanced,prefix_2_same,title+subtitle+body,fulltext_jaccard,True,50000,0.13584596,0.12628237,0.05775618,0.10757854,0.14857143,0.0046729,0.8
+large_group_balanced,prefix_2_same,title+subtitle+body,fulltext_tfidf_cosine,True,50000,0.07899383,0.05685143,0.07737837,0.03535077,0.09213057,0.0,0.95765793
+large_group_balanced,prefix_3_same,title-only,title_jaccard,False,8699,0.14256005,0.06666667,0.19278147,0.0,0.22222222,0.0,1.0
+large_group_balanced,prefix_3_same,body-only,body_jaccard,False,8699,0.21047247,0.1584507,0.14778798,0.12543554,0.21718404,0.0,1.0
+large_group_balanced,prefix_3_same,body-only,body_tfidf_cosine,False,8699,0.1936,0.12943766,0.16863836,0.06645002,0.29941074,0.0,1.0
+large_group_balanced,prefix_3_same,title+subtitle+body,fulltext_jaccard,True,8699,0.22244688,0.1636953,0.14726879,0.13023022,0.23956353,0.00578035,1.0
+large_group_balanced,prefix_3_same,title+subtitle+body,fulltext_tfidf_cosine,True,8699,0.20353774,0.13560219,0.17268409,0.07433262,0.31581689,0.0,1.0

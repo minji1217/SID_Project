@@ -1,0 +1,42 @@
+{
+  "purpose": "prefix_3_same의 높은 TF-IDF/Jaccard가 실제 semantic similarity 때문인지, 완전 중복 기사나 반복성/템플릿 기사군 때문에 부풀려진 것인지 확인",
+  "main_analysis_preserved": "Step 3의 9,338 body-valid train 결과를 main analysis로 유지. pair를 재샘플링하지 않고 동일 pair set에 filter만 적용.",
+  "exact_duplicate_definition": "두 article의 body 문자열이 완전히 동일(==)한 pair",
+  "repetitive_subset": {
+    "definition": "category_str == 'side9'",
+    "n_articles": 377,
+    "share_of_population_pct": 4.04,
+    "evidence": {
+      "body_token_median_in_subset": 117,
+      "body_token_median_rest": 332,
+      "article_type_counts": {
+        "article_page_nine_girl": 192,
+        "article_default": 167,
+        "article_fullscreen_gallery": 18
+      },
+      "article_page_nine_girl_all_inside_side9": true,
+      "title_duplicate_pct_in_subset": 11.4,
+      "title_duplicate_pct_rest": 0.1,
+      "body_duplicate_pct_in_subset": 8.5,
+      "side9_article_default_body_token_median": 4
+    },
+    "conclusion": "핀업 갤러리 섹션. 데이터셋 자체의 article_type 'article_page_nine_girl'(192개)이 전부 이 섹션 안에 있고, 제목이 '<이름>, <나이> år og fra <도시>' 템플릿이며, 본문이 전체 중앙값의 1/3 수준(side9 안의 article_default는 중앙값 4 token). 반복성·템플릿 article subset으로 확인되어 sensitivity subset으로 분리한다."
+  },
+  "subsets": [
+    "main",
+    "no_exact_dup",
+    "no_repetitive",
+    "no_both"
+  ],
+  "order_check": {
+    "rule": "semantic_different < prefix_2_same < prefix_3_same",
+    "combinations": 24,
+    "strict_holds": 20,
+    "no_inversion_ties_allowed": 24,
+    "note": "엄격 부등호가 깨지는 경우는 모두 title_jaccard의 median에서 semantic_different와 prefix_2_same이 둘 다 정확히 0.000인 동률이며, 역전은 한 건도 없다."
+  },
+  "figures": [
+    "fig7_subset_sensitivity.png",
+    "fig8_subset_distributions.png"
+  ]
+}

@@ -1,0 +1,6 @@
+﻿analysis_set,condition,sampling_method,metric,n_pairs,count,n_nan,mean,median,std,q1,q3,min,max
+large_and_balanced,prefix_3_same,exhaustive,title_jaccard,9916,9916,0,0.16048133833801212,0.07142857142857142,0.21055196751942978,0.0,0.2727272727272727,0.0,1.0
+large,prefix_2_same,group_balanced,title_jaccard,50000,50000,0,0.0438704324199162,0.0,0.09458128120133756,0.0,0.0625,0.0,1.0
+large,semantic_different,group_balanced,title_jaccard,50000,50000,0,0.010291599857379052,0.0,0.02819243769936491,0.0,0.0,0.0,0.3333333333333333
+balanced,prefix_2_same,group_balanced,title_jaccard,9916,9916,0,0.039675217930409366,0.0,0.08620842147341663,0.0,0.0625,0.0,0.8333333333333334
+balanced,semantic_different,group_balanced,title_jaccard,9916,9916,0,0.010620281689071205,0.0,0.02863780570660282,0.0,0.0,0.0,0.2857142857142857

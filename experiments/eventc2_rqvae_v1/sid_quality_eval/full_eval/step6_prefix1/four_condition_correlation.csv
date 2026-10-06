@@ -1,0 +1,5 @@
+﻿condition,n_pairs,pearson_r,pearson_p,spearman_rho,spearman_p,note
+semantic_different,50000,0.38497619,0.0,0.37999992,0.0,
+prefix_1_same,50000,0.37143384,0.0,0.38410337,0.0,
+prefix_2_same,50000,0.25373012,0.0,0.23427171,0.0,
+prefix_3_same,8699,,,,,"reconstruction_cosine이 상수(=1.0, 범위 7.2e-07)라 정의되지 않음 — 계산 시 부동소수점 오차에 대한 상관이 된다"

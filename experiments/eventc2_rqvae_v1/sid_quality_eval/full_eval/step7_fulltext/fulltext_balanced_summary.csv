@@ -1,0 +1,16 @@
+﻿analysis_set,condition,text_scope,metric,is_new,count,mean,median,std,q1,q3,min,max
+balanced_1534,semantic_different,title-only,title_jaccard,False,8699,0.01085287,0.0,0.02926361,0.0,0.0,0.0,0.55555556
+balanced_1534,semantic_different,body-only,body_jaccard,False,8699,0.10006413,0.10091743,0.02626014,0.0862069,0.11619921,0.0,0.21242485
+balanced_1534,semantic_different,body-only,body_tfidf_cosine,False,8699,0.02977344,0.02650887,0.01827864,0.01702756,0.03872758,0.0,0.17283384
+balanced_1534,semantic_different,title+subtitle+body,fulltext_jaccard,True,8699,0.10061596,0.1011236,0.02479994,0.08638743,0.11581606,0.00331126,0.21104536
+balanced_1534,semantic_different,title+subtitle+body,fulltext_tfidf_cosine,True,8699,0.02887213,0.02563526,0.01777135,0.01640129,0.03735654,0.0,0.16216901
+balanced_1534,prefix_2_same,title-only,title_jaccard,False,8699,0.03848916,0.0,0.08498114,0.0,0.0625,0.0,0.8
+balanced_1534,prefix_2_same,body-only,body_jaccard,False,8699,0.12849915,0.12307692,0.05347881,0.10501001,0.14377202,0.0,1.0
+balanced_1534,prefix_2_same,body-only,body_tfidf_cosine,False,8699,0.07232837,0.05221129,0.07364987,0.03354754,0.08301662,0.0,1.0
+balanced_1534,prefix_2_same,title+subtitle+body,fulltext_jaccard,True,8699,0.1321387,0.12426036,0.05299575,0.10646453,0.14510422,0.0052356,0.8
+balanced_1534,prefix_2_same,title+subtitle+body,fulltext_tfidf_cosine,True,8699,0.07436048,0.05316923,0.07460825,0.03399977,0.08551002,0.00138575,0.95629747
+balanced_1534,prefix_3_same,title-only,title_jaccard,False,8699,0.14256005,0.06666667,0.19278147,0.0,0.22222222,0.0,1.0
+balanced_1534,prefix_3_same,body-only,body_jaccard,False,8699,0.21047247,0.1584507,0.14778798,0.12543554,0.21718404,0.0,1.0
+balanced_1534,prefix_3_same,body-only,body_tfidf_cosine,False,8699,0.1936,0.12943766,0.16863836,0.06645002,0.29941074,0.0,1.0
+balanced_1534,prefix_3_same,title+subtitle+body,fulltext_jaccard,True,8699,0.22244688,0.1636953,0.14726879,0.13023022,0.23956353,0.00578035,1.0
+balanced_1534,prefix_3_same,title+subtitle+body,fulltext_tfidf_cosine,True,8699,0.20353774,0.13560219,0.17268409,0.07433262,0.31581689,0.0,1.0

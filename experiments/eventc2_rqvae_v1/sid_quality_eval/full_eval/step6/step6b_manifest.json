@@ -1,0 +1,107 @@
+{
+  "checkpoint": {
+    "selected_variant": "best_rec",
+    "experiment": "eventc2_lu0.05_m0.5",
+    "training_only_params_excluded_from_model": {},
+    "uploaded_path": "/tmp/claude-0/-home-user-SID-Project/203c7aef-bdd1-56e1-807f-a98088550c89/scratchpad/ec_eval/inputs/eventc2_best_rec.pt",
+    "bytes": 12089762,
+    "sha256": "7f39e9fc6e06e1bf1a035afed65b65d0cb20879239c10f14c10001a73713a324",
+    "epoch": 209,
+    "global_step": 8190,
+    "model_config": {
+      "input_dim": "768",
+      "embed_dim": "128",
+      "hidden_dims": "[512]",
+      "num_categories": "25",
+      "c2_codebook_size": "128",
+      "c3_codebook_size": "512",
+      "codebook_normalize": "False",
+      "codebook_sim_vq": "False",
+      "codebook_mode": "QuantizeForwardMode.STE",
+      "lambda_rec": "1.0",
+      "lambda_cb": "0.25",
+      "lambda_com": "0.1",
+      "lambda_uniq": "0.05",
+      "uniqueness_margin": "0.5"
+    },
+    "validation_state": {
+      "valid_total_loss": 0.35275143363932476,
+      "valid_reconstruction_loss": 0.1540254433898877,
+      "best_valid_total_loss": 0.21658242490526808,
+      "best_valid_total_epoch": 20.0,
+      "best_valid_rec_loss": 0.1540254433898877,
+      "best_valid_rec_epoch": 210.0
+    },
+    "state_dict_shapes": {
+      "encoder.mlp.0.weight": [
+        512,
+        768
+      ],
+      "encoder.mlp.2.weight": [
+        128,
+        512
+      ],
+      "decoder.mlp.0.weight": [
+        512,
+        128
+      ],
+      "decoder.mlp.2.weight": [
+        768,
+        512
+      ],
+      "quantizer_1.embedding.weight": [
+        25,
+        128
+      ],
+      "quantizer_2.embedding.weight": [
+        128,
+        128
+      ],
+      "quantizer_3.embedding.weight": [
+        512,
+        128
+      ]
+    },
+    "note": "base gin의 c3=256은 사용하지 않았다. checkpoint의 model_config가 권위."
+  },
+  "embeddings": {
+    "article_embeddings.npy sha256": "89f8046d21df11342157b0ad1ecf32afe69ca74e5f7a7e5fc64d005f3b7b8e42",
+    "original_l2_normalized": true
+  },
+  "forward_path": "x_hat = decoder(Q1[c1] + Q2[c2] + Q3[c3]) — 저장된 SID 정수 사용",
+  "pair_set": "Step 3 quantitative_pairs.parquet 그대로 (재샘플링 없음)",
+  "n_articles": 12860,
+  "n_pairs": 243495,
+  "verification": {
+    "sid_reproduce_train": {
+      "n": 9738,
+      "c1_match": 9738,
+      "c2_match": 9737,
+      "c3_match": 9736,
+      "all3_match": 9735
+    },
+    "sid_reproduce_validation": {
+      "n": 3122,
+      "c1_match": 3122,
+      "c2_match": 3121,
+      "c3_match": 3117,
+      "all3_match": 3117
+    },
+    "identical_xhat_for_same_sid": {
+      "groups_checked": 1926,
+      "max_abs_diff": 0.0
+    },
+    "forward_rec_loss_crosscheck": {
+      "forward": 0.14020656049251556,
+      "from_stored_sid_xhat": 0.1402067095041275,
+      "abs_diff": 1.4901161193847656e-07
+    },
+    "prefix3_reconstruction_cosine": {
+      "n": 8699,
+      "min": 0.9999996423721313,
+      "max": 1.0000003576278687,
+      "max_abs_dev_from_1": 3.5762786865234375e-07
+    }
+  },
+  "structural_note": "prefix_3_same은 (c1,c2,c3)가 같으므로 q1+q2+q3가 동일하고 decoder 입력이 동일하다. 따라서 reconstruction_cosine = 1.0은 모델 구조상 자명한 값이며 학습 성공의 근거가 아니다."
+}

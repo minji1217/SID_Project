@@ -1,0 +1,97 @@
+{
+  "seed": 42,
+  "population": {
+    "description": "train split, body 비어있지 않은 기사 (Step 1 main analysis 모집단)",
+    "n_articles": 9338,
+    "input_files_read_only": [
+      "sid_eventc2.parquet",
+      "articles.parquet"
+    ]
+  },
+  "prefix_3": {
+    "quota": {
+      "size_2_3": 15,
+      "size_4_5": 10,
+      "size_6_8": 5
+    },
+    "groups_selected": 30,
+    "articles_selected": 109,
+    "all_articles_of_each_group_included": true,
+    "distinct_c1": 15,
+    "distinct_c1_c2": 27,
+    "max_groups_sharing_one_c1": 3,
+    "real_population_distribution": {
+      "eligible_groups_size_2_3": 1030,
+      "eligible_groups_size_4_5": 197,
+      "eligible_groups_size_6_8": 83,
+      "share_size_2_3_of_eligible": 0.7863
+    },
+    "sampling_note": "전체 분포에서 size 2~3 group이 eligible group의 79%를 차지하지만, 큰 collision에서 의미적 일관성이 무너지는 사례를 확인하기 위한 진단 목적으로 size 4~8 group을 의도적으로 oversampling했다. 따라서 이 표본은 분포 비율 추정용 통계표본이 아니다.",
+    "group_size_histogram_population": {
+      "2": 805,
+      "3": 225,
+      "4": 123,
+      "5": 74,
+      "6": 46,
+      "7": 26,
+      "8": 11,
+      "9": 10,
+      "10": 13,
+      "11": 7,
+      "12": 1,
+      "13": 4,
+      "14": 3,
+      "15": 2,
+      "17": 1,
+      "18": 3,
+      "19": 1,
+      "20": 2,
+      "21": 1,
+      "26": 2
+    }
+  },
+  "prefix_2": {
+    "eligibility": "기사 수 4~10 AND c3 종류 >= 2",
+    "quota": {
+      "count_4_5": 5,
+      "count_6_7": 5,
+      "count_8_10": 5
+    },
+    "groups_selected": 15,
+    "articles_selected": 99,
+    "all_articles_of_each_group_included": true,
+    "distinct_c1": 9,
+    "distinct_c1_c2": 15,
+    "max_groups_sharing_one_c1": 3
+  },
+  "semantic_different": {
+    "definition": "c1, c2, c3가 모두 다른 (c1,c2,c3) group 두 개에서 대표 기사 1개씩",
+    "source_groups_available": 6369,
+    "pairs_main": 30,
+    "distinct_c1_main": 21,
+    "supplementary_allcodes_different": {
+      "definition": "c1,c2,c3 에 더해 c4까지 모두 다른 pair",
+      "pairs": 10,
+      "excluded_from_main_analysis": true,
+      "note": "c4는 collision 구분용 suffix이므로 본 분석의 pair 조건으로 쓰지 않는다."
+    }
+  },
+  "files": [
+    "qualitative_prefix2_band_summary.csv",
+    "qualitative_prefix2_band_summary.parquet",
+    "qualitative_prefix2_group_index.csv",
+    "qualitative_prefix2_group_index.parquet",
+    "qualitative_prefix2_groups.csv",
+    "qualitative_prefix2_groups.parquet",
+    "qualitative_prefix3_band_summary.csv",
+    "qualitative_prefix3_band_summary.parquet",
+    "qualitative_prefix3_group_index.csv",
+    "qualitative_prefix3_group_index.parquet",
+    "qualitative_prefix3_groups.csv",
+    "qualitative_prefix3_groups.parquet",
+    "qualitative_semantic_different.csv",
+    "qualitative_semantic_different.parquet",
+    "qualitative_semantic_different_allcodes_supplementary.csv",
+    "qualitative_semantic_different_allcodes_supplementary.parquet"
+  ]
+}
