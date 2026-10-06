@@ -65,6 +65,17 @@ for path in "$CKPT" "$RQVAE_DATA_DIR" "${UNI_TRAIN:-}" "${UNI_VAL_HALF:-}" "${UN
     case "$(realpath -m "$path")" in "$EXP_ROOT"*) echo "입력이 새 실험 폴더 안에 있습니다: $path" >&2; exit 1 ;; esac
 done
 
+# 이후 단계에서 cd를 하므로 입력 경로를 모두 절대 경로로 바꿔 둔다.
+abspath() { [ -n "${1:-}" ] && realpath -m "$1" || true; }
+CKPT="$(abspath "$CKPT")"
+RQVAE_DATA_DIR="$(abspath "$RQVAE_DATA_DIR")"
+TRANSFORMER_ROOT="$(abspath "$TRANSFORMER_ROOT")"
+UNI_TRAIN="$(abspath "${UNI_TRAIN:-}")"
+UNI_VAL_HALF="$(abspath "${UNI_VAL_HALF:-}")"
+UNI_TEST="$(abspath "${UNI_TEST:-}")"
+UNI_RUN="$(abspath "${UNI_RUN:-}")"
+UNI_SEQ_DIR="$(abspath "${UNI_SEQ_DIR:-}")"
+
 cd "$REPO_ROOT"
 
 # 시작 전 확인: raw 4개, 패키지, Transformer 코드 (실패하면 아무것도 만들지 않고 중단)
