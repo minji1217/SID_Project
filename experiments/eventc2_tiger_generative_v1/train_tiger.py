@@ -42,26 +42,38 @@ def log(msg: str) -> None:
 
 
 # ============================================================ data
+def read_truncated(path: Path, cols: list, max_history: int, limit: int | None) -> pl.DataFrame:
+    """history list는 읽으면서 바로 최근 max_history개로 자른다 (긴 history 전체를 메모리에 두지 않음)."""
+    lf = pl.scan_parquet(path).select(cols)
+    if limit:
+        lf = lf.head(limit)
+    lf = lf.with_columns([pl.col(f"history_{l}").list.tail(max_history) for l in LEVELS])
+    return lf.collect()
+
+
+def pad_history(df: pl.DataFrame, max_history: int) -> tuple[np.ndarray, np.ndarray]:
+    n = df.height
+    lengths = df["history_c1"].list.len().to_numpy().astype(np.int64)
+    hist = np.zeros((n, max_history, NUM_LEVELS), dtype=np.int64)
+    rows = np.repeat(np.arange(n), lengths)
+    pos = np.arange(lengths.sum()) - np.repeat(np.cumsum(lengths) - lengths, lengths)
+    for k, l in enumerate(LEVELS):
+        hist[rows, pos, k] = df[f"history_{l}"].explode().to_numpy()
+    mask = np.arange(max_history)[None, :] < lengths[:, None]
+    return hist, mask
+
+
 def load_split(path: Path, max_history: int, limit: int | None, need_candidates: bool) -> dict:
     cols = ["impression_id", "user_id", "impression_time"]
     cols += [f"history_{l}" for l in LEVELS] + [f"target_{l}" for l in LEVELS]
     if need_candidates:
         cols += ["candidate_article_ids", "candidate_labels"] + [f"candidate_{l}" for l in LEVELS]
-    df = pl.read_parquet(path, columns=cols)
-    if limit:
-        df = df.head(limit)
+    df = read_truncated(path, cols, max_history, limit)            # 최근 max_history개, 시간순 유지
     n_raw = df.height
     # V1(NewsSequenceDataset drop_empty_history=True)과 같이 history가 빈 row는 제외
     df = df.filter(pl.col("history_c1").list.len() > 0)
     n = df.height
-
-    lengths = df["history_c1"].list.len().clip(upper_bound=max_history).to_numpy()
-    hist = np.zeros((n, max_history, NUM_LEVELS), dtype=np.int64)
-    for k, l in enumerate(LEVELS):
-        tails = df[f"history_{l}"].list.tail(max_history).to_list()   # 최근 max_history개, 시간순 유지
-        for i, t in enumerate(tails):
-            hist[i, : len(t), k] = t
-    mask = np.arange(max_history)[None, :] < lengths[:, None]
+    hist, mask = pad_history(df, max_history)
 
     target = np.stack([df[f"target_{l}"].list.first().to_numpy() for l in LEVELS], axis=1).astype(np.int64)
     out = {
@@ -93,23 +105,14 @@ def load_train_targets(path: Path, max_history: int, limit: int | None) -> dict:
     """
     cols = ["impression_id", "user_id", "candidate_labels"]
     cols += [f"history_{l}" for l in LEVELS] + [f"candidate_{l}" for l in LEVELS]
-    df = pl.read_parquet(path, columns=cols)
-    if limit:
-        df = df.head(limit)
+    df = read_truncated(path, cols, max_history, limit)             # history를 먼저 자른 뒤 positive마다 펼친다
     n_impressions = df.height
-    df = (df.with_row_index("row")
-            .explode(["candidate_labels"] + [f"candidate_{l}" for l in LEVELS])
+    df = (df.explode(["candidate_labels"] + [f"candidate_{l}" for l in LEVELS])
             .filter(pl.col("candidate_labels") == 1))
     n_positive = df.height
     df = df.filter(pl.col("history_c1").list.len() > 0)      # V1과 같이 history가 빈 예시 제외
     n = df.height
-
-    lengths = df["history_c1"].list.len().clip(upper_bound=max_history).to_numpy()
-    hist = np.zeros((n, max_history, NUM_LEVELS), dtype=np.int64)
-    for k, l in enumerate(LEVELS):
-        for i, t in enumerate(df[f"history_{l}"].list.tail(max_history).to_list()):
-            hist[i, : len(t), k] = t
-    mask = np.arange(max_history)[None, :] < lengths[:, None]
+    hist, mask = pad_history(df, max_history)
     target = np.stack([df[f"candidate_{l}"].to_numpy() for l in LEVELS], axis=1).astype(np.int64)
     return {
         "n_raw": n_positive, "n": n, "n_impressions": n_impressions,
