@@ -17,10 +17,10 @@
 # 필수 환경변수
 #   CKPT             : EventC2 checkpoint_best_rec.pt
 #   RQVAE_DATA_DIR   : RQ-VAE 입력 3개 폴더 (RQVAE/datasets/ebnerd)
-#   TRANSFORMER_ROOT : UNI baseline을 학습한 Transformer 폴더
+#   TRANSFORMER_ROOT : sid_project-transformer/Transformer (claude/hopeful-mendel-fhc2n4 브랜치)
+# 선택 (UNI 비교. 하나라도 비어 있으면 EventC2 Transformer + Test까지만 하고 비교는 건너뛴다)
 #   UNI_TRAIN, UNI_VAL_HALF, UNI_TEST : UNI baseline이 쓴 shuffled_v2 train / validation half / test
 #   UNI_RUN          : UNI baseline seed42 run 폴더 (run_summary.json, checkpoint_best.pt)
-# 선택
 #   UNI_SEQ_DIR      : UNI의 1pos4neg 이전 train/validation_sequences.parquet 폴더 (단계별 감소량 재집계)
 #   EXP              : 기본 normalize_v2_uni_lu005_m05_eventc2_retrain_v1
 #   SID_OUTPUT_DIR   : 기본 data/output
@@ -29,8 +29,13 @@
 
 set -euo pipefail
 
-for name in CKPT RQVAE_DATA_DIR TRANSFORMER_ROOT UNI_TRAIN UNI_VAL_HALF UNI_TEST UNI_RUN; do
+for name in CKPT RQVAE_DATA_DIR TRANSFORMER_ROOT; do
     [ -n "${!name:-}" ] || { echo "$name를 지정하세요" >&2; exit 1; }
+done
+
+COMPARE_UNI=1
+for name in UNI_TRAIN UNI_VAL_HALF UNI_TEST UNI_RUN; do
+    [ -n "${!name:-}" ] || COMPARE_UNI=0
 done
 
 EXP="${EXP:-normalize_v2_uni_lu005_m05_eventc2_retrain_v1}"
@@ -54,14 +59,25 @@ REPORT_DIR="$EXP_ROOT/reports"
 
 step() { echo; echo "=================================================================="; echo "$1"; echo "=================================================================="; }
 
-for path in "$CKPT" "$RQVAE_DATA_DIR" "$UNI_TRAIN" "$UNI_VAL_HALF" "$UNI_TEST" "$UNI_RUN" "${UNI_SEQ_DIR:-}"; do
+for path in "$CKPT" "$RQVAE_DATA_DIR" "${UNI_TRAIN:-}" "${UNI_VAL_HALF:-}" "${UNI_TEST:-}" "${UNI_RUN:-}" "${UNI_SEQ_DIR:-}"; do
     [ -z "$path" ] && continue
     [ -e "$path" ] || { echo "없음: $path" >&2; exit 1; }
     case "$(realpath -m "$path")" in "$EXP_ROOT"*) echo "입력이 새 실험 폴더 안에 있습니다: $path" >&2; exit 1 ;; esac
 done
 
-mkdir -p "$REPORT_DIR"
 cd "$REPO_ROOT"
+
+# 시작 전 확인: raw 4개, 패키지, Transformer 코드 (실패하면 아무것도 만들지 않고 중단)
+missing=0
+for rel in train/behaviors.parquet train/history.parquet validation/behaviors.parquet validation/history.parquet; do
+    [ -f "data/raw/$rel" ] || { echo "없음: $REPO_ROOT/data/raw/$rel" >&2; missing=1; }
+done
+"$PYTHON" -c "import polars, rich, transformers, gin, pyarrow" || { echo "패키지 부족: pip install polars rich transformers" >&2; missing=1; }
+grep -q "gin-binding" "$TRANSFORMER_ROOT/train_transformer.py" 2>/dev/null \
+    || { echo "TRANSFORMER_ROOT가 claude/hopeful-mendel-fhc2n4 브랜치의 Transformer 폴더가 아닙니다: $TRANSFORMER_ROOT" >&2; missing=1; }
+[ "$missing" = 0 ] || exit 1
+
+mkdir -p "$REPORT_DIR"
 
 step "1. SID 생성 (EventC2 checkpoint, train_c2_policy=event)"
 if [ -f "$SID_DIR/article_semantic_ids.parquet" ]; then
@@ -123,6 +139,12 @@ echo "튜닝이 아니라 새 SID의 c4 범위가 늘어서 필요한 변경이�
     --train-path "$SHUF_DIR/train_sequences_1pos4neg.parquet" --dataset-dir "$DATASET_DIR" \
     --sid-path "$SID_DIR/article_semantic_ids.parquet" --out-dir "$RUNS_DIR" \
     --seeds 42 --num-workers "$NUM_WORKERS" 2>&1 | tee -a "$REPORT_DIR/06_transformer.log"
+
+if [ "$COMPARE_UNI" = 0 ]; then
+    step "완료 (UNI 비교는 건너뜀): $EXP_ROOT"
+    cat "$RUNS_DIR/transformer_results.json"
+    exit 0
+fi
 
 UNI_NEG_REPORT_ARG=()
 if [ -n "${UNI_SEQ_DIR:-}" ]; then
