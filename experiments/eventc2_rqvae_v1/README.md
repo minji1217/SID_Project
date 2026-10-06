@@ -31,6 +31,41 @@ x_hat(a) = Decoder(q1 + q2 + q3)                  기사 단위 reconstruction
 - **하이퍼파라미터**: A checkpoint 안의 `gin_config`와 같다 (`lambda_uniq=0.05` 포함). 다른 것은 `train.c2_mode = "event"`와 저장 경로뿐이다.
 - **실행 환경**: single GPU만 지원한다 (`accelerator.num_processes == 1` assert).
 
+## 실행 (AWS single GPU)
+
+`RQVAE/configs/rqvae_ebnerd_eventc2_aws.gin`은 Colab용 gin과 저장 경로만 다르다
+(`RQVAE/out/rqvae/ebnerd/eventc2_lu0.05_m0.5`, git에 올라가지 않는 폴더).
+
+```bash
+git clone -b claude/zealous-cerf-c1onwi https://github.com/minji1217/SID_Project.git
+cd SID_Project/RQVAE
+pip install -r requirements_rqvae.txt          # torch는 GPU/CUDA에 맞는 빌드를 먼저 설치
+
+# A와 같은 입력 3개를 RQVAE/datasets/ebnerd/에 둔다 (복사 또는 링크)
+#   article_master.parquet, validation_article_master.parquet, article_embeddings.npy
+mkdir -p datasets && ln -s <입력 3개가 있는 폴더> datasets/ebnerd
+
+python tests/check_event_c2.py                 # 시작 전 검증 (수 초)
+
+# GPU 1장만 사용. 접속이 끊겨도 계속 돌도록 nohup
+mkdir -p out/rqvae/ebnerd/eventc2_lu0.05_m0.5
+CUDA_VISIBLE_DEVICES=0 nohup python train_rqvae.py configs/rqvae_ebnerd_eventc2_aws.gin \
+  > out/rqvae/ebnerd/eventc2_lu0.05_m0.5/train.log 2>&1 &
+
+# 진행 확인
+grep -a "EventC2 epoch\|Validation epoch" out/rqvae/ebnerd/eventc2_lu0.05_m0.5/train.log | tail
+```
+
+학습이 끝나면 (checkpoint_best_rec.pt 기준):
+
+```bash
+python generate_semantic_ids.py \
+  --data_dir datasets/ebnerd \
+  --checkpoint out/rqvae/ebnerd/eventc2_lu0.05_m0.5/checkpoint_best_rec.pt \
+  --output_dir out/semantic_ids/eventc2_lu0.05_m0.5 \
+  --train_c2_policy event
+```
+
 ## 실행 (single GPU, 예: Colab)
 
 ```bash
