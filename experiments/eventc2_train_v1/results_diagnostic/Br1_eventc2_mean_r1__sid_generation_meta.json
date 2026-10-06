@@ -1,0 +1,12 @@
+{
+  "checkpoint": "/tmp/claude-0/-home-user-SID-Project/203c7aef-bdd1-56e1-807f-a98088550c89/scratchpad/real_data/checkpoint_best_rec.pt",
+  "train_c2_policy": "event",
+  "event_repr": "mean_r1",
+  "train_articles": 9738,
+  "validation_articles": 3122,
+  "unique_articles": 12860,
+  "train_c2_event_match_ratio": 1.0,
+  "train_same_event_c2_consistency": 1.0,
+  "validation_same_event_c2_consistency": 1.0,
+  "max_c4": 17
+}

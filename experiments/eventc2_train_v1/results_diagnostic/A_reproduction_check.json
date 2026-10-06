@@ -1,0 +1,24 @@
+{
+  "what": "A(article-level Train c2) 재현 검증: 업로드된 checkpoint로 generate_semantic_ids.py(기본 옵션) 재실행 결과 vs 기존 A article_semantic_ids.parquet",
+  "checkpoint": "checkpoint_best_rec.pt (uniqueness-loss-experiment, epoch 180, global_step 7020)",
+  "checkpoint_sha256": "dcb276f8bc87237f272668df4b51a0aa086f7d3817115e5c072ad5c032be73ba",
+  "embeddings": {
+    "shape": [
+      20719,
+      768
+    ],
+    "dtype": "float32",
+    "sha256_tobytes": "6de3ed68ba2f6d802ed2a80887e17f51c77bf7a500838d5a2acac2fa56e2a457",
+    "matches_user_reported_hash": true
+  },
+  "articles_old": 12860,
+  "articles_new": 12860,
+  "same_article_set": true,
+  "mismatch_counts": {
+    "c1": 0,
+    "c2": 0,
+    "c3": 0,
+    "c4": 0
+  },
+  "full_frame_identical_incl_row_order": true
+}
