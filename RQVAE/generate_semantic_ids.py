@@ -1,7 +1,8 @@
 import argparse
+import json
 import importlib
 from pathlib import Path
-from typing import Optional, Set
+from typing import Dict, Optional, Set
 
 import numpy as np
 import pandas as pd
@@ -83,6 +84,20 @@ def safe_torch_load(
         map_location=map_location,
         weights_only=False,
     )
+
+
+# ============================================================
+# Train C2 policy
+#
+# article: Train article의 최종 c2 = article-level Q2 nearest (기존 방식)
+# event  : Train article의 최종 c2 = 자기 event의 Train EventCode
+#          (Validation-only article과 같은 정책)
+# ============================================================
+
+TRAIN_C2_POLICIES = (
+    "article",
+    "event",
+)
 
 
 # ============================================================
@@ -519,15 +534,24 @@ def generate_train_semantic_ids(
     device: torch.device,
     batch_size: int = 512,
     num_workers: int = 0,
+    train_event_to_c2: Optional[
+        Dict[int, int]
+    ] = None,
 ) -> pd.DataFrame:
     """
     학습이 완료된 final frozen RQ-VAE를 이용하여
     Train article의 최종 (c1, c2, c3)를 한 번 확정한다.
 
-    Train article은 기존 RQ-VAE 방식 그대로:
+    train_event_to_c2 = None (train_c2_policy="article", 기존 방식):
         c1 = category ID
         Q2 = article-level nearest
         Q3 = article-level nearest
+
+    train_event_to_c2 = {event_id: event_c2} (train_c2_policy="event"):
+        c1 = category ID
+        c2 = 자기 event의 Train EventCode (fixed_c2_ids)
+        r2 = h - q1 - Q2[event_c2]
+        c3 = r2 기준 Q3 nearest (fixed c2 기준으로 다시 계산)
 
     Validation inference 단계에서는 이 Train article SID를
     다시 생성하지 않고 재사용할 수 있다.
@@ -607,17 +631,65 @@ def generate_train_semantic_ids(
 
         # ----------------------------------------------------
         # Train:
-        # fixed_c2_ids 없음
         #
-        # final frozen model 기준
-        # article-level C2 / C3 결정
+        # article policy:
+        #   fixed_c2_ids 없음
+        #   final frozen model 기준 article-level C2 / C3 결정
+        #
+        # event policy:
+        #   fixed_c2_ids = 자기 event의 Train EventCode
+        #   C3는 fixed q2 기준 residual에서 다시 nearest
         # ----------------------------------------------------
+
+        fixed_c2_ids = None
+
+        if (
+            train_event_to_c2
+            is not None
+        ):
+            batch_event_ids = (
+                batch[
+                    "event_id"
+                ]
+                .cpu()
+                .tolist()
+            )
+
+            missing_event_ids = sorted({
+                int(event_id)
+                for event_id
+                in batch_event_ids
+                if int(event_id)
+                not in train_event_to_c2
+            })
+
+            if missing_event_ids:
+                raise RuntimeError(
+                    "Train event has no "
+                    "Train EventCode. "
+                    f"event_ids={missing_event_ids[:10]}"
+                )
+
+            fixed_c2_ids = torch.tensor(
+                [
+                    train_event_to_c2[
+                        int(event_id)
+                    ]
+                    for event_id
+                    in batch_event_ids
+                ],
+                dtype=torch.long,
+                device=device,
+            )
 
         output = (
             model.get_semantic_ids(
                 x=x,
                 category_ids=(
                     category_ids
+                ),
+                fixed_c2_ids=(
+                    fixed_c2_ids
                 ),
             )
         )
@@ -2511,7 +2583,15 @@ def generate_semantic_ids(
     output_dir: str,
     batch_size: int = 512,
     num_workers: int = 0,
+    train_c2_policy: str = "article",
 ):
+
+    if train_c2_policy not in TRAIN_C2_POLICIES:
+        raise ValueError(
+            "train_c2_policy must be one of "
+            f"{TRAIN_C2_POLICIES}. "
+            f"Got {train_c2_policy!r}."
+        )
 
     data_dir = Path(
         data_dir
@@ -2524,6 +2604,24 @@ def generate_semantic_ids(
     output_dir = Path(
         output_dir
     )
+
+    # --------------------------------------------------------
+    # event policy는 새 실험 폴더에만 쓴다.
+    # 기존 SID 결과를 덮어쓰지 않도록 이미 결과가 있으면 중단한다.
+    # --------------------------------------------------------
+
+    if (
+        train_c2_policy == "event"
+        and (
+            output_dir
+            / "article_semantic_ids.parquet"
+        ).exists()
+    ):
+        raise FileExistsError(
+            "train_c2_policy=event output already exists. "
+            "Use a new --output_dir: "
+            f"{output_dir}"
+        )
 
     output_dir.mkdir(
         parents=True,
@@ -2591,6 +2689,11 @@ def generate_semantic_ids(
     )
 
     print(
+        "Train C2 policy   : "
+        f"{train_c2_policy}"
+    )
+
+    print(
         "=" * 70
         + "\n"
     )
@@ -2617,36 +2720,18 @@ def generate_semantic_ids(
     )
 
     # ========================================================
-    # 2. Train article final SID 확정
-    #
-    # 학습 중 계산되던 SID를
-    # final frozen model 기준으로 한 번 확정하여 저장
-    # ========================================================
-
-    train_result = (
-        generate_train_semantic_ids(
-            model=model,
-            master_path=str(
-                train_master_path
-            ),
-            embeddings_path=str(
-                embeddings_path
-            ),
-            device=device,
-            batch_size=batch_size,
-            num_workers=num_workers,
-        )
-    )
-
-    # ========================================================
-    # 3. Train event EventCode 확정
+    # 2. Train event EventCode 확정
     #
     # z_train(E) = mean(h(a))
     #        ↓
     # frozen Q2 nearest
     #
     # Validation에서 동일 event가 다시 등장하면
-    # 이 EventCode를 그대로 상속
+    # 이 EventCode를 그대로 상속한다.
+    #
+    # train_c2_policy="event"이면 Train article의
+    # 최종 c2도 이 EventCode로 고정한다.
+    # (Train SID와 독립적으로 계산되므로 먼저 만든다.)
     # ========================================================
 
     train_event_mapping = (
@@ -2673,6 +2758,73 @@ def generate_semantic_ids(
         train_event_mapping_path,
         index=False,
     )
+
+    train_event_to_c2 = {
+        int(row.event_id): int(row.event_c2)
+        for row in (
+            train_event_mapping
+            .itertuples(index=False)
+        )
+    }
+
+    # ========================================================
+    # 3. Train article final SID 확정
+    #
+    # article policy:
+    #   final frozen model 기준 article-level c2 / c3
+    #
+    # event policy:
+    #   c2 = 자기 event의 Train EventCode (fixed_c2_ids)
+    #   c3 = fixed q2 기준 residual에서 다시 nearest
+    # ========================================================
+
+    train_result = (
+        generate_train_semantic_ids(
+            model=model,
+            master_path=str(
+                train_master_path
+            ),
+            embeddings_path=str(
+                embeddings_path
+            ),
+            device=device,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            train_event_to_c2=(
+                train_event_to_c2
+                if train_c2_policy == "event"
+                else None
+            ),
+        )
+    )
+
+    train_c2_matches_event_c2 = (
+        train_result["event_id"]
+        .astype(int)
+        .map(train_event_to_c2)
+        == train_result["c2"]
+    )
+
+    train_c2_event_match_ratio = float(
+        train_c2_matches_event_c2.mean()
+    )
+
+    print(
+        "Train c2 == event_c2 ratio : "
+        f"{train_c2_event_match_ratio:.4%}"
+    )
+
+    if (
+        train_c2_policy == "event"
+        and not bool(
+            train_c2_matches_event_c2.all()
+        )
+    ):
+        raise RuntimeError(
+            "train_c2_policy=event but some "
+            "Train articles did not receive "
+            "their event_c2."
+        )
 
     # ========================================================
     # 4. Validation
@@ -2800,6 +2952,68 @@ def generate_semantic_ids(
     all_result.to_parquet(
         all_output_path,
         index=False,
+    )
+
+    # --------------------------------------------------------
+    # C2 policy 기록
+    #
+    # same-event C2 consistency:
+    #   기사 2개 이상인 event에서 모든 기사가 같은 c2를 가진 비율
+    # --------------------------------------------------------
+
+    def same_event_c2_consistency(
+        result: pd.DataFrame,
+    ) -> Optional[float]:
+        c2_per_event = (
+            result
+            .groupby("event_id")["c2"]
+            .agg(["size", "nunique"])
+        )
+
+        multi_article_events = c2_per_event[
+            c2_per_event["size"] >= 2
+        ]
+
+        if len(multi_article_events) == 0:
+            return None
+
+        return float(
+            (multi_article_events["nunique"] == 1).mean()
+        )
+
+    sid_generation_meta = {
+        "checkpoint": str(checkpoint_path),
+        "train_c2_policy": train_c2_policy,
+        "train_articles": int(len(train_result)),
+        "validation_articles": int(len(validation_result)),
+        "unique_articles": int(len(all_result)),
+        "train_c2_event_match_ratio": train_c2_event_match_ratio,
+        "train_same_event_c2_consistency": (
+            same_event_c2_consistency(train_result)
+        ),
+        "validation_same_event_c2_consistency": (
+            same_event_c2_consistency(validation_result)
+        ),
+        "max_c4": int(all_result["c4"].max()),
+    }
+
+    print(
+        "\nC2 policy summary"
+    )
+
+    for key, value in sid_generation_meta.items():
+        print(f"  {key}: {value}")
+
+    (
+        output_dir
+        / "sid_generation_meta.json"
+    ).write_text(
+        json.dumps(
+            sid_generation_meta,
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
     # ========================================================
@@ -2948,6 +3162,18 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--train_c2_policy",
+        type=str,
+        choices=TRAIN_C2_POLICIES,
+        default="article",
+        help=(
+            "article: Train c2 = article-level Q2 nearest (기존). "
+            "event: Train c2 = Train EventCode(fixed_c2_ids), "
+            "c3/c4는 그 기준으로 다시 부여."
+        ),
+    )
+
+    parser.add_argument(
         "--num_workers",
         type=int,
         default=0,
@@ -2972,5 +3198,8 @@ if __name__ == "__main__":
         ),
         num_workers=(
             args.num_workers
+        ),
+        train_c2_policy=(
+            args.train_c2_policy
         ),
     )
