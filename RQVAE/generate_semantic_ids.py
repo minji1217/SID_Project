@@ -1,6 +1,7 @@
 import argparse
 import json
 import importlib
+import inspect
 from pathlib import Path
 from typing import Dict, Optional, Set
 
@@ -373,8 +374,36 @@ def load_rqvae(
             f"  {key}: {value}"
         )
 
+    # --------------------------------------------------------
+    # 학습 loss 전용 설정(예: uniqueness-loss-experiment 브랜치의
+    # lambda_uniq, uniqueness_margin)은 SID 추론에 쓰이지 않으므로
+    # 이 브랜치의 RqVae가 받지 않는 key는 제외하고 만든다.
+    # --------------------------------------------------------
+
+    accepted_keys = set(
+        inspect.signature(
+            RqVae.__init__
+        ).parameters
+    )
+
+    ignored_keys = sorted(
+        key
+        for key in model_config
+        if key not in accepted_keys
+    )
+
+    if ignored_keys:
+        print(
+            "Ignored training-only config keys: "
+            f"{ignored_keys}"
+        )
+
     model = RqVae(
-        **model_config
+        **{
+            key: value
+            for key, value in model_config.items()
+            if key in accepted_keys
+        }
     )
 
     model.load_state_dict(
