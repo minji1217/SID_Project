@@ -1,0 +1,133 @@
+# ============================================================
+# Event-level C2 (교수님 설계) 재학습
+#
+# A(checkpoint_best_rec.pt, WD-001-UNI-lu0.05-m0.5)의 학습 설정을 그대로 쓰고
+# C2 학습 방식만 바꾼다.
+#
+#   c2 = EventCode[event(a)]
+#   z(E) = mean{h(a) | a in E}  -> current Q2 nearest -> EventCode(E)
+#   r2(a) = h(a) - q1(a) - q2(E) -> article-level Q3
+#   L_cb2  = mean_E ||sg(z(E)) - q2(E)||^2
+#   L_com2 = mean_E ||z(E) - sg(q2(E))||^2
+#   complete-event batch (EventBatchSampler)
+#
+# 하이퍼파라미터는 A checkpoint 안의 gin_config와 같다
+# (lambda_uniq = 0.05, uniqueness_margin = 0.5).
+# ============================================================
+
+train.epochs = 1283
+train.batch_size = 256
+train.learning_rate = 0.0002
+train.weight_decay = 0.0
+train.gradient_accumulate_every = 1
+
+train.dataset_folder = "datasets/ebnerd"
+
+# ------------------------------------------------------------
+# RQ-VAE architecture
+# WD-001 Best
+# ------------------------------------------------------------
+
+train.vae_input_dim = 768
+train.vae_hidden_dims = [512]
+train.vae_embed_dim = 128
+
+train.vae_num_categories = 25
+train.vae_c2_codebook_size = 128
+train.vae_c3_codebook_size = 512
+
+train.vae_codebook_normalize = False
+train.vae_sim_vq = False
+train.vae_codebook_mode = %QuantizeForwardMode.STE
+
+# ------------------------------------------------------------
+# Loss
+# 기존 WD-001
+# ------------------------------------------------------------
+
+train.lambda_rec = 1.0
+train.lambda_cb = 0.25
+train.lambda_com = 0.1
+
+# ------------------------------------------------------------
+# Uniqueness Loss (A와 동일)
+# ------------------------------------------------------------
+
+train.lambda_uniq = 0.05
+train.uniqueness_margin = 0.5
+
+# ------------------------------------------------------------
+# K-means
+# ------------------------------------------------------------
+
+train.kmeans_encode_batch_size = 512
+train.kmeans_n_init = 10
+
+# ------------------------------------------------------------
+# Gumbel
+# 현재 quantizer는 STE지만 기존 config 값 유지
+# ------------------------------------------------------------
+
+train.gumbel_t0 = 1.0
+train.gumbel_min_t = 0.1
+train.gumbel_anneal_rate = 0.000058
+
+# ------------------------------------------------------------
+# Runtime
+# ------------------------------------------------------------
+
+train.split_batches = True
+train.amp = True
+train.mixed_precision_type = "fp16"
+train.num_workers = 0
+
+# ------------------------------------------------------------
+# Evaluation
+# ------------------------------------------------------------
+
+train.do_eval = True
+train.eval_every_epochs = 10
+
+# ------------------------------------------------------------
+# Early Stopping
+#
+# 최대 1283 epoch
+# 최소 200 epoch 이후부터 종료 가능
+# patience = 20
+# min_delta = 0.001
+# ------------------------------------------------------------
+
+train.early_stopping = True
+train.early_stopping_min_epochs = 200
+train.early_stopping_patience = 20
+train.early_stopping_min_delta = 0.001
+
+# ------------------------------------------------------------
+# Checkpoint
+# A 결과와 겹치지 않는 새 폴더
+# ------------------------------------------------------------
+
+train.pretrained_rqvae_path = None
+
+train.save_dir_root = "/content/drive/MyDrive/SID_Project_Colab/results/ebnerd/stage_eventc2/WD-001-UNI-lu0.05-m0.5-EVENTC2/rqvae"
+
+train.save_model_every_epochs = 50
+
+# ------------------------------------------------------------
+# Logging
+# ------------------------------------------------------------
+
+train.wandb_logging = False
+train.wandb_project = "news-rqvae-training"
+
+# ------------------------------------------------------------
+# C2 mode
+# ------------------------------------------------------------
+
+train.c2_mode = "event"
+
+# ------------------------------------------------------------
+# Reproducibility
+# ------------------------------------------------------------
+
+train.seed = 42

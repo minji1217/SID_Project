@@ -2803,6 +2803,43 @@ def generate_semantic_ids(
         device=device,
     )
 
+    # --------------------------------------------------------
+    # event-level C2로 학습한 checkpoint (train_rqvae c2_mode="event")
+    #
+    # 학습 중 c2 = EventCode[event(a)]였으므로 SID도 같은 규칙
+    # (--train_c2_policy event, --event_repr mean_h)으로 만들어야 한다.
+    # checkpoint에 저장된 EventCode 표는 아래에서 다시 계산한 표와 비교한다.
+    # --------------------------------------------------------
+
+    checkpoint_state = safe_torch_load(
+        checkpoint_path=checkpoint_path,
+        map_location="cpu",
+    )
+
+    checkpoint_c2_mode = checkpoint_state.get(
+        "c2_mode",
+        "article",
+    )
+
+    checkpoint_event_code_table = checkpoint_state.get(
+        "event_code_table"
+    )
+
+    del checkpoint_state
+
+    if (
+        checkpoint_c2_mode == "event"
+        and (
+            train_c2_policy != "event"
+            or event_repr != "mean_h"
+        )
+    ):
+        raise ValueError(
+            "This checkpoint was trained with event-level C2 "
+            "(c2_mode='event'). Use --train_c2_policy event "
+            "--event_repr mean_h."
+        )
+
     # ========================================================
     # 2. Train event EventCode 확정
     #
@@ -2851,6 +2888,31 @@ def generate_semantic_ids(
             .itertuples(index=False)
         )
     }
+
+    checkpoint_event_code_agreement = None
+
+    if checkpoint_event_code_table:
+        common_events = [
+            event_id
+            for event_id in train_event_to_c2
+            if event_id in checkpoint_event_code_table
+        ]
+
+        checkpoint_event_code_agreement = (
+            float(np.mean([
+                train_event_to_c2[event_id]
+                == checkpoint_event_code_table[event_id]
+                for event_id in common_events
+            ]))
+            if common_events
+            else None
+        )
+
+        print(
+            "Checkpoint EventCode table vs recomputed: "
+            f"{checkpoint_event_code_agreement} "
+            f"({len(common_events)} events)"
+        )
 
     # ========================================================
     # 3. Train article final SID 확정
@@ -3082,6 +3144,10 @@ def generate_semantic_ids(
             same_event_c2_consistency(validation_result)
         ),
         "max_c4": int(all_result["c4"].max()),
+        "checkpoint_c2_mode": checkpoint_c2_mode,
+        "checkpoint_event_code_table_agreement": (
+            checkpoint_event_code_agreement
+        ),
     }
 
     print(

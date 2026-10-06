@@ -1,10 +1,12 @@
 import gin
 import importlib
+import json
 import math
 import os
 import random
 
 import numpy as np
+import pandas as pd
 import torch
 import wandb
 
@@ -15,6 +17,22 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from data.news import NewsArticleDataset
+from event_c2_utils import (
+    EventC2Logger,
+    assert_complete_events,
+    assert_one_c2_per_event,
+    assert_snapshot_consistency,
+    batch_event_codes,
+    build_sid_snapshot,
+    code_override_for_batch,
+    event_code_churn,
+    event_code_table,
+    event_dataloader,
+    event_size_lookup,
+    in_epoch_vs_snapshot_agreement,
+    q2_code_usage,
+    sid_statistics,
+)
 from modules.rqvae import RqVae
 from modules.quantize import QuantizeForwardMode
 from modules.utils import parse_config
@@ -520,6 +538,9 @@ def evaluate(
     dataloader,
     device,
     gumbel_t,
+    c2_mode="article",
+    event_sizes=None,
+    train_code_table=None,
 ):
     """
     전체 dataloader에 대해 아래 loss의 dataset 평균을 계산한다.
@@ -546,10 +567,12 @@ def evaluate(
         "rqvae_loss": 0.0,
     }
 
+    component_sums = {}
+
     total_samples = 0
 
     for batch in dataloader:
-        x, category_ids, _ = unpack_batch(batch)
+        x, category_ids, event_ids = unpack_batch(batch)
 
         x = x.to(
             device=device,
@@ -564,11 +587,49 @@ def evaluate(
 
         batch_size_now = x.shape[0]
 
-        output = model(
-            x=x,
-            category_ids=category_ids,
-            gumbel_t=gumbel_t,
-        )
+        if c2_mode == "event":
+            # --------------------------------------------
+            # event-level C2
+            # Train event: in-batch z(E) (= 현재 시점 EventCode)
+            # Validation: 기존 Train event는 train_code_table 상속,
+            #             신규 event는 현재 mean(h) -> 현재 Q2 nearest
+            # --------------------------------------------
+            event_ids = torch.as_tensor(
+                event_ids,
+                dtype=torch.long,
+            ).to(device)
+
+            assert_complete_events(event_ids, event_sizes)
+
+            output = model(
+                x=x,
+                category_ids=category_ids,
+                gumbel_t=gumbel_t,
+                event_ids=event_ids,
+                event_code_override=code_override_for_batch(
+                    event_ids,
+                    train_code_table,
+                ),
+            )
+
+            assert_one_c2_per_event(
+                event_ids,
+                output.sem_ids[:, 1],
+            )
+
+        else:
+            output = model(
+                x=x,
+                category_ids=category_ids,
+                gumbel_t=gumbel_t,
+            )
+
+        if output.loss_components is not None:
+            for key, value in output.loss_components.items():
+                component_sums[key] = (
+                    component_sums.get(key, 0.0)
+                    + float(value) * batch_size_now
+                )
 
         sums["loss"] += (
             output.loss
@@ -625,10 +686,17 @@ def evaluate(
             "Evaluation dataloader is empty."
         )
 
-    return {
+    result = {
         key: value / total_samples
         for key, value in sums.items()
     }
+
+    result.update({
+        key: value / total_samples
+        for key, value in component_sums.items()
+    })
+
+    return result
 
 
 def print_loss_result(
@@ -700,6 +768,7 @@ def build_checkpoint_state(
     lambda_cb,
     lambda_com,
     lambda_uniq,
+    extra_state=None,
 ):
     unwrapped_model = accelerator.unwrap_model(
         model
@@ -725,6 +794,10 @@ def build_checkpoint_state(
         },
         "gin_config": gin.operative_config_str(),
     }
+
+    # event-level C2: 저장 시점의 EventCode 표와 c2_mode
+    if extra_state:
+        state.update(extra_state)
 
     return state
 
@@ -827,10 +900,25 @@ def train(
     wandb_project: str = "news-rqvae-training",
 
     # --------------------------------------------------------
+    # C2 mode
+    # --------------------------------------------------------
+    # article: 기존 A. 기사별 r1에서 Q2 nearest
+    # event  : c2 = EventCode[event(a)]
+    #          z(E)=mean h(a) -> current Q2 nearest,
+    #          complete-event batch, event-level Q2 loss
+    c2_mode: str = "article",
+
+    # --------------------------------------------------------
     # Misc
     # --------------------------------------------------------
     seed: int = 42,
 ):
+    if c2_mode not in ("article", "event"):
+        raise ValueError(
+            "c2_mode must be 'article' or 'event'. "
+            f"Got {c2_mode!r}."
+        )
+
     if epochs <= 0:
         raise ValueError(
             "epochs must be > 0."
@@ -1022,6 +1110,160 @@ def train(
     else:
         eval_dataset = None
         eval_dataloader = None
+
+    # --------------------------------------------------------
+    # event-level C2: complete-event batch
+    #
+    # 같은 event의 기사를 한 batch에 모두 담아
+    # 같은 학습 시점에서 같은 EventCode를 공유하게 한다.
+    # --------------------------------------------------------
+
+    train_event_sampler = None
+    train_event_sizes = None
+    eval_event_sizes = None
+
+    if c2_mode == "event":
+        if accelerator.num_processes != 1:
+            raise RuntimeError(
+                "c2_mode='event' supports single process only."
+            )
+
+        (
+            train_dataloader,
+            train_event_sampler,
+        ) = event_dataloader(
+            dataset=train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            seed=seed,
+            num_workers=num_workers,
+            pin_memory=(device.type == "cuda"),
+        )
+
+        train_eval_dataloader, _ = event_dataloader(
+            dataset=train_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            seed=seed,
+            num_workers=num_workers,
+            pin_memory=(device.type == "cuda"),
+        )
+
+        train_event_sizes = event_size_lookup(train_dataset)
+
+        if do_eval:
+            eval_dataloader, _ = event_dataloader(
+                dataset=eval_dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                seed=seed,
+                num_workers=num_workers,
+                pin_memory=(device.type == "cuda"),
+            )
+
+            eval_event_sizes = event_size_lookup(eval_dataset)
+
+        print(
+            "C2 mode: event "
+            f"(train events={len(train_event_sizes)}, "
+            f"max event size={max(train_event_sizes.values())})"
+        )
+
+    event_logger = (
+        EventC2Logger(
+            os.path.join(save_dir_root, "event_c2_log.jsonl")
+        )
+        if c2_mode == "event"
+        else None
+    )
+
+    # 현재 Train EventCode 표 (event mode)
+    current_train_code_table = None
+    previous_train_code_table = None
+
+    def checkpoint_extra_state():
+        if c2_mode != "event":
+            return None
+
+        return {
+            "c2_mode": c2_mode,
+            "event_code_table": dict(current_train_code_table or {}),
+        }
+
+    def event_snapshot_report(
+        epoch_number,
+        assigned_codes=None,
+        with_validation=False,
+    ):
+        """현재 파라미터로 Train(+Validation) SID snapshot을 만들고 로그를 남긴다."""
+
+        nonlocal current_train_code_table
+        nonlocal previous_train_code_table
+
+        unwrapped = accelerator.unwrap_model(model)
+        num_codes = unwrapped.c2_codebook_size
+
+        train_snapshot = build_sid_snapshot(
+            model=unwrapped,
+            dataset=train_dataset,
+            device=device,
+            batch_size=batch_size,
+        )
+
+        # 전체 Train same-event C2 consistency = 100%
+        assert_snapshot_consistency(train_snapshot, "Train")
+
+        previous_train_code_table = current_train_code_table
+        current_train_code_table = event_code_table(train_snapshot)
+
+        record = {
+            "epoch": epoch_number,
+            "train": sid_statistics(train_snapshot),
+            **q2_code_usage(train_snapshot, num_codes),
+            **event_code_churn(
+                previous_train_code_table,
+                current_train_code_table,
+                train_event_sizes,
+            ),
+            "in_epoch_vs_snapshot_code_agreement": (
+                in_epoch_vs_snapshot_agreement(
+                    assigned_codes,
+                    current_train_code_table,
+                )
+                if assigned_codes
+                else None
+            ),
+        }
+
+        if with_validation and eval_dataset is not None:
+            validation_snapshot = build_sid_snapshot(
+                model=unwrapped,
+                dataset=eval_dataset,
+                device=device,
+                batch_size=batch_size,
+                train_code_table=current_train_code_table,
+            )
+
+            assert_snapshot_consistency(
+                validation_snapshot,
+                "Validation",
+            )
+
+            union = (
+                pd.concat(
+                    [
+                        train_snapshot.assign(split="train"),
+                        validation_snapshot.assign(split="validation"),
+                    ],
+                    ignore_index=True,
+                )
+                .drop_duplicates("article_id", keep="first")
+            )
+
+            record["validation"] = sid_statistics(validation_snapshot)
+            record["train_validation"] = sid_statistics(union)
+
+        return record
 
     batches_per_epoch = len(
         train_dataloader
@@ -1347,6 +1589,21 @@ def train(
         ),
     )
 
+    if c2_mode == "event":
+        # 학습 시작 시점 EventCode (Q2 init = Event K-means centroid)
+        initial_event_record = event_snapshot_report(
+            epoch_number=start_epoch,
+            with_validation=do_eval,
+        )
+        initial_event_record["stage"] = "before_training"
+
+        if accelerator.is_main_process:
+            event_logger.write(initial_event_record)
+            print(
+                "[EventC2 before training] "
+                + json.dumps(initial_event_record, default=float)
+            )
+
     initial_train_result = evaluate(
         model=model,
         dataloader=(
@@ -1354,6 +1611,8 @@ def train(
         ),
         device=device,
         gumbel_t=initial_gumbel_t,
+        c2_mode=c2_mode,
+        event_sizes=train_event_sizes,
     )
 
     if do_eval:
@@ -1362,6 +1621,9 @@ def train(
             dataloader=eval_dataloader,
             device=device,
             gumbel_t=initial_gumbel_t,
+            c2_mode=c2_mode,
+            event_sizes=eval_event_sizes,
+            train_code_table=current_train_code_table,
         )
     else:
         initial_eval_result = None
@@ -1412,6 +1674,9 @@ def train(
     ):
         model.train()
 
+        if train_event_sampler is not None:
+            train_event_sampler.set_epoch(epoch)
+
         epoch_sums = {
             "loss": 0.0,
             "reconstruction_loss": 0.0,
@@ -1420,6 +1685,11 @@ def train(
             "uniqueness_loss": 0.0,
             "rqvae_loss": 0.0,
         }
+
+        epoch_component_sums = {}
+
+        # 이번 epoch 학습 step에서 event별로 배정된 code
+        assigned_event_codes = {}
 
         epoch_samples = 0
         optimizer.zero_grad(
@@ -1480,7 +1750,7 @@ def train(
                 )
             )
 
-            x, category_ids, _ = unpack_batch(
+            x, category_ids, event_ids = unpack_batch(
                 batch
             )
 
@@ -1497,6 +1767,20 @@ def train(
 
             batch_size_now = x.shape[0]
 
+            if c2_mode == "event":
+                event_ids = torch.as_tensor(
+                    event_ids,
+                    dtype=torch.long,
+                ).to(device)
+
+                # event가 batch 간 분할되지 않음
+                assert_complete_events(
+                    event_ids,
+                    train_event_sizes,
+                )
+            else:
+                event_ids = None
+
             with accelerator.autocast():
                 model_output = model(
                     x=x,
@@ -1504,7 +1788,29 @@ def train(
                         category_ids
                     ),
                     gumbel_t=last_gumbel_t,
+                    event_ids=event_ids,
                 )
+
+            if c2_mode == "event":
+                # 한 batch에서 같은 event의 c2 unique count = 1
+                assert_one_c2_per_event(
+                    event_ids,
+                    model_output.sem_ids[:, 1],
+                )
+
+                assigned_event_codes.update(
+                    batch_event_codes(
+                        event_ids,
+                        model_output.sem_ids[:, 1],
+                    )
+                )
+
+            if model_output.loss_components is not None:
+                for key, value in model_output.loss_components.items():
+                    epoch_component_sums[key] = (
+                        epoch_component_sums.get(key, 0.0)
+                        + float(value) * x.shape[0]
+                    )
 
                 loss_for_backward = (
                     model_output.loss
@@ -1619,6 +1925,12 @@ def train(
             in epoch_sums.items()
         }
 
+        epoch_result.update({
+            key: value / epoch_samples
+            for key, value
+            in epoch_component_sums.items()
+        })
+
         # Early Stopping이 걸리더라도 실제 마지막 완료 epoch를 final checkpoint에 기록한다.
         last_completed_epoch = epoch
         stop_training = False
@@ -1714,6 +2026,56 @@ def train(
             )
         )
 
+        # ----------------------------------------------------
+        # event-level C2: epoch별 EventCode snapshot
+        #
+        # 현재 파라미터로 Train 전체 EventCode를 다시 계산하고
+        # churn / Q2 code usage / same-event consistency /
+        # c123 collision / max c4를 기록한다.
+        # Validation 평가에서는 이 표를 기존 Train event에 상속한다.
+        # ----------------------------------------------------
+
+        if c2_mode == "event":
+            event_record = event_snapshot_report(
+                epoch_number=epoch + 1,
+                assigned_codes=assigned_event_codes,
+                with_validation=should_eval,
+            )
+            event_record["stage"] = "epoch_end"
+            event_record["train_loss"] = epoch_result
+
+            if accelerator.is_main_process:
+                event_logger.write(event_record)
+
+                train_stats = event_record["train"]
+
+                print(
+                    f"[EventC2 epoch {epoch + 1}] "
+                    "churn="
+                    f"{event_record['event_code_churn']} | "
+                    "churn_art="
+                    f"{event_record['event_code_churn_article_weighted']} | "
+                    "step_vs_snapshot="
+                    f"{event_record['in_epoch_vs_snapshot_code_agreement']} | "
+                    "q2_used(events/articles)="
+                    f"{event_record['q2_codes_used_by_events']}/"
+                    f"{event_record['q2_codes_used_by_articles']} | "
+                    f"dead={event_record['q2_dead_codes']} | "
+                    "same_event_c2="
+                    f"{train_stats['same_event_c2_consistency']} | "
+                    "c123_collision="
+                    f"{train_stats['c123_collision_rate']:.4f} | "
+                    f"max_c4={train_stats['max_c4']} | "
+                    "cb_q1/q2/q3="
+                    f"{epoch_result.get('codebook_q1', float('nan')):.5f}/"
+                    f"{epoch_result.get('codebook_q2', float('nan')):.5f}/"
+                    f"{epoch_result.get('codebook_q3', float('nan')):.5f} | "
+                    "com_q1/q2/q3="
+                    f"{epoch_result.get('commitment_q1', float('nan')):.5f}/"
+                    f"{epoch_result.get('commitment_q2', float('nan')):.5f}/"
+                    f"{epoch_result.get('commitment_q3', float('nan')):.5f}"
+                )
+
         if should_eval:
             accelerator.wait_for_everyone()
 
@@ -1735,7 +2097,20 @@ def train(
                 dataloader=eval_dataloader,
                 device=device,
                 gumbel_t=eval_gumbel_t,
+                c2_mode=c2_mode,
+                event_sizes=eval_event_sizes,
+                train_code_table=current_train_code_table,
             )
+
+            if (
+                c2_mode == "event"
+                and accelerator.is_main_process
+            ):
+                event_logger.write({
+                    "epoch": epoch + 1,
+                    "stage": "validation",
+                    "validation_loss": eval_result,
+                })
 
             if accelerator.is_main_process:
                 print(
@@ -1827,6 +2202,7 @@ def train(
                     epoch=epoch,
                     global_step=global_step,
                     lambda_uniq=lambda_uniq,
+                    extra_state=checkpoint_extra_state(),
                     lambda_rec=lambda_rec,
                     lambda_cb=lambda_cb,
                     lambda_com=lambda_com,
@@ -1946,6 +2322,7 @@ def train(
                     lambda_cb=lambda_cb,
                     lambda_com=lambda_com,
                     lambda_uniq=lambda_uniq,
+                extra_state=checkpoint_extra_state(),
                 )
 
                 checkpoint_path = os.path.join(
@@ -2100,6 +2477,7 @@ def train(
             lambda_cb=lambda_cb,
             lambda_com=lambda_com,
             lambda_uniq=lambda_uniq,
+        extra_state=checkpoint_extra_state(),
         )
 
         final_path = os.path.join(
