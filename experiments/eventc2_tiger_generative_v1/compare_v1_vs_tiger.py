@@ -116,7 +116,7 @@ def main():
 
     lines += ["", f"TIGER best epoch {summary['best_epoch']} / {summary['epochs_run']} epoch", "",
               "## TIGER 진단 (test)", "", "| level | CE | token accuracy |", "|---|---|---|"]
-    for l in ("c1", "c2", "c3", "c4"):
+    for l in t["level_ce"]:          # reference 모델은 c1..c3만 (c4 = dedup column, 모델 밖)
         lines.append(f"| {l} | {t['level_ce'][l]:.4f} | {t['level_token_accuracy'][l]:.4f} |")
     lines += ["", f"- positive 평균 log-prob {t['positive_mean_log_prob']:.4f}",
               f"- negative 평균 log-prob {t['negative_mean_log_prob']:.4f}",
