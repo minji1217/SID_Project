@@ -134,7 +134,13 @@ def _build_chunk(
             pl.col(column_name) == pl.col(f"{column_name}_neg")
         )
 
+    # 단계별 기록용: (positive, negative) 쌍 수
+    pair_count_total = pair_df.height
+    positive_without_negative = positive_total - pair_df["sample_id"].n_unique()
+
     pair_df = pair_df.filter(~same_sid_expression)
+
+    pair_count_after_pn = pair_df.height
 
     # STEP 15-5. 재현 가능한 난수 부여
     # (전역 row_index, positive article_id, negative article_id)의 해시를
@@ -164,6 +170,8 @@ def _build_chunk(
             maintain_order=True,
         )
     )
+
+    pair_count_after_nn = pair_df.height
 
     # STEP 15-7. negative가 N개 미만인 sample 제외
     usable_df = (
@@ -265,6 +273,11 @@ def _build_chunk(
         "positive_count": positive_total,
         "feasible_sample_count": feasible_sample_count,
         "output_row_count": result_df.height,
+        "output_impression_count": result_df["impression_id"].n_unique(),
+        "pair_count_total": pair_count_total,
+        "pn_same_sid_removed_pair_count": pair_count_total - pair_count_after_pn,
+        "nn_dedup_removed_pair_count": pair_count_after_pn - pair_count_after_nn,
+        "positive_without_negative_count": positive_without_negative,
     }
 
     return result_df, stats
@@ -321,6 +334,11 @@ def build_1pos_n_neg(
         "positive_count": 0,
         "feasible_sample_count": 0,
         "output_row_count": 0,
+        "output_impression_count": 0,
+        "pair_count_total": 0,
+        "pn_same_sid_removed_pair_count": 0,
+        "nn_dedup_removed_pair_count": 0,
+        "positive_without_negative_count": 0,
     }
 
     output_frames = []
@@ -354,15 +372,19 @@ def build_1pos_n_neg(
 
     output_df = pl.concat(output_frames, how="vertical")
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_df.write_parquet(output_path)
+    # 같은 chunk가 여러 번 나뉘어도 impression 수는 전체 기준으로 다시 센다.
+    totals["output_impression_count"] = output_df["impression_id"].n_unique()
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_df.write_parquet(output_path)
 
     dropped = totals["positive_count"] - totals["output_row_count"]
 
     return {
         "split_name": split_name,
         "sequences_path": str(sequences_path),
-        "output_path": str(output_path),
+        "output_path": str(output_path) if output_path is not None else None,
         "semantic_ids_path": (
             str(semantic_ids_path) if use_external_sid else None
         ),
@@ -380,6 +402,22 @@ def build_1pos_n_neg(
         "candidate_position_count": (
             totals["output_row_count"] * (negative_count + 1)
         ),
+        # 단계별 기록. negative는 positive마다 따로 세므로 (positive, negative) 쌍 기준이다.
+        #   P-N: positive와 c123이 같아 제거된 쌍
+        #   N-N: P-N 이후 negative끼리 c123 중복으로 제거된 쌍
+        "output_impression_count": totals["output_impression_count"],
+        "pair_count_total": totals["pair_count_total"],
+        "pn_same_sid_removed_pair_count": totals["pn_same_sid_removed_pair_count"],
+        "pn_same_sid_removed_pair_ratio": _safe_ratio(
+            totals["pn_same_sid_removed_pair_count"],
+            totals["pair_count_total"],
+        ),
+        "nn_dedup_removed_pair_count": totals["nn_dedup_removed_pair_count"],
+        "nn_dedup_removed_pair_ratio": _safe_ratio(
+            totals["nn_dedup_removed_pair_count"],
+            totals["pair_count_total"],
+        ),
+        "positive_without_negative_count": totals["positive_without_negative_count"],
     }
 
 
@@ -439,6 +477,17 @@ def _print_result(result: dict[str, Any]) -> None:
         f"({result['dropped_positive_ratio']:.4%})"
     )
     print(
+        "P-N 동일 c123 제거   : "
+        f"{result['pn_same_sid_removed_pair_count']:,} / {result['pair_count_total']:,} 쌍 "
+        f"({result['pn_same_sid_removed_pair_ratio']:.4%})"
+    )
+    print(
+        "N-N c123 dedup 제거  : "
+        f"{result['nn_dedup_removed_pair_count']:,} 쌍 "
+        f"({result['nn_dedup_removed_pair_ratio']:.4%})"
+    )
+    print(f"생성된 impression    : {result['output_impression_count']:,}")
+    print(
         "candidate position   : "
         f"{result['candidate_position_count']:,} "
         f"(= row × {n + 1})"
@@ -471,6 +520,11 @@ def main() -> None:
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_SIZE)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--report", type=Path, default=None)
+    parser.add_argument(
+        "--stats-only",
+        action="store_true",
+        help="parquet을 쓰지 않고 단계별 집계만 리포트로 남긴다 (기존 실험 재집계용).",
+    )
 
     args = parser.parse_args()
 
@@ -486,9 +540,13 @@ def main() -> None:
 
     for split_name, sequences_path in targets:
         output_path = (
-            args.out_dir
-            / f"{split_name}_1pos{args.negatives}neg.parquet"
+            None
+            if args.stats_only
+            else args.out_dir / f"{split_name}_1pos{args.negatives}neg.parquet"
         )
+
+        if output_path is not None and output_path.exists():
+            raise FileExistsError(f"이미 존재합니다. 덮어쓰지 않습니다: {output_path}")
 
         result = build_1pos_n_neg(
             sequences_path,
