@@ -28,3 +28,7 @@ tail -f data/output/experiments/eventc2_tiger_reference_v1.log
 ```
 
 출력: `…/eventc2_tiger_reference_v1/seed42/`, 비교표 `…/eventc2_tiger_reference_v1/compare_v1_vs_reference.md`
+
+## 상태 (2026-10-07)
+
+실행하지 않음. `eventc2_tiger_generative_v1` 결과로 TIGER 생성형 loss 적용을 철회해서 코드만 보존한다.

@@ -57,3 +57,28 @@ tail -f data/output/experiments/eventc2_tiger_generative_v1.log
 - `train_tiger.py`: 데이터 로드, 학습, Validation/Test 채점, 진단
 - `compare_v1_vs_tiger.py`: 같은 test sample인지 확인 후 6개 지표 비교
 - `run_aws.sh`: 위 세 단계를 순서대로 실행
+
+## 결과와 결정 (2026-10-07): TIGER loss 적용 철회
+
+같은 EventC2 test 122,670 sample (seed 42, 두 모델 모두 best epoch 1)
+
+| 지표 | V1 ranker | TIGER-style |
+|---|---|---|
+| Top-1 | 0.2978 | 0.1677 |
+| AUC | 0.6080 | 0.4694 |
+| MRR | 0.5419 | 0.4303 |
+| nDCG@5 | 0.6552 | 0.5695 |
+| Preference Loss | 1.6526 | 5.8346 |
+| Positive Probability | 0.2537 | 0.1700 |
+
+TIGER 누적 level: c1 AUC 0.543 → c1+c2 0.534 → c1+c2+c3 0.494 → +c4 0.469.
+level CE (test): c1 1.85 / c2 4.43 / c3 8.67 / c4 4.04. positive 평균 log-prob −18.99 < negative −18.58.
+
+`diagnose_seen_in_train.py`: train에서 클릭된 고유 기사는 1,858개뿐이고,
+후보 기사가 train target에 있었던 비율은 positive 7.8% / negative 21.3% (validation),
+1.7% / 12.1% (test). 생성형 loss는 train에서 본 SID에 높은 확률을 주므로
+새 기사가 클릭되는 뉴스 데이터에서는 c3 이하에서 순위가 뒤집힌다.
+
+결정: 이 과제(같은 impression의 후보 5개 ranking)에는 TIGER 생성형 loss를 쓰지 않는다.
+학습 목표는 V1 listwise를 유지한다. `eventc2_tiger_reference_v1`(공개 구현 그대로)은 실행하지 않고 보존만 한다.
+코드와 결과는 기록으로 남긴다.
