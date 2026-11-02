@@ -3,6 +3,7 @@
   변경 1) TOKEN_RE: [a-z0-9]+ → \\w+ (덴마크어 æ·ø·å가 단어를 쪼개지 않도록. 영어 MIND에서는 결과가 같다)
   변경 2) 테이블 행 수 N: EB-NeRD의 embedding_row는 0~19,906 중 12,860개만 쓰여 연속이 아니다.
           N = max(embedding_row)+1로 두고, 기사가 없는 행은 0(pad와 같은 영벡터/코드)으로 남긴다.
+  변경 3) sequence에서 SID를 모을 때 메모리 부족(Killed)이 나서 컬럼 4개만 나눠 읽음 (모으는 값은 같음)
 모델·데이터셋·학습 코드(model.py, dataset.py, train.py)는 원본 그대로다.
 
 기사 조회 테이블 생성 (train + validation 전체 기사).
@@ -55,17 +56,31 @@ def norm_id(a):
 
 def sid_from_sequences(paths, N, id2row):
     """시퀀스 parquet에서 기사별 (c1,c2,c3)를 모은다. 반환: codes (N,3), has_sid (N,) bool"""
+    # [EB-NeRD 변경 3] 원본은 parquet 전체를 읽어 pandas explode로 펼쳤다. EB-NeRD는 history가 길어
+    # AWS에서 메모리 부족(Killed)이 나서, 필요한 4개 컬럼만 2만 행씩 읽어 펼치고 바로 중복을 없앤다.
+    # 모으는 값((article_id, c1, c2, c3) 고유 조합)은 원본과 같다.
+    import pyarrow.compute as pc
+    import pyarrow.parquet as pq
     parts = []
     for p in paths:
-        df = pd.read_parquet(p)
+        pf = pq.ParquetFile(p)
+        names = set(pf.schema_arrow.names)
         for pre in ("history", "candidate", "target"):
             cols = [f"{pre}_article_ids", f"{pre}_c1", f"{pre}_c2", f"{pre}_c3"]
-            if not all(c in df.columns for c in cols):
+            if not all(c in names for c in cols):
                 continue
-            ex = df[cols].explode(cols)
-            ex.columns = ["aid", "c1", "c2", "c3"]
-            parts.append(ex.dropna().drop_duplicates().astype("int64"))
-        print(f"[build] 시퀀스 읽음: {p} ({len(df)}행)")
+            seen = None
+            for batch in pf.iter_batches(batch_size=20000, columns=cols):
+                flat = [pc.list_flatten(batch.column(i)) for i in range(4)]
+                lens = {len(f) for f in flat}
+                if len(lens) != 1:
+                    raise ValueError(f"{p} {pre}: 리스트 길이가 컬럼마다 다릅니다 {lens}")
+                arr = np.stack([np.asarray(f.cast("int64").fill_null(-1)) for f in flat], 1)
+                arr = np.unique(arr[(arr >= 0).all(1)], axis=0)
+                seen = arr if seen is None else np.unique(np.concatenate([seen, arr]), axis=0)
+            if seen is not None:
+                parts.append(pd.DataFrame(seen, columns=["aid", "c1", "c2", "c3"]))
+        print(f"[build] 시퀀스 읽음: {p} ({pf.metadata.num_rows}행)")
     allp = pd.concat(parts).drop_duplicates()
     conflict = allp.groupby("aid").size()
     n_conf = int((conflict > 1).sum())

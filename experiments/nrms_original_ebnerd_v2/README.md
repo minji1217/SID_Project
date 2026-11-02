@@ -6,7 +6,7 @@
 | 파일 | 출처 |
 |---|---|
 | `model.py`, `dataset.py`, `train.py` | `~/minkyo/nrms/` 원본 그대로 (md5 831ad4dc…, 3f771074…, b819dbba…) |
-| `build_tables_ebnerd.py` | 원본 `build_tables.py`(md5 6bc488c4…)에서 두 곳만 변경: 토큰 규칙 `\w+`(덴마크어), embedding_row 비연속 허용 |
+| `build_tables_ebnerd.py` | 원본 `build_tables.py`(md5 6bc488c4…)에서 데이터 읽기만 변경: 토큰 규칙 `\w+`(덴마크어), embedding_row 비연속 허용, sequence에서 SID 모을 때 나눠 읽기(AWS 메모리 부족 해결, 결과는 원본과 같음을 확인) |
 | `evaluate_test.py` | 새로 작성. train.py의 best checkpoint로 validation/test Top-1·MRR·nDCG@5·AUC 계산 (학습 없음) |
 | `run_aws.sh` | 테이블 생성 → title / e5 / sid / sid_shuffled × seed 0,1,2 학습(5 epoch, batch 64) → 평가 → seed 평균 요약 |
 
