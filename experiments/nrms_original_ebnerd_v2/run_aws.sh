@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 정민교 NRMS(원 논문 구조) 코드를 그대로 EB-NeRD에 적용: title / e5 / sid / sid_shuffled × seed 0,1,2
+# 정민교 NRMS(원 논문 구조) 코드를 그대로 EB-NeRD에 적용: title / e5 / sid / sid_shuffled × seed 42,123,2026
 # 설정은 정민교 MIND 실행과 같다: --epochs 5 --batch_size 64 (lr 1e-3, embed 300, head 20, dropout 0.2 = 코드 기본값)
 #
 #   cd ~/minji/SID_Project && CUDA_VISIBLE_DEVICES=0 nohup bash experiments/nrms_original_ebnerd_v2/run_aws.sh \
@@ -15,7 +15,7 @@ SEQ="${SEQ_DIR:-$HOME/shared/datasets/ebnerd}"            # UNI SID 1pos4neg (V1
 OUT="${OUT_DIR:-$REPO_ROOT/data/output/experiments/nrms_original_ebnerd_v2}"
 PYTHON="${PYTHON:-python}"
 MODES="${MODES:-title e5 sid sid_shuffled}"
-SEEDS="${SEEDS:-0 1 2}"
+SEEDS="${SEEDS:-42 123 2026}"  # EB-NeRD의 다른 실험(9장 NRMS, V1 seed 확인)과 같은 seed. 민교 MIND는 0 1 2
 export PYTHONUNBUFFERED=1
 
 TRAIN="$SEQ/train_sequences_1pos4neg.parquet"
