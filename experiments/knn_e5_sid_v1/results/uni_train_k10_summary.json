@@ -1,0 +1,39 @@
+{
+  "sid": "deb24666-article_semantic_ids.parquet",
+  "embeddings": [
+    "16259c8c-emb_part0.npy",
+    "3296e7ad-emb_part1.npy",
+    "f969055e-emb_part2.npy",
+    "58d29e8f-emb_part3.npy",
+    "8667969f-emb_part4.npy",
+    "ae8ce799-emb_part5.npy"
+  ],
+  "split": "train",
+  "k": 10,
+  "anchors": 9738,
+  "anchor_neighbor_pairs": 97380,
+  "mean_neighbor_cosine": 0.8819774985313416,
+  "levels": {
+    "same_c1": {
+      "knn_rate": 0.708451427397823,
+      "matched_pairs": 68989,
+      "random_baseline": 0.1574775393422067,
+      "lift": 4.498745855168094,
+      "anchors_with_any_match": 0.9659067570342986
+    },
+    "same_c12": {
+      "knn_rate": 0.28201889505031835,
+      "matched_pairs": 27463,
+      "random_baseline": 0.0029948246819046826,
+      "lift": 94.1687494277484,
+      "anchors_with_any_match": 0.6893612651468474
+    },
+    "same_c123": {
+      "knn_rate": 0.02760320394331485,
+      "matched_pairs": 2688,
+      "random_baseline": 3.9781095976787584e-05,
+      "lift": 693.8774125132555,
+      "anchors_with_any_match": 0.15434380776340112
+    }
+  }
+}
