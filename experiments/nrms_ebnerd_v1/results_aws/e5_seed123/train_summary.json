@@ -1,0 +1,9 @@
+{
+  "representation": "e5",
+  "seed": 123,
+  "best_validation_top1": 0.27758692442217625,
+  "best_validation_mrr": 0.5255801185692803,
+  "checkpoint": "/home/ubuntu/nrms_out/e5_seed123/checkpoint_best.pt",
+  "random_top1_baseline": 0.2,
+  "note": "Test split was not used during training/model selection."
+}

@@ -1,0 +1,9 @@
+{
+  "representation": "sid",
+  "seed": 42,
+  "best_validation_top1": 0.2848493255846468,
+  "best_validation_mrr": 0.5301524398673153,
+  "checkpoint": "/home/ubuntu/nrms_out/sid_seed42/checkpoint_best.pt",
+  "random_top1_baseline": 0.2,
+  "note": "Test split was not used during training/model selection."
+}
