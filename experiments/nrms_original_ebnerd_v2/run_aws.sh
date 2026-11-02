@@ -13,6 +13,7 @@ REPO_ROOT="$(cd "$CODE/../.." && pwd)"
 RAW="${RAW_DIR:-$HOME/shared/raw/ebnerd}"                 # article_master / validation_article_master / article_embeddings.npy
 SEQ="${SEQ_DIR:-$HOME/shared/datasets/ebnerd}"            # UNI SID 1pos4neg (V1·9장 NRMS와 같은 파일)
 OUT="${OUT_DIR:-$REPO_ROOT/data/output/experiments/nrms_original_ebnerd_v2}"
+OUT="$(realpath -m "$OUT")"   # 아래에서 cd "$OUT" 하므로 상대경로면 tables 경로가 깨진다
 PYTHON="${PYTHON:-python}"
 MODES="${MODES:-title e5 sid sid_shuffled}"
 SEEDS="${SEEDS:-42 123 2026}"  # EB-NeRD의 다른 실험(9장 NRMS, V1 seed 확인)과 같은 seed. 민교 MIND는 0 1 2
