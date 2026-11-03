@@ -93,6 +93,7 @@ main h4{font-size:15px;margin:16px 0 6px}
   <a href="#s7">7장 · 자기 복원</a>
   <a href="#s8">8장 · KNN</a>
   <a href="#s9">9장 · NRMS</a>
+  <a href="#e2e">E. 전체 파이프라인 결과</a>
   <a href="#z">종합</a>
   <a href="#test">test 통일 비교</a>
 </nav>
@@ -850,6 +851,49 @@ epoch 2~5: 반복</pre>
   <p>저장된 최고 모델로 test 122,668문제를 풀어 Top-1 = 1등이 정답인 문제 수 ÷ 122,668. SID: seed 42 26.20%, 123 26.01%, 2026 26.06% → 평균 <b>26.09%</b>. 모드 4개 × seed 3개 = 12번 모두 이 과정을 거쳤습니다.</p>
 
   <div class="box"><p><b>한 줄 요약</b> · 클릭 기록 → 1P4N 한 줄 → 행 번호 → 50칸 + mask, 후보 섞기 → [기사 인코더] 기사마다 300차원 (SID: E1+E2+E3 / E5: Linear / Title: 단어 attention) → [사용자 인코더] self-attention 20 head → additive attention → 사용자 벡터 → [점수] 내적 5개 → 1등 추천 → train으로 학습, validation half로 epoch 선택, test로 보고.</p></div>
+  <h3 class="g">실험 동작 방식 ④ 학습 방식 — loss와 숫자 예시</h3>
+  <h4>loss 식</h4>
+  <pre>loss = −log P(정답) = −log( exp(s정답) / Σ exp(s후보) )
+     = −s정답 + log( exp(s1) + exp(s2) + exp(s3) + exp(s4) + exp(s5) )</pre>
+  <p>s = 후보 5개 점수(사용자 벡터 · 후보 벡터). 정답 확률이 1이면 loss 0. 코드는 <code>nn.CrossEntropyLoss()</code>이고 문제 64개 loss의 <b>평균</b>으로 한 번 학습합니다(Adam, lr 1e-3).</p>
+  <h4>숫자로 따라가기 — 300차원을 4차원으로 줄인 예시 (모든 숫자 실제 계산)</h4>
+  <p>학습된 가중치는 AWS checkpoint에만 있어서, 코드와 <b>같은 계산 순서</b>를 차원만 줄여(300 = 20 head × 15 → 4 = 2 head × 2) 처음부터 끝까지 계산했습니다. 앞 2칸 = “스포츠 성분”, 뒤 2칸 = “정치 성분”이라고 생각하면 됩니다. 실제 모델은 내적 전에 학습된 W_Q·W_K·W_V(각 300×300), 끝에 W_O로 변환하지만 여기서는 “그대로 통과(단위행렬)”로 두었습니다.</p>
+  <div class="tw"><table>
+    <tr><th></th><th>기사 인코더 출력 (4차원)</th></tr>
+    <tr><td>h1 총리 보고서</td><td>[0.1, 0.0, <b>1.0, 0.8</b>]</td></tr>
+    <tr><td>h2 빙에고르 경고</td><td>[<b>0.9, 0.7</b>, 0.1, 0.0]</td></tr>
+    <tr><td>h3 빙에고르 폭설</td><td>[<b>1.0, 0.8</b>, 0.0, 0.1]</td></tr>
+    <tr><td>빈칸 47개</td><td>mask로 제외</td></tr>
+  </table></div>
+  <p><b>(a) self-attention</b> — head마다: ① 내적 ÷ √(head 차원) = 참고 점수 → ② softmax(빈칸 −∞ → 0) → ③ 가중치로 기사 벡터를 섞어 새 벡터.</p>
+  <div class="tw"><table>
+    <tr><th>head 1 (앞 2칸): h3가 참고</th><th class="n">내적</th><th class="n">÷√2</th><th class="n">가중치</th></tr>
+    <tr><td>h1 [0.1, 0.0]</td><td class="n">0.10</td><td class="n">0.071</td><td class="n">0.152</td></tr>
+    <tr><td>h2 [0.9, 0.7]</td><td class="n">1.46</td><td class="n">1.032</td><td class="n"><b>0.397</b></td></tr>
+    <tr><td>h3 [1.0, 0.8]</td><td class="n">1.64</td><td class="n">1.160</td><td class="n"><b>0.451</b></td></tr>
+  </table></div>
+  <p>h3 새 앞 2칸 = 0.152×[0.1, 0.0] + 0.397×[0.9, 0.7] + 0.451×[1.0, 0.8] = <b>[0.824, 0.639]</b> — 스포츠 관점에서 자기 자신과 h2(빙에고르)를 주로 참고. head 2(뒤 2칸)에서는 h1(총리)이 자기 자신을 0.599로 가장 많이 참고합니다. 두 head 결과를 이어 붙이면 h1′ [0.678, 0.510, 0.620, 0.499], h2′ [0.810, 0.627, 0.381, 0.311], h3′ [0.824, 0.639, 0.378, 0.309].</p>
+  <p><b>(b) additive attention</b> — 중요도 = q · tanh(W · 기사 벡터 + b) → softmax → 가중 평균. 실제 W는 200×300, q는 200개(“200”의 뜻). 예시는 W = [[1,1,0,0], [0,0,1,1], [0.5,0.5,0.5,0.5]], q = [1.0, 0.2, 0.3](스포츠 성분을 중요하게 봄)으로 정했습니다.</p>
+  <div class="tw"><table>
+    <tr><th>기사</th><th>tanh(W · 벡터)</th><th class="n">중요도</th><th class="n">가중치</th></tr>
+    <tr><td>h1′</td><td>[0.830, 0.807, 0.819]</td><td class="n">1.237</td><td class="n">0.330</td></tr>
+    <tr><td>h2′</td><td>[0.893, 0.599, 0.788]</td><td class="n">1.249</td><td class="n">0.334</td></tr>
+    <tr><td>h3′</td><td>[0.898, 0.596, 0.791]</td><td class="n">1.255</td><td class="n">0.336</td></tr>
+  </table></div>
+  <p>사용자 벡터 u = 0.330·h1′ + 0.334·h2′ + 0.336·h3′ = <b>[0.771, 0.592, 0.459, 0.373]</b>. W·q를 단순하게 정해서 가중치가 거의 같지만, 학습되면 클릭을 맞히는 데 도움이 되는 기사에 큰 가중치를 주도록 바뀝니다.</p>
+  <div class="tw"><table>
+    <tr><th>후보</th><th>벡터</th><th class="n">점수 u · 후보</th><th class="n">확률</th></tr>
+    <tr><td>c1 해리 왕자</td><td>[0.1, 0.0, 0.3, 0.2]</td><td class="n">0.289</td><td class="n">0.142</td></tr>
+    <tr class="hl"><td>c2 빙에고르 ✅</td><td>[0.9, 0.9, 0.0, 0.0]</td><td class="n"><b>1.227</b></td><td class="n"><b>0.362</b></td></tr>
+    <tr><td>c3 브뢴비</td><td>[0.6, 0.1, 0.1, 0.0]</td><td class="n">0.568</td><td class="n">0.187</td></tr>
+    <tr><td>c4 테크 은행</td><td>[0.0, 0.1, 0.6, 0.5]</td><td class="n">0.521</td><td class="n">0.179</td></tr>
+    <tr><td>c5 Side 9</td><td>[0.0, 0.2, 0.1, 0.1]</td><td class="n">0.202</td><td class="n">0.130</td></tr>
+  </table></div>
+  <ul>
+    <li>c2 점수 = 0.771×0.9 + 0.592×0.9 + 0.459×0 + 0.373×0 = 1.227 → 1등 = 정답 → Top-1 정답.</li>
+    <li>loss = −log 0.362 = <b>1.015</b> (= −1.227 + log(e^0.289 + e^1.227 + e^0.568 + e^0.521 + e^0.202)).</li>
+    <li>이 loss를 줄이는 방향(역전파)으로 W_Q·W_K·W_V·W_O, additive의 W·q, 기사 인코더(E1·E2·E3 또는 Linear)를 조금씩 고칩니다. 다음번에는 c2 확률이 0.362보다 커집니다. 이것을 문제 64개씩 한 epoch에 3,639번, 5 epoch 반복합니다.</li>
+  </ul>
   <h3 class="g">결과</h3>
 <h4>결과 (Test 122,668행, 3-seed 평균)</h4>
   <div class="tw"><table>
@@ -896,6 +940,51 @@ epoch 2~5: 반복</pre>
     <li>근거: <code>experiments/nrms_original_ebnerd_v2/</code> (12개 run 지표·로그), 변형: <code>experiments/nrms_ebnerd_v1/</code></li>
   </ul>
 </section>
+<section class="card" id="e2e">
+  <h2>E. 전체 파이프라인 결과 — RQ-VAE → SID → Transformer</h2>
+  <span class="tag">Test 기준</span><span class="tag">2026-11-03 업데이트</span>
+  <div class="one">2~9장이 SID 자체와 NRMS 비교였다면, 여기는 <b>RQ-VAE가 만든 SID를 우리 Transformer 추천 모델까지 통과시킨 최종 추천 성능</b>입니다. 모두 같은 UNI SID, 같은 test 122,668행(1P4N)입니다.</div>
+  <h3 class="g">파이프라인</h3>
+  <div class="flow"><span>기사 제목+부제 → E5 768</span><i>→</i><span>RQ-VAE (UNI, epoch 180) → SID (c1, c2, c3)</span><i>→</i><span>사용자 기록을 SID 토큰열로</span><i>→</i><span>Transformer V1 → 후보 5개 채점</span><i>→</i><span>1등 = 추천</span></div>
+  <div class="tw"><table>
+    <tr><th>모델</th><th>후보 채점 방식</th><th>학습 방식 (loss)</th></tr>
+    <tr><td><b>Transformer V1</b> (우리 모델)</td><td>기록 SID 토큰열을 읽고 다음 SID의 c1 · c2 · c3 확률을 냄. 후보 점수 S = L1 + L2 + L3 (L = 후보 SID의 level별 log-prob)</td><td>후보 5개 점수 S에 listwise cross-entropy (정답이 오답보다 높도록). 9장 NRMS loss와 같은 형태</td></tr>
+    <tr><td>V1 + level 가중치</td><td>S = 1·L1 + 0.5·L2 + 0.1·L3 (재학습 없이 점수만 다시 계산)</td><td>V1과 같음. 가중치는 validation half에서 격자로 고른 값</td></tr>
+    <tr><td>공개 TIGER (생성형)</td><td>같은 S = L1 + L2 + L3</td><td>다음 클릭 기사 SID를 생성하는 cross-entropy만 학습 (오답 후보를 쓰지 않음)</td></tr>
+  </table></div>
+  <h3 class="g">결과 (Test 122,668행)</h3>
+  <div class="tw"><table>
+    <tr><th>모델</th><th class="n">Top-1</th><th class="n">MRR</th><th class="n">nDCG@5</th><th class="n">AUC</th><th>seed</th></tr>
+    <tr class="hl"><td><b>Transformer V1 + UNI SID</b></td><td class="n"><b>27.07%</b></td><td class="n">0.518</td><td class="n">0.637</td><td class="n">0.579</td><td>42</td></tr>
+    <tr class="hl"><td><b>V1 + level 가중치 (1, 0.5, 0.1)</b></td><td class="n"><b>29.46%</b></td><td class="n">0.538</td><td class="n">0.652</td><td class="n">0.603</td><td>42</td></tr>
+    <tr><td>공개 TIGER (EdoardoBotta/RQ-VAE-Recommender, 수정 없음) + UNI SID</td><td class="n">17.36%</td><td class="n">0.440</td><td class="n">0.577</td><td class="n">0.487</td><td>42</td></tr>
+    <tr><td>(참고) NRMS 원 논문 구조 + E5 (9장)</td><td class="n">29.92%</td><td class="n">0.543</td><td class="n">0.656</td><td class="n">0.609</td><td>3개 평균</td></tr>
+    <tr><td>(참고) NRMS 원 논문 구조 + SID (9장)</td><td class="n">26.09%</td><td class="n">0.511</td><td class="n">0.631</td><td class="n">0.571</td><td>3개 평균</td></tr>
+    <tr><td>무작위</td><td class="n">20.00%</td><td class="n">—</td><td class="n">—</td><td class="n">0.500</td><td>이론값</td></tr>
+  </table></div>
+  <h3 class="g">결과 분석 방법과 해석</h3>
+  <ul>
+    <li><b>V1은 SID만으로 무작위보다 확실히 잘 추천합니다</b>: 27.07%(+7.1%p). 같은 SID를 쓴 NRMS(26.09%)보다 약간 높고, level 가중치를 주면 29.46%로 E5를 쓴 NRMS(29.92%)에 가까워집니다. 모델이 달라 직접 비교는 아니고 수준 비교입니다.</li>
+    <li><b>level 가중치가 효과 있는 이유</b>: c3 점수(L3)를 작게 반영할수록 좋아집니다. c3는 기사 수준의 세부 코드라 새 기사에 잘 일반화되지 않기 때문입니다(아래 TIGER level별 결과와 같은 현상). 가중치는 validation half로 골랐고 test에서도 +2.4%p가 유지됐습니다.</li>
+    <li><b>공개 TIGER는 무작위보다 낮습니다</b>(Top-1 17.36% &lt; 20%, AUC 0.487 &lt; 0.5). 우리가 만든 TIGER-style(EventC2 SID, 16.77%)과 같은 양상이라 구현 문제가 아닙니다.
+      <ul>
+        <li>원인: test 정답 기사 중 train에서 클릭된 적 있는 것은 <b>1.7%</b>, 오답은 <b>12.2%</b>. 생성형 학습은 train에서 본 기사(SID)에 확률을 몰아주므로 오답을 더 높게 봅니다.</li>
+        <li>level별: c1만 쓰면 Top-1 23.0%, c1+c2 23.7%(무작위보다 조금 나음), c3까지 더하면 17.4%로 떨어짐. 카테고리·주제 수준 선호는 새 기사에도 일반화되지만, 기사 수준(c3)은 일반화되지 않습니다.</li>
+        <li>V1은 같은 SID 점수 구조지만 <b>후보 5개(정답 + 오답)로 순위를 학습</b>하기 때문에 이 문제를 피합니다.</li>
+      </ul></li>
+  </ul>
+  <h3 class="g">설계 관점에서 의미</h3>
+  <ul>
+    <li>원래 설계의 추천은 “다음 SID 생성 → 현재 후보에 그라운딩”입니다. 이 결과는 뉴스처럼 정답 대부분이 새 기사인 환경에서는 <b>순수 생성형 학습만으로는 안 되고</b>, 후보 비교(ranking) 학습이나 c1·c2 중심 점수가 필요하다는 것을 보여 줍니다.</li>
+    <li>c2를 사건 단위로 만들면(원래 설계) 새 기사도 기존 사건의 c2를 물려받으므로 c2 수준 일반화가 더 좋아질 수 있습니다. 다음 RQ-VAE 실험에서 확인할 부분입니다.</li>
+  </ul>
+  <h3 class="g">한계 · 주의</h3>
+  <ul>
+    <li>V1·TIGER는 seed 1개(42)라 약 1%p 안쪽 차이는 같은 수준으로 봐야 합니다. NRMS는 3-seed 평균입니다.</li>
+    <li>RQ-VAE checkpoint를 validation 기사 복원 loss로 골랐고, 새 사건 c2에 일부 미래 기사 정보가 들어가 있습니다(신규 사건의 1.07%). 결과에 미치는 영향은 작을 것으로 봅니다.</li>
+    <li>근거: test 통일 비교(아래 섹션), <code>experiments/uni_v1_test_eval/</code>, <code>experiments/uni_tiger_reference_v1/results_aws/summary_seed42.md</code>, <code>experiments/eventc2_tiger_generative_v1/README.md</code></li>
+  </ul>
+</section>
 <section class="card" id="z">
   <h2>종합: 무엇이 확인됐고 무엇이 남았나</h2>
   <div class="tw"><table>
@@ -906,6 +995,7 @@ epoch 2~5: 반복</pre>
     <tr><td>SID만으로 기사 임베딩을 대부분 되살린다</td><td>7장: 평균 cos 0.928, 최저 0.842</td></tr>
     <tr><td>반대 방향(임베딩 이웃 → SID)도 성립</td><td>8장: 무작위 대비 4.5배 · 94배 · 694배</td></tr>
     <tr><td>추천에서 의미 있는 정보를 담는다</td><td>9장: 섞은 SID보다 +5.4%p, 원조 NRMS와 같은 수준, E5의 87%</td></tr>
+    <tr><td>RQ-VAE → SID → Transformer 전체 파이프라인이 동작한다</td><td>E절: V1 27.07%, level 가중치 29.46% (무작위 20%). 순수 생성형 TIGER는 17.36%로 실패(새 기사 문제)</td></tr>
   </table></div>
   <h3 class="g">남은 과제</h3>
   <ol>
