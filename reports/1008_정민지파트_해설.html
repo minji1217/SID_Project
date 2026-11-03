@@ -72,6 +72,7 @@ code{overflow-wrap:anywhere;word-break:break-all;background:var(--code);padding:
   section.card{padding:20px 18px}
   .grid2{grid-template-columns:1fr}
 }
+main pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.55;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0}
 main h3.g{font-size:17px;margin:26px 0 10px;padding-top:14px;border-top:1px solid var(--line);color:var(--accent)}
 main h4{font-size:15px;margin:16px 0 6px}
 </style>
@@ -692,7 +693,7 @@ main h4{font-size:15px;margin:16px 0 6px}
 
   <h3 class="g">목적</h3>
   <p>2~8장이 SID 자체의 품질이라면, 9장은 그 SID를 추천 모델에 넣었을 때 <b>추천에 필요한 정보가 얼마나 남는지</b>를 봅니다. 같은 모델에서 기사 표현만 바꿔 비교하는 통제 실험입니다.</p>
-  <h3 class="g">실험 동작 방식</h3>
+  <h3 class="g">실험 동작 방식 ① 모델 개요</h3>
 <h4>NRMS가 하는 일 — 한 줄</h4>
   <p>사용자가 전에 읽은 기사들을 <b>관심 벡터 하나</b>로 요약하고, 후보 기사 벡터와 <b>내적</b>해서 점수가 가장 높은 후보를 고릅니다. 원 논문: Wu et al., 2019, “Neural News Recommendation with Multi-Head Self-Attention”.</p>
   <div class="flow"><span>기사 → 기사 벡터 (300차원)</span><i>→</i><span>읽은 기사 벡터들 → self-attention → attention pooling → 사용자 벡터</span><i>→</i><span>사용자 · 후보 → 5개 중 1등</span></div>
@@ -700,37 +701,12 @@ main h4{font-size:15px;margin:16px 0 6px}
   <p>네 모드 모두 <b>원 논문(Wu et al., 2019) NRMS 구조</b>를 그대로 씁니다. 바꾼 것은 <b>기사를 벡터로 바꾸는 입구(기사 인코더) 하나</b>뿐이고, 사용자 인코더·점수·데이터·학습 설정·seed는 모두 같습니다. 조건을 하나만 바꿨기 때문에 Top-1 차이를 “기사 표현의 차이”로 돌릴 수 있습니다. 네 모드 중 <b>Title이 원 논문 NRMS 그대로</b>이고, 나머지는 같은 구조에서 기사 입력만 바꾼 변형입니다.</p>
   <div class="tw"><table>
     <tr><th>부분</th><th>네 모드에서</th><th>내용</th></tr>
-    <tr><td>기사 인코더</td><td><b>모드마다 다름</b></td><td>Title / E5 / SID / 섞은 SID (아래 “기사 → 벡터”, “모드별로 학습되는 것”)</td></tr>
-    <tr><td>사용자 인코더</td><td>같음</td><td>multi-head self-attention 20 head + additive attention 200 (아래 “사용자 인코더를 숫자로 따라가기”)</td></tr>
+    <tr><td>기사 인코더</td><td><b>모드마다 다름</b></td><td>Title / E5 / SID / 섞은 SID (아래 “모드별로 학습되는 것”, ③의 5단계)</td></tr>
+    <tr><td>사용자 인코더</td><td>같음</td><td>multi-head self-attention 20 head + additive attention 200 (③의 6단계)</td></tr>
     <tr><td>점수 · loss</td><td>같음</td><td>사용자 벡터 · 후보 벡터 내적 → 후보 5개 softmax → cross-entropy</td></tr>
     <tr><td>설정</td><td>같음</td><td>300차원, dropout 0.2, Adam lr 1e-3, batch 64, 5 epoch, 기록 최근 50개</td></tr>
     <tr><td>데이터 · seed</td><td>같음</td><td>같은 train 1P4N / validation half / test, seed 42 · 123 · 2026</td></tr>
   </table></div>
-<h4>실제 예시로 따라가기</h4>
-  <p class="src" style="border:0;margin:0 0 6px;padding:0">기사 제목·SID·단어 번호는 실제 데이터와 실제 코드 규칙(단어 사전 5,516개)으로 뽑은 값입니다. “이 사용자가 이 기사들을 읽었다”는 기록만 설명용으로 만든 예시입니다.</p>
-  <div class="tw"><table>
-    <tr><th></th><th>제목 (뜻)</th><th>SID</th></tr>
-    <tr><td>읽은 기사 h1</td><td>Mette Frederiksen taler om Zilmer-rapport (총리, 보고서에 대해 말하다)</td><td>12-22-288</td></tr>
-    <tr><td>읽은 기사 h2</td><td>Midt i Tour-drama: Legenden advarer Vingegaard (투르 드 프랑스 중 전설이 빙에고르에게 경고)</td><td>21-61-470</td></tr>
-    <tr><td>읽은 기사 h3</td><td>Vingegaard i vildt sne-kaos: Løbet stoppet (빙에고르, 폭설 대혼란에 경기 중단)</td><td>21-117-485</td></tr>
-    <tr class="hl"><td>후보 c2 ✅ 정답</td><td>Én særlig dag var afgørende: Vingegaards vej mod toppen (결정적이었던 하루: 빙에고르의 정상까지)</td><td>21-117-147</td></tr>
-    <tr><td>후보 c3</td><td>Brøndby-fans hånede afdød FCK-fan (브뢴비 팬, 숨진 FCK 팬 조롱)</td><td>21-88-469</td></tr>
-    <tr><td>후보 c5</td><td>Gigi, 18 år og fra Brøndby Strand (Side 9 인물 갤러리)</td><td>20-122-349</td></tr>
-  </table></div>
-  <p>후보는 실제로는 5개(정답 1 + 오답 4)이고, 여기서는 3개만 보입니다.</p>
-<h4>기사 → 벡터: 이 부분만 네 가지로 바꿔 비교</h4>
-  <div class="tw"><table>
-    <tr><th>모드</th><th>h3 “Vingegaard i vildt sne-kaos: Løbet stoppet”을 벡터로 만드는 방법</th></tr>
-    <tr><td><b>Title</b><br>(원 논문 그대로)</td><td>제목을 단어로 쪼갬 → <code>vingegaard(1057) i(2) vildt(106) sne(1=모르는 단어) kaos(215) løbet(2106) stoppet(1865)</code> → 단어마다 300차원 벡터 → 단어끼리 self-attention(20 head) → 중요한 단어에 가중치를 둬서 합침(attention pooling) → 기사 벡터 300</td></tr>
-    <tr><td><b>E5</b></td><td>미리 계산한 E5 768차원 벡터 → Linear → 300</td></tr>
-    <tr><td><b>SID</b></td><td>코드 21 · 117 · 485마다 학습되는 300차원 벡터를 하나씩 꺼내 <b>더함</b> = emb_c1[21] + emb_c2[117] + emb_c3[485]</td></tr>
-    <tr><td><b>SID shuffled</b></td><td>SID 코드를 기사들끼리 무작위로 바꿔 끼운 뒤 SID와 같은 방식. h3가 엉뚱한 기사의 코드를 받음 → 코드 개수·그룹 크기는 그대로, <b>의미만</b> 지운 대조군</td></tr>
-  </table></div>
-  <ul>
-    <li><b>Title에서는</b> h3의 <code>vingegaard</code>(1057)와 정답의 <code>vingegaards</code>(4927, 소유격)가 서로 다른 단어 번호입니다. 모델이 둘이 같은 사람이라는 걸 학습으로 알아내야 합니다.</li>
-    <li><b>SID에서는</b> h3(21-117-485)와 정답(21-117-147)이 c1·c2 벡터를 공유해서, 기사 벡터 3개 중 2개 조각이 처음부터 같습니다. “자전거·빙에고르 묶음”이라는 정보가 코드에 들어 있습니다.</li>
-    <li><b>SID shuffled에서는</b> 이 공유가 사라집니다. 그래서 SID와 SID shuffled의 차이가 곧 “코드가 담은 의미”의 효과입니다.</li>
-  </ul>
   <h4>모드별로 학습되는 것</h4>
   <div class="tw"><table>
     <tr><th>모드</th><th>기사 벡터 만드는 법</th><th>학습되는 것</th></tr>
@@ -743,39 +719,137 @@ main h4{font-size:15px;margin:16px 0 6px}
     <li>SID 모드의 E1·E2·E3는 <b>RQ-VAE 코드북 벡터가 아닙니다.</b> NRMS가 번호만 받아 새로 학습하는 표입니다. 그래서 이 실험은 “SID <b>번호 체계</b>(어떤 기사끼리 같은 번호를 받았나)가 추천에 쓸모 있나”를 봅니다. 자전거 기사들이 c2 = 117을 공유하므로 E2[117]은 학습 중에 “자전거 경주” 벡터로 자리 잡습니다.</li>
     <li>기사 인코더 안에 self-attention이 있는 것은 Title뿐입니다. E5·SID는 기사당 벡터가 하나라 서로 참고할 단어가 없습니다.</li>
   </ul>
-<h4>사용자 벡터 → 점수 → 학습 (네 모드 모두 같음)</h4>
-  <ol>
-    <li>읽은 기사 벡터 [h1, h2, h3, …] (최근 50개까지)에 self-attention(20 head): 기사끼리 서로를 참고합니다. 빙에고르 기사 h2·h3는 서로를 강하게 참고하고, 정치 기사 h1은 따로 남습니다.</li>
-    <li>attention pooling: 기사마다 중요도를 학습해 가중 평균 → <b>사용자 벡터</b> u (300).</li>
-    <li>후보마다 점수 = u · 후보 벡터 (내적). 후보 5개 점수에 softmax → 클릭 확률.</li>
-    <li>학습: loss = −log P(정답). 정답 c2의 확률이 올라가도록 기사 인코더·사용자 인코더를 같이 학습합니다.</li>
-    <li>평가: 점수 1등이 정답이면 Top-1 정답. MRR·nDCG@5·AUC는 정답의 순위로 계산합니다.</li>
-  </ol>
-  <h4>사용자 인코더를 숫자로 따라가기 (설명용 숫자)</h4>
-  <p><b>(a) multi-head self-attention, 20 head</b> — 읽은 기사끼리 서로 참고해 벡터를 다시 씁니다. h3(빙에고르 폭설)는 h2(빙에고르 경고)의 정보를 많이 섞고, h1(총리)은 거의 섞지 않습니다. 얼마나 섞을지는 학습으로 정해집니다. <b>20 head</b>는 300차원을 15차원씩 20조각으로 나눠 조각마다 따로 계산한다는 뜻으로, “같은 종목인가”, “같은 인물인가”처럼 20가지 관점에서 동시에 참고하는 셈입니다. 20개 결과를 이어 붙여 다시 300차원이 됩니다.</p>
-  <p><b>(b) additive attention, 200</b> — 기사 벡터마다 작은 신경망(300 → 200 → 1, tanh)으로 “이 사용자를 설명하는 데 얼마나 중요한가” 점수를 내고, softmax로 합이 1인 가중치를 만들어 가중 평균합니다. 200은 이 신경망 중간층의 크기입니다.</p>
+  <p>코드: 정민교 님 MIND NRMS 코드(<code>model.py</code>·<code>dataset.py</code>·<code>train.py</code>)를 그대로 사용하고, 데이터 읽는 부분만 EB-NeRD에 맞췄습니다(덴마크어 단어 쪼개기, 행 번호 빈칸 허용, 메모리 부족 대응).</p>
+  <h3 class="g">실험 동작 방식 ② 데이터 · 입력 · 출력</h3>
+  <h4>문제 한 개 = 1P4N 파일의 한 줄</h4>
+  <p>클릭 기록 한 번을 “이 사용자가 전에 읽은 기사들을 보고, 화면에 뜬 후보 5개 중 무엇을 클릭할지 맞히기” 문제 하나로 바꿉니다.</p>
   <div class="tw"><table>
-    <tr><th>읽은 기사</th><th class="n">중요도 점수</th><th class="n">가중치 (softmax)</th></tr>
-    <tr><td>h1 총리 보고서</td><td class="n">−0.6</td><td class="n">0.15</td></tr>
-    <tr><td>h2 빙에고르 경고</td><td class="n">0.4</td><td class="n">0.41</td></tr>
-    <tr><td>h3 빙에고르 폭설</td><td class="n">0.45</td><td class="n">0.43</td></tr>
+    <tr><th>칸</th><th>예</th><th>뜻</th></tr>
+    <tr><td><code>history_article_ids</code></td><td>[9452499, 9346767, 9648021]</td><td>그전에 읽은 기사들. <b>최근 50개까지</b>만 씀</td></tr>
+    <tr><td><code>candidate_article_ids</code></td><td>[3044020, 9349924, 4404346, 9780283, 4176427]</td><td>그 순간 화면에 뜬 후보 5개</td></tr>
+    <tr><td><code>candidate_labels</code></td><td>[0, 1, 0, 0, 0]</td><td>실제로 클릭한 기사 = 1 (정답 1개, 오답 4개)</td></tr>
   </table></div>
-  <p>사용자 벡터 u = 0.15 × h1 + 0.41 × h2 + 0.43 × h3 (300차원) → “자전거·빙에고르에 관심 있는 사용자”.</p>
-  <p><b>(c) 점수</b> — 후보마다 u · 후보 벡터(내적)를 계산하고 softmax로 확률을 냅니다.</p>
-  <div class="tw"><table>
-    <tr><th>후보</th><th class="n">점수(내적)</th><th class="n">확률</th></tr>
-    <tr class="hl"><td>c2 빙에고르의 정상까지 ✅</td><td class="n">4.1</td><td class="n">0.84</td></tr>
-    <tr><td>c3 브뢴비 팬 조롱 (축구)</td><td class="n">2.3</td><td class="n">0.14</td></tr>
-    <tr><td>c5 Side 9 인물 갤러리</td><td class="n">0.2</td><td class="n">0.02</td></tr>
-  </table></div>
-  <p>점수 1등(c2)이 실제 클릭과 같으므로 이 문제는 Top-1 정답입니다. 학습 때는 정답 확률 0.84가 1에 가까워지도록 기사 인코더와 사용자 인코더를 함께 고칩니다.</p>
-<h4>데이터와 학습 설정</h4>
   <ul>
-    <li>Train 232,874 / Validation half 122,549 / Test 122,668행 (UNI SID 기준 1P4N, Transformer V1과 같은 파일). EB-NeRD는 정답이 공개된 test가 없어서 Validation을 시간순으로 반으로 나눠 뒤쪽을 test로 씁니다.</li>
-    <li>코드: 정민교 님 MIND NRMS 코드(<code>model.py</code>·<code>dataset.py</code>·<code>train.py</code>)를 그대로 사용. 데이터 읽는 부분만 EB-NeRD에 맞춤(덴마크어 단어 쪼개기, 행 번호 빈칸 허용, 메모리 부족 대응).</li>
-    <li>설정(원 논문·MIND 실행과 같음): 300차원, 20 head, attention 200, dropout 0.2, Adam lr 1e-3, batch 64, 5 epoch.</li>
-    <li>seed 42 / 123 / 2026으로 각각 학습 → validation Top-1이 가장 높은 epoch 선택 → 그 모델로 test 1회 → 3개 평균.</li>
+    <li><b>모델 입력</b>: 읽은 기사 행 번호 50칸 + 어느 칸이 진짜 기사인지 표시(mask) + 후보 5개 행 번호</li>
+    <li><b>모델 출력</b>: 후보 5개의 점수 5개 → 1등을 추천. 1등이 실제 클릭이면 그 문제는 Top-1 정답</li>
   </ul>
+  <h4>문제 묶음 세 개: train / validation half / test</h4>
+  <div class="tw"><table>
+    <tr><th>묶음</th><th class="n">행 수</th><th>어디서</th><th>쓰는 곳</th></tr>
+    <tr><td>train</td><td class="n">232,874</td><td>train 주 클릭 기록</td><td><b>학습</b>: 매 epoch 전부 한 번씩 풀며 모델을 고침</td></tr>
+    <tr><td>validation half</td><td class="n">122,549</td><td>validation 주의 <b>앞쪽 절반</b>(시간순)</td><td><b>epoch 고르기</b>: 매 epoch 끝에 채점만 하고 가장 좋은 epoch 저장</td></tr>
+    <tr><td>test</td><td class="n">122,668</td><td>validation 주의 <b>뒤쪽 절반</b></td><td><b>성적 보고</b>: 저장된 모델로 딱 한 번 채점</td></tr>
+  </table></div>
+  <p>EB-NeRD는 정답이 공개된 test가 없어서 validation 주를 시간순으로 반으로 나눠 뒤쪽을 test로 씁니다(과거로 고르고 미래로 평가). 세 묶음 모두 UNI SID 기준 1P4N이고 Transformer V1과 같은 파일입니다.</p>
+  <div class="note"><b>“train / validation”이 두 가지 뜻으로 쓰입니다</b> · 위 표는 <b>클릭 기록의 기간</b>입니다. 아래 기사 표의 train / validation-only는 <b>기사가 처음 나온 주</b>입니다. validation·test 문제의 후보는 대부분 그 주에 새로 나온 validation-only 기사라서, 기사 표에는 두 종류 기사가 모두 있어야 합니다.</div>
+  <h4>기사 조회 표와 행 번호</h4>
+  <p>모델은 기사 ID를 직접 읽지 못합니다. 그래서 기사마다 값을 한 줄씩 적어 둔 <b>표</b>를 미리 만들고, 모델은 <b>행 번호</b>로 그 줄을 꺼내 씁니다.</p>
+  <div class="tw"><table>
+    <tr><th>표 (파일)</th><th>한 줄에 들어 있는 것</th><th>출처</th><th>쓰는 모드</th></tr>
+    <tr><td><code>article_embeddings.npy</code> (= <b>E5</b>)</td><td>E5 768개 숫자</td><td>프로젝트 처음에 만든 원래 파일, 20,719줄(EB-NeRD 기사 거의 전부)</td><td>E5</td></tr>
+    <tr><td><code>sid_codes.npy</code></td><td>(c1, c2, c3)</td><td><code>build_tables_ebnerd.py</code>가 새로 만듦</td><td>SID</td></tr>
+    <tr><td><code>sid_shuffled.npy</code></td><td>기사끼리 섞은 (c1, c2, c3)</td><td>같음</td><td>SID shuffled</td></tr>
+    <tr><td><code>title_tokens.npy</code></td><td>제목 단어 번호 최대 20개 (사전 5,516개, train 제목에서 2번 이상 나온 단어)</td><td>같음</td><td>Title</td></tr>
+    <tr><td><code>article_id2row.pkl</code></td><td>기사 ID → 행 번호 사전</td><td>같음</td><td>모든 모드</td></tr>
+  </table></div>
+  <p><b>행 번호 = E5 파일(<code>article_embeddings.npy</code>)의 줄 번호(<code>embedding_row</code>)</b>입니다. 이 번호는 E5를 만들 때 기사마다 붙었고, RQ-VAE도 이 파일로 SID를 만들었기 때문에 master 파일과 SID 파일에 같은 번호가 들어 있습니다. 새 표들은 이 번호에 맞춰 만들었습니다.</p>
+  <ol>
+    <li>train master(9,738) + validation master(3,122)를 합침 → 기사 12,860개, 각자 <code>embedding_row</code>를 가짐</li>
+    <li>가장 큰 번호 19,906 → 0으로 채운 19,907줄짜리 빈 표를 만듦</li>
+    <li>기사마다 값을 <b>자기 <code>embedding_row</code> 줄</b>에 써 넣음 (빙에고르 폭설 (21,117,485) → 11057번 줄)</li>
+    <li>12,860줄만 채워지고 나머지는 0. 사전에 그 줄을 가리키는 기사 ID가 없어 꺼내질 일이 없음</li>
+  </ol>
+  <div class="tw"><table>
+    <tr><th class="n">줄 번호</th><th>기사</th><th>E5 표 (앞 3개 / 768)</th><th>SID 표</th></tr>
+    <tr><td class="n">0</td><td>3001353</td><td>[0.004, 0.047, −0.004, …]</td><td>(9, 84, 123)</td></tr>
+    <tr><td class="n">1</td><td>(우리 실험에 없는 기사)</td><td>[−0.001, 0.014, −0.062, …]</td><td>(0, 0, 0)</td></tr>
+    <tr><td class="n">7532</td><td>9349924 빙에고르의 정상까지</td><td>[0.018, 0.013, −0.028, …]</td><td>(21, 117, 147)</td></tr>
+    <tr><td class="n">11057</td><td>9648021 빙에고르 폭설</td><td>[0.008, 0.032, −0.046, …]</td><td>(21, 117, 485)</td></tr>
+  </table></div>
+  <ul>
+    <li>기사 하나 = 행 번호 하나(12,860개 기사 ↔ 12,860개 번호, 1:1). 같은 기사는 어느 사용자의 기록이든 후보든, train이든 test든 항상 같은 번호입니다.</li>
+    <li>표가 여러 개여도 같은 줄 번호 = 같은 기사입니다. 모드마다 다른 것은 “그 줄에서 무엇을 꺼내느냐”뿐이라, 모든 모드가 정확히 같은 기사·같은 문제로 비교됩니다.</li>
+    <li>모델을 만들 때 그 모드에 필요한 표 하나만 넣고, 맨 끝에 빈칸(pad)용 줄 하나를 덧붙입니다.</li>
+  </ul>
+  <h3 class="g">실험 동작 방식 ③ 입력부터 출력까지 — 실제 기사로 따라가기</h3>
+  <p class="src" style="border:0;margin:0 0 6px;padding:0">기사·SID·행 번호·E5 숫자·제목 단어 번호는 실제 데이터입니다. “이 사용자가 이 기사들을 읽고 이 화면을 봤다”는 상황은 설명용으로 만든 것이고, 학습된 가중치로 계산하는 단계(* 표시)의 숫자는 설명용입니다(학습된 checkpoint는 AWS에만 있음).</p>
+  <h4>0단계 · 상황</h4>
+  <div class="tw"><table>
+    <tr><th></th><th>기사 ID</th><th>제목 (뜻)</th><th>SID</th><th class="n">행 번호</th></tr>
+    <tr><td>읽은 h1</td><td>9452499</td><td>Mette Frederiksen taler om Zilmer-rapport (총리, 보고서 발언)</td><td>12-22-288</td><td class="n">8458</td></tr>
+    <tr><td>읽은 h2</td><td>9346767</td><td>Midt i Tour-drama: Legenden advarer Vingegaard (투르 중 전설이 빙에고르에게 경고)</td><td>21-61-470</td><td class="n">7499</td></tr>
+    <tr><td>읽은 h3</td><td>9648021</td><td>Vingegaard i vildt sne-kaos: Løbet stoppet (빙에고르, 폭설로 경기 중단)</td><td>21-117-485</td><td class="n">11057</td></tr>
+    <tr><td>후보 c1</td><td>3044020</td><td>Prins Harry tvunget til dna-test (해리 왕자 DNA 검사)</td><td>22-105-2</td><td class="n">17</td></tr>
+    <tr class="hl"><td>후보 c2 ✅</td><td>9349924</td><td>Én særlig dag var afgørende: Vingegaards vej mod toppen (빙에고르의 정상까지)</td><td>21-117-147</td><td class="n">7532</td></tr>
+    <tr><td>후보 c3</td><td>4404346</td><td>Brøndby-fans hånede afdød FCK-fan (브뢴비 팬, 숨진 FCK 팬 조롱)</td><td>21-88-469</td><td class="n">1077</td></tr>
+    <tr><td>후보 c4</td><td>9780283</td><td>Kriseramt tech-bank fyrer 500 medarbejdere (위기 테크 은행 500명 해고)</td><td>15-29-449</td><td class="n">19053</td></tr>
+    <tr><td>후보 c5</td><td>4176427</td><td>Gigi, 18 år og fra Brøndby Strand (Side 9 인물)</td><td>20-122-349</td><td class="n">631</td></tr>
+  </table></div>
+  <p>읽은 기사는 train 기사, 후보는 모두 validation-only 기사입니다. 사용자는 c2를 클릭했습니다.</p>
+
+  <h4>1~2단계 · 문제 한 줄 → 행 번호</h4>
+  <p>1P4N 한 줄(위 “문제 한 개” 표)의 기사 ID를 사전 <code>article_id2row</code>로 행 번호로 바꿉니다: 9648021 → 11057, 9349924 → 7532 …</p>
+
+  <h4>3단계 · 50칸 상자 + mask</h4>
+  <p>문제 64개를 한 번에 묶어 계산하는데(batch 64), 사용자마다 읽은 기사 수가 달라서 모두 <b>50칸</b>으로 맞춥니다. 모자란 칸은 <b>빈칸(pad)</b>으로 채우고, mask로 진짜 칸(1)과 빈칸(0)을 표시합니다.</p>
+  <pre>history_rows = [8458, 7499, 11057, pad, pad, …, pad]   (50칸)
+history_mask = [1,    1,    1,     0,   0,   …, 0  ]</pre>
+  <h4>4단계 · 후보 순서 섞기</h4>
+  <p>“정답은 항상 첫 칸” 같은 위치 단서를 외우지 못하게 넣을 때마다 섞습니다. 예: <code>candidate_rows = [1077, 7532, 19053, 631, 17]</code> → 정답 c2(7532)는 1번 칸(0부터 셈), <code>label = 1</code>.</p>
+
+  <h4>5단계 · 기사 인코더: 행 번호 → 300차원 기사 벡터 (여기만 모드마다 다름)</h4>
+  <div class="tw"><table>
+    <tr><th>모드</th><th>h3(11057번 줄)에서 꺼낸 값</th><th>기사 벡터 만드는 법</th></tr>
+    <tr><td><b>SID</b></td><td>(21, 117, 485) → 0번을 빈칸 전용으로 두려고 +1 → (22, 118, 486)</td><td>E1[22] + E2[118] + E3[486] (각 300차원, NRMS가 새로 학습하는 표)</td></tr>
+    <tr><td><b>E5</b></td><td>[0.008, 0.032, −0.046, 0.012, …] (768개)</td><td>Linear 768 → 300 (W · x + b)</td></tr>
+    <tr><td><b>Title</b></td><td><code>vingegaard(1057) i(2) vildt(106) sne(1=모르는 단어) kaos(215) løbet(2106) stoppet(1865)</code></td><td>단어마다 300차원 → 단어끼리 self-attention(20 head) → additive attention으로 가중 평균</td></tr>
+    <tr><td><b>SID shuffled</b></td><td>다른 기사의 SID</td><td>SID와 같음</td></tr>
+    <tr><td>빈칸(pad)</td><td>SID (0,0,0) / E5 768개 모두 0</td><td>SID는 영벡터, E5는 bias만 남은 벡터 → 어느 쪽이든 6단계에서 mask로 무시</td></tr>
+  </table></div>
+  <ul>
+    <li><b>SID</b>: h3(22, 118, 486)와 정답 c2(22, 118, 148)는 세 조각 중 <b>E1[22]·E2[118] 두 조각이 똑같습니다</b>. “스포츠 · 자전거 경주” 정보가 처음부터 벡터에 들어 있습니다. c3(브뢴비, 22-89-470)은 c1만, c4(테크 은행, 16-30-450)는 아무것도 공유하지 않습니다.</li>
+    <li><b>Title</b>: h3의 <code>vingegaard</code>(1057)와 정답의 <code>vingegaards</code>(4927, 소유격)는 다른 단어 번호라, 같은 사람이라는 걸 학습으로 알아내야 합니다.</li>
+    <li><b>E5</b>: 학습 전 원본만으로도 정답이 가장 가깝습니다(실제 계산). 읽은 기사 3개 평균과의 cosine: c2 <b>0.920</b>, c3 0.857, c4 0.857, c1 0.856, c5 0.844. E5 성능이 가장 높은 이유입니다.</li>
+  </ul>
+
+  <h4>6단계 · 사용자 인코더: 50칸 → 사용자 벡터 1개 (모든 모드 같음)</h4>
+  <p><b>(a) self-attention, 20 head</b>: 진짜 칸 h1·h2·h3끼리만 서로 참고해 벡터를 다시 씁니다(빈칸은 <code>key_padding_mask</code>로 제외). 실제 E5 cosine도 h2–h3 0.864로 가장 가깝고 h1–h3 0.777, h1–h2 0.796이라, h2·h3는 서로를 강하게 참고하고 h1은 따로 남는 식입니다. 20 head = 300차원을 15차원씩 20조각으로 나눠 20가지 관점에서 동시에 참고.</p>
+  <p><b>(b) additive attention, 200</b>*: 기사마다 작은 신경망(300 → 200 → 1)으로 중요도를 매기고 softmax로 가중치를 만듭니다. 빈칸은 점수를 −∞로 만들어 가중치 0.</p>
+  <div class="tw"><table>
+    <tr><th>칸</th><th class="n">중요도 점수*</th><th class="n">가중치*</th></tr>
+    <tr><td>h1′ 총리</td><td class="n">−0.6</td><td class="n">0.15</td></tr>
+    <tr><td>h2′ 빙에고르 경고</td><td class="n">0.4</td><td class="n">0.41</td></tr>
+    <tr><td>h3′ 빙에고르 폭설</td><td class="n">0.45</td><td class="n">0.43</td></tr>
+    <tr><td>빈칸 47개</td><td class="n">−∞</td><td class="n">0</td></tr>
+  </table></div>
+  <p>사용자 벡터 u = 0.15·h1′ + 0.41·h2′ + 0.43·h3′ (300차원) → “자전거 · 빙에고르에 관심 많은 사용자”. 기록이 하나도 없는 사용자는 u = 영벡터.</p>
+
+  <h4>7단계 · 점수 = 모델 출력 (모든 모드 같음)</h4>
+  <div class="tw"><table>
+    <tr><th class="n">칸</th><th>후보</th><th class="n">점수 u · 후보*</th><th class="n">softmax 확률*</th></tr>
+    <tr><td class="n">0</td><td>c3 브뢴비 팬</td><td class="n">2.3</td><td class="n">0.13</td></tr>
+    <tr class="hl"><td class="n">1</td><td>c2 빙에고르 ✅</td><td class="n">4.1</td><td class="n">0.82</td></tr>
+    <tr><td class="n">2</td><td>c4 테크 은행</td><td class="n">0.2</td><td class="n">0.02</td></tr>
+    <tr><td class="n">3</td><td>c5 Side 9</td><td class="n">0.3</td><td class="n">0.02</td></tr>
+    <tr><td class="n">4</td><td>c1 해리 왕자</td><td class="n">0.4</td><td class="n">0.02</td></tr>
+  </table></div>
+
+  <h4>8단계 · 판정과 학습</h4>
+  <ul>
+    <li>판정: 점수 1등 = 1번 칸 = 정답 → Top-1 정답.</li>
+    <li>loss = −log P(정답) = −log 0.82 = 0.20*. 문제 64개의 loss 평균으로 모델을 한 번 고칩니다(한 걸음). SID 모드면 E1·E2·E3 표와 attention, E5 모드면 Linear W·b와 attention이 고쳐집니다.</li>
+  </ul>
+
+  <h4>9단계 · epoch 반복과 checkpoint 선택</h4>
+  <pre>epoch 1: train 232,874문제를 64개씩 → 3,639걸음 학습
+         → validation half 122,549문제 채점 (학습 없이) → 지금까지 최고면 저장
+epoch 2~5: 반복</pre>
+  <p>SID는 1~3 epoch에서 최고를 찍고 내려갔고, E5는 5 epoch까지 계속 올랐습니다(best epoch e5 5·5·4, sid 2·1·3).</p>
+
+  <h4>10단계 · test 평가 (딱 한 번)</h4>
+  <p>저장된 최고 모델로 test 122,668문제를 풀어 Top-1 = 1등이 정답인 문제 수 ÷ 122,668. SID: seed 42 26.20%, 123 26.01%, 2026 26.06% → 평균 <b>26.09%</b>. 모드 4개 × seed 3개 = 12번 모두 이 과정을 거쳤습니다.</p>
+
+  <div class="box"><p><b>한 줄 요약</b> · 클릭 기록 → 1P4N 한 줄 → 행 번호 → 50칸 + mask, 후보 섞기 → [기사 인코더] 기사마다 300차원 (SID: E1+E2+E3 / E5: Linear / Title: 단어 attention) → [사용자 인코더] self-attention 20 head → additive attention → 사용자 벡터 → [점수] 내적 5개 → 1등 추천 → train으로 학습, validation half로 epoch 선택, test로 보고.</p></div>
   <h3 class="g">결과</h3>
 <h4>결과 (Test 122,668행, 3-seed 평균)</h4>
   <div class="tw"><table>
