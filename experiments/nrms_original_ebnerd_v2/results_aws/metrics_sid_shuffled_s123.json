@@ -1,0 +1,19 @@
+{
+  "input_mode": "sid_shuffled",
+  "tag": "_s123",
+  "checkpoint": "nrms_sid_shuffled_s123_best.pt",
+  "validation": {
+    "samples": 122549,
+    "top1_accuracy": 0.2112053137928502,
+    "mrr": 0.46853258696521394,
+    "ndcg@5": 0.5989503560214475,
+    "auc": 0.5194075431052069
+  },
+  "test": {
+    "samples": 122668,
+    "top1_accuracy": 0.20857110248801644,
+    "mrr": 0.4665954717883501,
+    "ndcg@5": 0.5974321474450679,
+    "auc": 0.5156825741024554
+  }
+}

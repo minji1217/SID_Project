@@ -1,0 +1,14 @@
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=e5
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 652,300
+[epoch 1] loss=1.5221  val_top1=26.98%  (37.1s)
+[epoch 2] loss=1.4982  val_top1=27.61%  (36.0s)
+[epoch 3] loss=1.4855  val_top1=27.62%  (36.1s)
+[epoch 4] loss=1.4767  val_top1=28.17%  (36.2s)
+[epoch 5] loss=1.4681  val_top1=28.66%  (36.7s)
+[train] DONE input_mode=e5  best val Top-1 = 28.66%  (무작위 기준 20%)  | test Top-1 @best-val = 30.13%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)

@@ -1,0 +1,281 @@
+== 1. 조회 테이블 (SID는 V1이 쓴 sequence 파일의 c1~c3에서 모음)
+[build] embedding_row 0~19906 중 기사 12860개 사용 (나머지 행은 영벡터)
+[build] articles = 12860  (train 9738, validation-only 3122)
+[build] vocab size = 5516
+[build] 시퀀스 읽음: /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet (232874행)
+[build] 시퀀스 읽음: /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet (122549행)
+[build] 시퀀스 읽음: /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet (122668행)
+[build] SID가 있는 기사 = 12572, 한 기사에 코드가 2종 이상인 경우 = 0 (0이어야 정상)
+[build] 기사 테이블에 없는 SID 기사 = 0 (0이어야 정상), SID 있는 행 = 12572/19907
+[build] c1 max=24, c2 max=127, c3 max=511
+[build] saved: title_tokens.npy sid_codes.npy sid_shuffled.npy vocab.pkl article_id2row.pkl
+== 2. train  mode=title seed=42
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=title
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 2,498,000
+[epoch 1] loss=1.4578  val_top1=23.86%  (498.2s)
+[epoch 2] loss=1.3994  val_top1=25.02%  (495.9s)
+[epoch 3] loss=1.3805  val_top1=24.94%  (441.2s)
+[epoch 4] loss=1.3709  val_top1=24.71%  (439.2s)
+[epoch 5] loss=1.3651  val_top1=24.85%  (442.8s)
+[train] DONE input_mode=title  best val Top-1 = 25.02%  (무작위 기준 20%)  | test Top-1 @best-val = 26.14%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=title seed=42
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[title_s42] validation Top-1 25.0202%  MRR 0.5058  nDCG@5 0.6277  AUC 0.5710  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[title_s42] test       Top-1 26.1413%  MRR 0.5131  nDCG@5 0.6332  AUC 0.5764  (122,668)
+== 2. train  mode=title seed=123
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=title
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 2,498,000
+[epoch 1] loss=1.4587  val_top1=24.53%  (498.7s)
+[epoch 2] loss=1.3992  val_top1=24.94%  (499.9s)
+[epoch 3] loss=1.3802  val_top1=25.04%  (501.0s)
+[epoch 4] loss=1.3716  val_top1=24.32%  (443.4s)
+[epoch 5] loss=1.3646  val_top1=25.15%  (501.0s)
+[train] DONE input_mode=title  best val Top-1 = 25.15%  (무작위 기준 20%)  | test Top-1 @best-val = 25.81%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=title seed=123
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[title_s123] validation Top-1 25.1467%  MRR 0.5077  nDCG@5 0.6292  AUC 0.5742  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[title_s123] test       Top-1 25.8079%  MRR 0.5098  nDCG@5 0.6306  AUC 0.5718  (122,668)
+== 2. train  mode=title seed=2026
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=title
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 2,498,000
+[epoch 1] loss=1.4596  val_top1=24.69%  (500.3s)
+[epoch 2] loss=1.4008  val_top1=24.56%  (443.2s)
+[epoch 3] loss=1.3809  val_top1=24.80%  (500.7s)
+[epoch 4] loss=1.3709  val_top1=24.45%  (443.2s)
+[epoch 5] loss=1.3640  val_top1=24.45%  (442.9s)
+[train] DONE input_mode=title  best val Top-1 = 24.80%  (무작위 기준 20%)  | test Top-1 @best-val = 26.22%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=title seed=2026
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[title_s2026] validation Top-1 24.7958%  MRR 0.5036  nDCG@5 0.6261  AUC 0.5680  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[title_s2026] test       Top-1 26.2179%  MRR 0.5127  nDCG@5 0.6328  AUC 0.5747  (122,668)
+== 2. train  mode=e5 seed=42
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=e5
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 652,300
+[epoch 1] loss=1.5221  val_top1=26.98%  (37.1s)
+[epoch 2] loss=1.4982  val_top1=27.61%  (36.0s)
+[epoch 3] loss=1.4855  val_top1=27.62%  (36.1s)
+[epoch 4] loss=1.4767  val_top1=28.17%  (36.2s)
+[epoch 5] loss=1.4681  val_top1=28.66%  (36.7s)
+[train] DONE input_mode=e5  best val Top-1 = 28.66%  (무작위 기준 20%)  | test Top-1 @best-val = 30.13%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=e5 seed=42
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[e5_s42] validation Top-1 28.6579%  MRR 0.5326  nDCG@5 0.6481  AUC 0.5973  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[e5_s42] test       Top-1 30.1350%  MRR 0.5435  nDCG@5 0.6563  AUC 0.6078  (122,668)
+== 2. train  mode=e5 seed=123
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=e5
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 652,300
+[epoch 1] loss=1.5246  val_top1=27.12%  (37.2s)
+[epoch 2] loss=1.4998  val_top1=28.73%  (36.2s)
+[epoch 3] loss=1.4870  val_top1=28.51%  (29.5s)
+[epoch 4] loss=1.4781  val_top1=28.84%  (36.5s)
+[epoch 5] loss=1.4693  val_top1=28.92%  (36.3s)
+[train] DONE input_mode=e5  best val Top-1 = 28.92%  (무작위 기준 20%)  | test Top-1 @best-val = 28.81%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=e5 seed=123
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[e5_s123] validation Top-1 28.9248%  MRR 0.5344  nDCG@5 0.6494  AUC 0.5996  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[e5_s123] test       Top-1 28.8135%  MRR 0.5348  nDCG@5 0.6498  AUC 0.6011  (122,668)
+== 2. train  mode=e5 seed=2026
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=e5
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 652,300
+[epoch 1] loss=1.5228  val_top1=27.29%  (37.2s)
+[epoch 2] loss=1.4961  val_top1=28.68%  (36.2s)
+[epoch 3] loss=1.4852  val_top1=27.36%  (29.4s)
+[epoch 4] loss=1.4745  val_top1=28.87%  (36.7s)
+[epoch 5] loss=1.4677  val_top1=28.27%  (30.0s)
+[train] DONE input_mode=e5  best val Top-1 = 28.87%  (무작위 기준 20%)  | test Top-1 @best-val = 30.82%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=e5 seed=2026
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[e5_s2026] validation Top-1 28.8668%  MRR 0.5348  nDCG@5 0.6498  AUC 0.6007  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[e5_s2026] test       Top-1 30.8198%  MRR 0.5507  nDCG@5 0.6619  AUC 0.6186  (122,668)
+== 2. train  mode=sid seed=42
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=sid
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 622,000
+[epoch 1] loss=1.4319  val_top1=25.40%  (38.9s)
+[epoch 2] loss=1.3840  val_top1=25.82%  (38.0s)
+[epoch 3] loss=1.3563  val_top1=25.42%  (30.6s)
+[epoch 4] loss=1.3339  val_top1=25.39%  (30.5s)
+[epoch 5] loss=1.3174  val_top1=24.69%  (30.4s)
+[train] DONE input_mode=sid  best val Top-1 = 25.82%  (무작위 기준 20%)  | test Top-1 @best-val = 26.20%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=sid seed=42
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[sid_s42] validation Top-1 25.8174%  MRR 0.5098  nDCG@5 0.6307  AUC 0.5720  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[sid_s42] test       Top-1 26.1984%  MRR 0.5114  nDCG@5 0.6318  AUC 0.5716  (122,668)
+== 2. train  mode=sid seed=123
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=sid
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 622,000
+[epoch 1] loss=1.4321  val_top1=26.05%  (39.1s)
+[epoch 2] loss=1.3840  val_top1=25.41%  (30.6s)
+[epoch 3] loss=1.3593  val_top1=25.44%  (30.6s)
+[epoch 4] loss=1.3376  val_top1=25.04%  (30.5s)
+[epoch 5] loss=1.3204  val_top1=25.22%  (30.6s)
+[train] DONE input_mode=sid  best val Top-1 = 26.05%  (무작위 기준 20%)  | test Top-1 @best-val = 26.01%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=sid seed=123
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[sid_s123] validation Top-1 26.0500%  MRR 0.5116  nDCG@5 0.6320  AUC 0.5732  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[sid_s123] test       Top-1 26.0052%  MRR 0.5099  nDCG@5 0.6307  AUC 0.5698  (122,668)
+== 2. train  mode=sid seed=2026
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=sid
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 622,000
+[epoch 1] loss=1.4322  val_top1=25.82%  (38.9s)
+[epoch 2] loss=1.3831  val_top1=25.55%  (30.3s)
+[epoch 3] loss=1.3602  val_top1=25.89%  (37.7s)
+[epoch 4] loss=1.3389  val_top1=25.26%  (31.4s)
+[epoch 5] loss=1.3218  val_top1=25.76%  (30.8s)
+[train] DONE input_mode=sid  best val Top-1 = 25.89%  (무작위 기준 20%)  | test Top-1 @best-val = 26.06%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=sid seed=2026
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[sid_s2026] validation Top-1 25.8909%  MRR 0.5110  nDCG@5 0.6316  AUC 0.5739  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[sid_s2026] test       Top-1 26.0598%  MRR 0.5109  nDCG@5 0.6315  AUC 0.5719  (122,668)
+== 2. train  mode=sid_shuffled seed=42
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=sid_shuffled
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 622,000
+[epoch 1] loss=1.4954  val_top1=20.98%  (38.9s)
+[epoch 2] loss=1.4374  val_top1=20.68%  (30.0s)
+[epoch 3] loss=1.4052  val_top1=20.59%  (30.7s)
+[epoch 4] loss=1.3791  val_top1=20.88%  (30.6s)
+[epoch 5] loss=1.3610  val_top1=20.78%  (31.0s)
+[train] DONE input_mode=sid_shuffled  best val Top-1 = 20.98%  (무작위 기준 20%)  | test Top-1 @best-val = 20.26%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=sid_shuffled seed=42
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[sid_shuffled_s42] validation Top-1 20.9818%  MRR 0.4657  nDCG@5 0.5967  AUC 0.5135  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[sid_shuffled_s42] test       Top-1 20.2612%  MRR 0.4608  nDCG@5 0.5930  AUC 0.5080  (122,668)
+== 2. train  mode=sid_shuffled seed=123
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=sid_shuffled
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 622,000
+[epoch 1] loss=1.4953  val_top1=21.12%  (38.3s)
+[epoch 2] loss=1.4374  val_top1=20.44%  (30.9s)
+[epoch 3] loss=1.4032  val_top1=20.02%  (30.6s)
+[epoch 4] loss=1.3787  val_top1=20.29%  (30.7s)
+[epoch 5] loss=1.3582  val_top1=20.27%  (31.0s)
+[train] DONE input_mode=sid_shuffled  best val Top-1 = 21.12%  (무작위 기준 20%)  | test Top-1 @best-val = 20.86%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=sid_shuffled seed=123
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[sid_shuffled_s123] validation Top-1 21.1205%  MRR 0.4685  nDCG@5 0.5990  AUC 0.5194  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[sid_shuffled_s123] test       Top-1 20.8571%  MRR 0.4666  nDCG@5 0.5974  AUC 0.5157  (122,668)
+== 2. train  mode=sid_shuffled seed=2026
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[train] device=cuda  input_mode=sid_shuffled
+[dataset] /home/ubuntu/shared/datasets/ebnerd/train_sequences_1pos4neg.parquet: 232874 samples, candidate 조회 실패 0/1164370
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[train] 학습 파라미터 수 = 622,000
+[epoch 1] loss=1.4952  val_top1=20.87%  (38.1s)
+[epoch 2] loss=1.4380  val_top1=20.25%  (30.8s)
+[epoch 3] loss=1.4040  val_top1=20.56%  (30.5s)
+[epoch 4] loss=1.3789  val_top1=20.51%  (30.5s)
+[epoch 5] loss=1.3604  val_top1=20.65%  (31.1s)
+[train] DONE input_mode=sid_shuffled  best val Top-1 = 20.87%  (무작위 기준 20%)  | test Top-1 @best-val = 21.02%
+[train] 참고 - 팀 V1: 27.06% (fixed weight 29.31%)
+== 3. evaluate mode=sid_shuffled seed=2026
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:64: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[dataset] /home/ubuntu/shared/datasets/ebnerd/validation_sequences_1pos4neg_half.parquet: 122549 samples, candidate 조회 실패 0/612745
+[sid_shuffled_s2026] validation Top-1 20.8717%  MRR 0.4666  nDCG@5 0.5975  AUC 0.5171  (122,549)
+[dataset] /home/ubuntu/shared/datasets/ebnerd/test_sequences_1pos4neg.parquet: 122668 samples, candidate 조회 실패 0/613340
+[sid_shuffled_s2026] test       Top-1 21.0177%  MRR 0.4666  nDCG@5 0.5974  AUC 0.5148  (122,668)
+== 4. 요약 (seed 평균)
+mode            n  Val Top-1  Test Top-1     MRR  nDCG@5     AUC
+e5              3     28.82%      29.92%  0.5430  0.6560  0.6092
+sid             3     25.92%      26.09%  0.5107  0.6313  0.5711
+sid_shuffled    3     20.99%      20.71%  0.4647  0.5959  0.5128
+title           3     24.99%      26.06%  0.5119  0.6322  0.5743

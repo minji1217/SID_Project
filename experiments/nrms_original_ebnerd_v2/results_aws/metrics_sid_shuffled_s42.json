@@ -1,0 +1,19 @@
+{
+  "input_mode": "sid_shuffled",
+  "tag": "_s42",
+  "checkpoint": "nrms_sid_shuffled_s42_best.pt",
+  "validation": {
+    "samples": 122549,
+    "top1_accuracy": 0.20981811357089816,
+    "mrr": 0.46574961851993896,
+    "ndcg@5": 0.596728057875956,
+    "auc": 0.5134670621547299
+  },
+  "test": {
+    "samples": 122668,
+    "top1_accuracy": 0.20261192813121595,
+    "mrr": 0.4607816762861274,
+    "ndcg@5": 0.5929505666776468,
+    "auc": 0.5079707014054196
+  }
+}

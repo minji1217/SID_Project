@@ -1,0 +1,19 @@
+{
+  "input_mode": "sid_shuffled",
+  "tag": "_s2026",
+  "checkpoint": "nrms_sid_shuffled_s2026_best.pt",
+  "validation": {
+    "samples": 122549,
+    "top1_accuracy": 0.20871651339464214,
+    "mrr": 0.46658234665317544,
+    "ndcg@5": 0.5974605885566939,
+    "auc": 0.5171268227402916
+  },
+  "test": {
+    "samples": 122668,
+    "top1_accuracy": 0.2101770632927903,
+    "mrr": 0.46658528168172086,
+    "ndcg@5": 0.5973850475280437,
+    "auc": 0.5148408712948772
+  }
+}
