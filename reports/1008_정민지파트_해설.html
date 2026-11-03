@@ -741,7 +741,7 @@ main h4{font-size:15px;margin:16px 0 6px}
     <tr><td>test</td><td class="n">122,668</td><td>validation 주의 <b>뒤쪽 절반</b></td><td><b>성적 보고</b>: 저장된 모델로 딱 한 번 채점</td></tr>
   </table></div>
   <p>EB-NeRD는 정답이 공개된 test가 없어서 validation 주를 시간순으로 반으로 나눠 뒤쪽을 test로 씁니다(과거로 고르고 미래로 평가). 세 묶음 모두 UNI SID 기준 1P4N이고 Transformer V1과 같은 파일입니다.</p>
-  <div class="note"><b>“train / validation”이 두 가지 뜻으로 쓰입니다</b> · 위 표는 <b>클릭 기록의 기간</b>입니다. 아래 기사 표의 train / validation-only는 <b>기사가 처음 나온 주</b>입니다. validation·test 문제의 후보는 대부분 그 주에 새로 나온 validation-only 기사라서, 기사 표에는 두 종류 기사가 모두 있어야 합니다.</div>
+  <div class="note"><b>“train / validation”이 두 가지 뜻으로 쓰입니다</b> · 위 표는 <b>클릭 기록의 기간</b>입니다. 아래 기사 표의 train 기사 / validation-only 기사는 <b>기사가 처음 등장한 기간</b>입니다(train 기사는 train 기간에 등장한 기사로, validation 기간에도 다시 나올 수 있음). validation·test 문제의 후보는 대부분 그 주에 새로 나온 validation-only 기사라서, 기사 표에는 두 종류 기사가 모두 있어야 합니다.</div>
   <h4>기사 조회 표와 행 번호</h4>
   <p>모델은 기사 ID를 직접 읽지 못합니다. 그래서 기사마다 값을 한 줄씩 적어 둔 <b>표</b>를 미리 만들고, 모델은 <b>행 번호</b>로 그 줄을 꺼내 씁니다.</p>
   <div class="tw"><table>
@@ -754,10 +754,10 @@ main h4{font-size:15px;margin:16px 0 6px}
   </table></div>
   <p><b>행 번호 = E5 파일(<code>article_embeddings.npy</code>)의 줄 번호(<code>embedding_row</code>)</b>입니다. 이 번호는 E5를 만들 때 기사마다 붙었고, RQ-VAE도 이 파일로 SID를 만들었기 때문에 master 파일과 SID 파일에 같은 번호가 들어 있습니다. 새 표들은 이 번호에 맞춰 만들었습니다.</p>
   <ol>
-    <li>train master(9,738) + validation master(3,122)를 합침 → 기사 12,860개, 각자 <code>embedding_row</code>를 가짐</li>
-    <li>가장 큰 번호 19,906 → 0으로 채운 19,907줄짜리 빈 표를 만듦</li>
+    <li>train master(9,738) + validation master(3,122)를 합침 → 기사 12,860개, 각자 <code>embedding_row</code>를 가짐. 두 파일은 겹치지 않습니다. train master는 “train 기간에 등장한 기사”라서 validation 기간에도 다시 나올 수 있고(validation 후보의 약 절반), validation master는 train 기간에는 없고 validation 기간에 처음 나온 validation-only 기사입니다.</li>
+    <li>번호가 0부터 19,906까지 띄엄띄엄 쓰입니다(E5 파일에는 우리 실험에 안 쓰는 기사 줄도 섞여 있음). 행 번호로 바로 줄을 찾으려면 가장 큰 번호까지 자리가 있어야 하므로, 0으로 채운 <b>19,907줄</b>(0~19,906번)짜리 빈 표를 만듭니다. 기사는 12,860개뿐이라 나머지 7,047줄은 빈 자리로 남습니다. 번호를 새로 촘촘하게 매기지 않은 이유는 E5 파일과 같은 번호를 그대로 써서 사전 하나로 모든 모드를 처리하기 위해서입니다.</li>
     <li>기사마다 값을 <b>자기 <code>embedding_row</code> 줄</b>에 써 넣음 (빙에고르 폭설 (21,117,485) → 11057번 줄)</li>
-    <li>12,860줄만 채워지고 나머지는 0. 사전에 그 줄을 가리키는 기사 ID가 없어 꺼내질 일이 없음</li>
+    <li>12,860줄만 채워지고 나머지 7,047줄은 0. 사전에 그 줄을 가리키는 기사 ID가 없어 꺼내질 일이 없음</li>
   </ol>
   <div class="tw"><table>
     <tr><th class="n">줄 번호</th><th>기사</th><th>E5 표 (앞 3개 / 768)</th><th>SID 표</th></tr>
