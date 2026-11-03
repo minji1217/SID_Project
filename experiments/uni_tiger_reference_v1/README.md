@@ -43,4 +43,4 @@ epoch_history.csv, config.json, checkpoint_best.pt), `compare_v1_vs_reference_se
 출력 폴더가 이미 있으면 시작하지 않는다. 다른 seed는 `SEED=123`.
 
 ## 상태
-합성 데이터(UNI 형식, c1<25/c2<128/c3<512/c4≤16)로 `run_aws.sh` 4단계 전체 동작 확인. AWS 미실행.
+AWS seed 42 완료 (2026-11-03). 결과: `results_aws/summary_seed42.md` — test Top-1 17.36% / AUC 0.487 (V1 27.07% / 0.579).
