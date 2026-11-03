@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>원래 아이디어 E2E</title>
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f1f3f6; --ink:#16181d; --ink-2:#4a5160; --ink-3:#6b7280;
+  --line:#e2e5ea; --accent:#2556c4; --accent-soft:#e8eefb; --good:#17794a; --good-soft:#e5f4ec;
+  --warn:#9a5b00; --warn-soft:#fbf1e1; --code:#eef1f5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111317; --surface:#181b21; --surface-2:#1f232a; --ink:#e9ebef; --ink-2:#b4bac5; --ink-3:#8b93a1;
+    --line:#2b3039; --accent:#7ea3ff; --accent-soft:#1d2840; --good:#5fcf95; --good-soft:#15291f;
+    --warn:#f0b35a; --warn-soft:#2d2415; --code:#232832;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111317; --surface:#181b21; --surface-2:#1f232a; --ink:#e9ebef; --ink-2:#b4bac5; --ink-3:#8b93a1;
+  --line:#2b3039; --accent:#7ea3ff; --accent-soft:#1d2840; --good:#5fcf95; --good-soft:#15291f;
+  --warn:#f0b35a; --warn-soft:#2d2415; --code:#232832;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:15.5px/1.72 "Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;word-break:keep-all}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 16px 80px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:36px}
+nav{position:sticky;top:20px;align-self:start;font-size:13.5px}
+nav .h{font-weight:700;color:var(--ink-3);font-size:12px;letter-spacing:.04em;margin:0 0 8px}
+nav a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent}
+nav a:hover{background:var(--surface-2);color:var(--ink)}
+main{min-width:0}
+header h1{font-size:28px;line-height:1.3;margin:0 0 8px}
+header p.lead{color:var(--ink-2);margin:0 0 20px;font-size:16px}
+h2{font-size:22px;margin:0 0 6px;line-height:1.35}
+h3{font-size:16px;margin:22px 0 8px}
+section.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:26px 28px;margin:0 0 26px;scroll-margin-top:16px}
+.tag{display:inline-block;font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:2px 9px;border-radius:999px;margin-right:6px;vertical-align:middle}
+.tag.good{color:var(--good);background:var(--good-soft)}
+.tag.warn{color:var(--warn);background:var(--warn-soft)}
+.one{font-size:16.5px;color:var(--ink);background:var(--surface-2);border-left:3px solid var(--accent);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0 6px}
+figure{margin:16px 0 4px}
+figure img{width:100%;height:auto;border:1px solid var(--line);border-radius:10px;display:block;background:#fff}
+figcaption{font-size:12.5px;color:var(--ink-3);margin-top:6px}
+table{border-collapse:collapse;width:100%;margin:10px 0 6px;font-size:14px}
+.tw{overflow-x:auto}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-weight:700;color:var(--ink-2);white-space:nowrap}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.hl td{background:var(--accent-soft)}
+ol,ul{padding-left:22px;margin:8px 0}
+li{margin:4px 0}
+code{overflow-wrap:anywhere;word-break:break-all;background:var(--code);padding:1px 6px;border-radius:5px;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.note{background:var(--warn-soft);border-radius:10px;padding:12px 16px;margin:14px 0 4px;font-size:14.5px}
+.note b{color:var(--warn)}
+.ok{background:var(--good-soft);border-radius:10px;padding:12px 16px;margin:14px 0 4px;font-size:14.5px}
+.ok b{color:var(--good)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.box{background:var(--surface-2);border-radius:10px;padding:12px 16px}
+.box h4{margin:0 0 4px;font-size:14px}
+.box p{margin:0;font-size:14px;color:var(--ink-2)}
+.src{font-size:13px;color:var(--ink-3);margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+.flow span{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13.5px}
+.flow i{font-style:normal;color:var(--ink-3)}
+@media (max-width:860px){
+  .wrap{grid-template-columns:1fr;gap:0}
+  nav{position:static;margin-bottom:18px;display:flex;flex-wrap:wrap;gap:4px}
+  nav .h{width:100%}
+  nav a{border-left:0;background:var(--surface);border:1px solid var(--line)}
+  section.card{padding:20px 18px}
+  .grid2{grid-template-columns:1fr}
+}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <p class="h">목차</p>
+  <a href="#sum">0. 한눈에 보기</a>
+  <a href="#why">1. 왜 c1·c2·c3인가</a>
+  <a href="#sym">2. 기호 정리</a>
+  <a href="#e2e">3. E2E 흐름과 순서</a>
+  <a href="#c1">4. c1 카테고리</a>
+  <a href="#c2">5. c2 사건 유형</a>
+  <a href="#c3">6. c3 서술 잔차</a>
+  <a href="#train">7. 학습</a>
+  <a href="#infer">8. 추론</a>
+  <a href="#ex">9. 처음부터 끝까지 예시</a>
+  <a href="#hist">10. 설계가 정해진 과정</a>
+  <a href="#diff">11. 지금 코드와 다른 점</a>
+</nav>
+<main>
+<header>
+  <h1>원래 아이디어: 뉴스 시맨틱 ID의 E2E 동작 방식</h1>
+  <p class="lead">기사가 SID가 되고, 그 SID로 추천이 나오기까지를 <b>원래 설계 기준</b>으로 처음부터 끝까지 정리했습니다. 코드 구현은 마지막 11절에서만 비교합니다.</p>
+  <div class="tw"><table>
+    <tr><th>근거 자료</th><th>내용</th></tr>
+    <tr><td>아이디어 문서 (2026-07-14, 「핵심 논리 구조」)</td><td>4단계 논증, c1·c2·c3 의미, 사건 클러스터·c2 부여 절차(2-a/2-b), 학습 3단계</td></tr>
+    <tr><td>프로젝트 소개 PPT (2026-07-22)</td><td>z(E) = RQ-VAE 인코더 출력 h의 평균, c3 = h − (q(c1)+q(c2)), Transformer 생성 + 후보 그라운딩</td></tr>
+    <tr><td>설계 확정 기록 (2026-08-11~14, <code>SID_Project_HANDOFF_20260814_v2.md</code>, GPT 대화)</td><td>새 사건 z(E) = 첫 기사 h, 이후 z(E)·c2 고정, 메타데이터만 갱신, Train 사건 c2 상속, 사건 배정과 c2 추론의 역할 분리</td></tr>
+    <tr><td>구현 검토 (2026-10-06)</td><td>실제 코드의 Train c2가 기사별로 정해졌다는 점 확인</td></tr>
+  </table></div>
+</header>
+
+<section class="card" id="sum">
+  <h2>0. 한눈에 보기</h2>
+  <div class="one">뉴스 기사는 “사건에 대한 서술”이므로, 시맨틱 ID의 세 자리를 <b>c1 = 어떤 종류의 사건(카테고리)</b>, <b>c2 = 구체적으로 어떤 사건(사건 유형)</b>, <b>c3 = 어떻게 서술했나(기사 고유 성격)</b>로 미리 정해 두고, 학습이 이 역할을 따르게 한다.</div>
+  <div class="tw"><table>
+    <tr><th>자리</th><th>담는 의미</th><th>정하는 방법</th><th>외부 지식</th></tr>
+    <tr><td><b>c1</b></td><td>뉴스 카테고리</td><td>편집 카테고리를 그대로 (고정)</td><td>편집 택소노미 (MIND 카테고리, IPTC Media Topics)</td></tr>
+    <tr><td><b>c2</b></td><td>사건 유형 (사건 임베딩 공간의 영역)</td><td>사건 E의 z(E) = mean(h)를 Q2 코드북에 양자화. <b>같은 사건 = 같은 c2</b></td><td>개체 링킹으로 만든 같은 사건 관계</td></tr>
+    <tr><td><b>c3</b></td><td>기사 고유의 서술 특성 (관점·형식·세부 초점)</td><td>잔차 h − (q1 + q2)를 Q3 코드북에 양자화</td><td>의도적으로 없음</td></tr>
+  </table></div>
+  <p>추천 모델이 SID를 앞에서부터 생성하면 <b>“이 사용자는 다음에 어떤 카테고리의 → 어떤 유형의 사건을 → 어떤 보도로 소비할까”</b>라는 해석 가능한 3단계 예측이 됩니다. “토픽 → 스토리 → 기사”라는 실제 뉴스 소비 구조와 같습니다.</p>
+</section>
+
+<section class="card" id="why">
+  <h2>1. 왜 c1·c2·c3로 나누나 — 4단계 논증</h2>
+  <div class="flow"><span>① 뉴스 = 사건의 서술</span><i>→</i><span>② 그 정의를 ID 구조에 새긴다</span><i>→</i><span>③ 각 코드가 명시적 의미를 갖게</span><i>→</i><span>④ c1 카테고리 · c2 사건 유형 · c3 서술</span></div>
+  <div class="grid2">
+    <div class="box"><h4>① 뉴스 기사란 무엇인가</h4><p>IPTC 뉴스 표준, Wikidata·EventKG는 기사(창작물)와 사건(발생)을 별개 개체로 두고 “기사 —보도함→ 사건”으로 잇습니다. 그러면 기사의 정체성이 <b>(어떤 유형의 사건) + (구체적으로 어떤 사건) + (어떻게 서술했나)</b>로 나뉩니다.</p></div>
+    <div class="box"><h4>② 특징으로 넣지 않고 구조에 새긴다</h4><p>기존 연구는 사건·개체 정보를 인코더 입력 특징으로 섞어 넣어 구조가 벡터 속에 녹아 사라집니다. 우리는 그 분해를 ID의 계층 구조 자체에 새깁니다.</p></div>
+    <div class="box"><h4>③ TIGER와의 차이</h4><p>TIGER의 계층은 잔차 양자화의 부산물이고 레벨 의미는 학습 후에 들여다보고 붙입니다. 우리는 학습 전에 의미를 정하고 학습이 이를 지키게 합니다. 근거: NewsRec-Chat(ACL 2026 Industry)에서 TIGER류 1단계 코드와 편집 카테고리 일치도 50.9%.</p></div>
+    <div class="box"><h4>④ 근거 있는 층만 접지</h4><p>c1은 편집 택소노미, c2는 같은 사건 관계에 대응시키고, c3는 대응시킬 외부 지식이 없으므로 데이터에 맡깁니다.</p></div>
+  </div>
+  <div class="tw"><table>
+    <tr><th></th><th>TIGER</th><th>우리 아이디어</th></tr>
+    <tr><td>계층의 기원</td><td>잔차 양자화의 수학적 부산물</td><td>도메인 존재론에서 도출</td></tr>
+    <tr><td>레벨의 의미</td><td>학습 후 해석</td><td>학습 전 지정, 학습이 강제</td></tr>
+    <tr><td>외부 지식</td><td>없음 (우연히 겹칠 뿐)</td><td>c1·c2가 외부 지식 구조를 기반으로 함</td></tr>
+  </table></div>
+</section>
+
+<section class="card" id="sym">
+  <h2>2. 기호 정리</h2>
+  <div class="tw"><table>
+    <tr><th>기호</th><th>뜻</th><th>크기·예시</th></tr>
+    <tr><td><b>x(a)</b></td><td>기사 a의 콘텐츠 임베딩. 제목+요약을 콘텐츠 인코더(Sentence-T5, NAML, E5 등)에 넣은 결과</td><td>768차원</td></tr>
+    <tr><td><b>h(a)</b></td><td>x(a)를 <b>RQ-VAE 인코더</b>에 통과시킨 잠재 벡터. 코드북이 모두 이 공간에 있음</td><td>128차원</td></tr>
+    <tr><td><b>q1, q2, q3</b></td><td>c1·c2·c3 번호로 각 코드북에서 꺼낸 대표 벡터</td><td>각 128차원</td></tr>
+    <tr><td><b>E</b></td><td>사건 = 같은 사건을 다루는 기사들의 묶음</td><td>E1 = {a1, a2, a3}</td></tr>
+    <tr><td><b>z(E)</b></td><td>사건 임베딩 = 사건 기사들의 h 평균. 새 사건은 첫 기사의 h</td><td>128차원</td></tr>
+    <tr><td><b>E(a)</b></td><td>기사의 개체 집합 (제목·요약에서 뽑은 사람·장소·기관 등)</td><td>{Impeachment inquiry, Taylor}</td></tr>
+    <tr><td><b>θ, Δ</b></td><td>같은 사건 판정 기준: 개체 집합 유사도 임계값, 발행 시간 창</td><td>θ 예: 0.3 · Δ 예: 72시간</td></tr>
+    <tr><td><b>x̂(a)</b></td><td>q1 + q2 + q3를 디코더로 복원한 벡터</td><td>768차원</td></tr>
+  </table></div>
+</section>
+
+<section class="card" id="e2e">
+  <h2>3. E2E 흐름과 순서</h2>
+  <figure><svg viewBox='0 0 1000 425' role='img' aria-label='원래 설계 E2E: 학습 단계와 추론 단계' style='width:100%;height:auto;display:block'><defs><marker id='ar' viewBox='0 0 10 10' refX='9' refY='5' markerWidth='7' markerHeight='7' orient='auto-start-reverse'><path d='M0 0L10 5L0 10z' fill='var(--ink-3)'/></marker></defs><text x='16' y='22' font-size='13' font-weight='700' fill='var(--accent)'>학습 단계 · Train 기간 기사만</text><rect x='16' y='34' width='178' height='118' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='26' y='55' font-size='13' font-weight='700' fill='var(--ink)'>① 콘텐츠 임베딩</text><text x='26' y='74' font-size='11.5' fill='var(--ink-2)'>제목+요약 → 인코더</text><text x='26' y='90' font-size='11.5' fill='var(--ink-2)'>→ x(a) 768차원</text><path d='M194 93.0 L211 93.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' /><rect x='211' y='34' width='178' height='118' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='221' y='55' font-size='13' font-weight='700' fill='var(--ink)'>② Train 사건</text><text x='221' y='74' font-size='11.5' fill='var(--ink-2)'>개체 유사도 ≥ θ</text><text x='221' y='90' font-size='11.5' fill='var(--ink-2)'>발행 간격 ≤ Δ</text><text x='221' y='106' font-size='11.5' fill='var(--ink-2)'>연결 덩어리 = 사건 E</text><path d='M389 93.0 L406 93.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' /><rect x='406' y='34' width='178' height='118' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='416' y='55' font-size='13' font-weight='700' fill='var(--ink)'>③ RQ-VAE 학습</text><text x='416' y='74' font-size='11.5' fill='var(--ink-2)'>c1 = 카테고리</text><text x='416' y='90' font-size='11.5' fill='var(--ink-2)'>c2 = Q2(mean h) 사건 단위</text><text x='416' y='106' font-size='11.5' fill='var(--ink-2)'>c3 = Q3(h − q1 − q2)</text><text x='416' y='122' font-size='11.5' fill='var(--ink-2)'>loss 3종 (복원 등)</text><path d='M584 93.0 L601 93.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' /><rect x='601' y='34' width='178' height='118' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='611' y='55' font-size='13' font-weight='700' fill='var(--ink)'>④ Train SID 확정</text><text x='611' y='74' font-size='11.5' fill='var(--ink-2)'>RQ-VAE 고정</text><text x='611' y='90' font-size='11.5' fill='var(--ink-2)'>같은 사건 = 같은 c2</text><text x='611' y='106' font-size='11.5' fill='var(--ink-2)'>Train 사건 c2 저장</text><path d='M779 93.0 L796 93.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' /><rect x='796' y='34' width='178' height='118' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='806' y='55' font-size='13' font-weight='700' fill='var(--ink)'>⑤ Transformer 학습</text><text x='806' y='74' font-size='11.5' fill='var(--ink-2)'>기록 SID 시퀀스 →</text><text x='806' y='90' font-size='11.5' fill='var(--ink-2)'>다음 SID를 c1→c2→c3</text><text x='806' y='106' font-size='11.5' fill='var(--ink-2)'>순서로 생성</text><line x1='16' x2='984' y1='180' y2='180' stroke='var(--line)' stroke-dasharray='6 5'/><text x='16' y='202' font-size='13' font-weight='700' fill='var(--warn)'>추론 단계 · 학습 후 새 기사 (validation-only), 발행 순서대로 하나씩</text><rect x='16' y='214' width='178' height='134' rx='10' fill='var(--warn-soft)' stroke='var(--warn)' stroke-width='1.5'/><text x='26' y='235' font-size='13' font-weight='700' fill='var(--ink)'>⑥ 새 기사 입력</text><text x='26' y='254' font-size='11.5' fill='var(--ink-2)'>x(a) → 고정 인코더</text><text x='26' y='270' font-size='11.5' fill='var(--ink-2)'>→ h(a)</text><text x='26' y='286' font-size='11.5' fill='var(--ink-2)'>개체 집합 E(a)</text><path d='M194 281.0 L211 281.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' /><rect x='211' y='214' width='178' height='134' rx='10' fill='var(--warn-soft)' stroke='var(--warn)' stroke-width='1.5'/><text x='221' y='235' font-size='13' font-weight='700' fill='var(--ink)'>⑦ 사건 배정</text><text x='221' y='254' font-size='11.5' fill='var(--ink-2)'>살아 있는 사건 중</text><text x='221' y='270' font-size='11.5' fill='var(--ink-2)'>유사도 ≥ θ, Δ 이내?</text><text x='221' y='286' font-size='11.5' fill='var(--ink-2)'>있음 → 2-a 합치기</text><text x='221' y='302' font-size='11.5' fill='var(--ink-2)'>없음 → 2-b 새 사건</text><path d='M389 281.0 L406 281.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' /><rect x='406' y='214' width='178' height='134' rx='10' fill='var(--warn-soft)' stroke='var(--warn)' stroke-width='1.5'/><text x='416' y='235' font-size='13' font-weight='700' fill='var(--ink)'>⑧ c2 정하기</text><text x='416' y='254' font-size='11.5' fill='var(--ink-2)'>2-a: 사건 c2 상속</text><text x='416' y='270' font-size='11.5' fill='var(--ink-2)'>2-b: z = 첫 기사 h</text><text x='416' y='286' font-size='11.5' fill='var(--ink-2)'>→ Q2 최근접, 고정</text><text x='416' y='302' font-size='11.5' fill='var(--ink-2)'>(z·c2 재계산 안 함)</text><path d='M584 281.0 L601 281.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' /><rect x='601' y='214' width='178' height='134' rx='10' fill='var(--warn-soft)' stroke='var(--warn)' stroke-width='1.5'/><text x='611' y='235' font-size='13' font-weight='700' fill='var(--ink)'>⑨ SID 완성</text><text x='611' y='254' font-size='11.5' fill='var(--ink-2)'>c1 = 카테고리</text><text x='611' y='270' font-size='11.5' fill='var(--ink-2)'>c3 = Q3(h − q1 − q2)</text><text x='611' y='286' font-size='11.5' fill='var(--ink-2)'>메타데이터 갱신:</text><text x='611' y='302' font-size='11.5' fill='var(--ink-2)'>개체·마지막 시각·수</text><path d='M779 281.0 L796 281.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' /><rect x='796' y='214' width='178' height='134' rx='10' fill='var(--warn-soft)' stroke='var(--warn)' stroke-width='1.5'/><text x='806' y='235' font-size='13' font-weight='700' fill='var(--ink)'>⑩ 추천</text><text x='806' y='254' font-size='11.5' fill='var(--ink-2)'>Transformer가</text><text x='806' y='270' font-size='11.5' fill='var(--ink-2)'>다음 SID 생성</text><text x='806' y='286' font-size='11.5' fill='var(--ink-2)'>→ 현재 후보와</text><text x='806' y='302' font-size='11.5' fill='var(--ink-2)'>그라운딩</text><path d='M495.0 152 L495.0 214' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' stroke-dasharray='4 4'/><path d='M641 152 L554 214' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' stroke-dasharray='4 4'/><path d='M885.0 152 L885.0 214' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)' stroke-dasharray='4 4'/><text x='16' y='412' font-size='11.5' fill='var(--ink-3)'>점선 = 학습 단계에서 만든 것(고정된 인코더·코드북, Train 사건 c2, 학습된 Transformer)을 추론 단계에서 그대로 사용</text></svg><figcaption>원래 설계의 E2E 흐름 · 위(학습 단계)에서 아래(추론 단계)로</figcaption></figure>
+  <h3>학습 단계 (Train 기간 기사만 사용)</h3>
+  <ol>
+    <li><b>콘텐츠 임베딩</b>: Train 기사마다 x(a)</li>
+    <li><b>Train 사건 만들기</b>: Train 기사 전체의 개체 집합과 발행 시각으로 같은 사건 기사를 연결. 연결된 덩어리 하나 = 사건 하나 (한꺼번에 처리)</li>
+    <li><b>RQ-VAE 학습</b>: c1 = 카테고리, c2 = 사건 단위로 z(E) = mean(h)를 양자화, c3 = 잔차 양자화. 복원 loss 등으로 인코더·디코더·코드북 학습</li>
+    <li><b>RQ-VAE 고정 → Train 기사 SID 확정</b>: 같은 사건의 Train 기사는 같은 c2</li>
+    <li><b>Transformer 학습</b>: 사용자 클릭 기록을 SID 순서로 바꿔, 다음 클릭 기사의 SID를 c1 → c2 → c3 순서로 생성하도록 학습</li>
+  </ol>
+  <h3>추론 단계 (학습 후 들어오는 새 기사 = validation-only 기사)</h3>
+  <ol start="6">
+    <li><b>사건 배정</b>: 새 기사를 발행 순서대로 하나씩, 살아 있는 사건에 합치거나(2-a) 새 사건을 만듦(2-b). 개체와 시간만 사용</li>
+    <li><b>SID 추론</b>: 학습된 인코더·코드북으로 c2를 정함. 2-a면 사건의 c2 상속, 2-b면 첫 기사 h의 최근접 코드. 이후 고정</li>
+    <li><b>추천</b>: Transformer가 다음 SID를 생성하고 현재 추천 가능한 기사 후보와 그라운딩</li>
+  </ol>
+  <div class="note"><b>순서에 대한 확정 사항</b> · 사건 배정(어느 사건 소속인가)과 c2 추론(몇 번 코드인가)은 역할이 분리돼 있습니다. 사건 배정은 개체·시간만 쓰므로 전처리에서 미리 계산해 둘 수 있고, c2는 학습된 RQ-VAE가 있어야 정할 수 있습니다. 발행 순서대로 앞선 기사만 보고 배정하면, 미리 계산해도 결과는 발행 순간에 처리한 것과 같습니다.</div>
+</section>
+
+<section class="card" id="c1">
+  <h2>4. c1 = 뉴스 카테고리</h2>
+  <ul>
+    <li>“어떤 유형의 사건을 다루나”(상위 분류)를 담습니다.</li>
+    <li>학습으로 찾지 않고 편집 카테고리를 그대로 번호로 씁니다. 예: c1 = 0 정치, 1 경제, 2 스포츠 …</li>
+    <li><b>c1 번호의 의미는 고정이지만, c1 번호가 가리키는 벡터 q1은 학습됩니다.</b></li>
+    <li>c1과 편집 카테고리의 일치도는 정의상 100%입니다.</li>
+  </ul>
+</section>
+
+<section class="card" id="c2">
+  <h2>5. c2 = 사건 유형</h2>
+  <div class="one">c2는 개별 사건의 번호가 아니라 <b>사건 임베딩 공간을 나눈 영역(사건 유형)</b>입니다. 같은 사건의 기사는 반드시 같은 c2를 받습니다.</div>
+  <h3>① 사건 클러스터 (Train)</h3>
+  <div class="tw"><table>
+    <tr><th>기사</th><th>발행</th><th>제목</th><th>개체</th></tr>
+    <tr><td>a1</td><td>11/12 09:00</td><td>탄핵 청문회 일정 발표</td><td>{Pelosi, Impeachment inquiry, House}</td></tr>
+    <tr><td>a2</td><td>11/12 14:00</td><td>이번 주 청문회 관전 포인트</td><td>{Impeachment inquiry, Trump, House Intel Committee}</td></tr>
+    <tr><td>a3</td><td>11/13 08:00</td><td>첫 공개 청문회 핵심 정리</td><td>{Impeachment inquiry, Taylor}</td></tr>
+    <tr><td>b1</td><td>11/12 20:00</td><td>레이커스, 워리어스 격파</td><td>{Lakers, Davis, Warriors}</td></tr>
+  </table></div>
+  <p>“개체 집합 유사도 ≥ θ 그리고 발행 간격 ≤ Δ”인 기사 쌍을 연결하고, 연결된 덩어리 하나를 사건으로 봅니다. 위에서 E1 = {a1, a2, a3} “탄핵 청문회”, E2 = {b1} “레이커스 경기”. Train 기간 기사는 모두 과거 데이터라 한꺼번에 묶습니다.</p>
+  <h3>② 사건 임베딩 z(E)</h3>
+  <ul>
+    <li><code>z(E1) = mean{ h(a1), h(a2), h(a3) }</code>. h는 <b>RQ-VAE 인코더 출력</b>입니다(콘텐츠 임베딩 x가 아님). 코드북이 인코더의 잠재 공간에 있으므로 사건 무게중심도 같은 공간에서 구해야 “가장 가까운 코드”를 찾을 수 있습니다.</li>
+    <li>평균은 <b>mean(h)</b>입니다. q1을 뺀 mean(h − q1)으로 정한 기록은 없습니다.</li>
+    <li>학습 중에는 인코더가 바뀌므로 z(E)도 매번 현재 인코더로 다시 계산됩니다.</li>
+  </ul>
+  <h3>③ 양자화 = 사건 유형 영역</h3>
+  <ul>
+    <li>z(E)를 Q2 코드북(예: K = 256개)에서 가장 가까운 코드에 배정 → 그 사건의 c2. 사건의 모든 기사가 이 c2를 공유합니다.</li>
+    <li>코드 #47은 “탄핵 청문회 사건” 자체가 아니라 “워싱턴 정치 절차성 사건들이 모이는 영역”입니다. 같은 코드에 서로 다른 사건이 들어갈 수 있고, 그 구별은 c3와 디코딩 시점의 후보 그라운딩이 맡습니다.</li>
+    <li>사건마다 번호를 붙이면 새 사건이 생길 때마다 코드 체계가 무너집니다. 유형 영역으로 정의하면 새 사건의 첫 기사도 발행 순간에 자기 h로 바로 c2를 받을 수 있습니다.</li>
+  </ul>
+</section>
+
+<section class="card" id="c3">
+  <h2>6. c3 = 기사 고유의 서술 특성 (서술 잔차)</h2>
+  <div class="box"><p><b>c3 = Q3 코드북에서 [ h(a) − (q1 + q2) ]에 가장 가까운 코드</b><br>c1(카테고리)과 c2(사건 유형)로 설명하고 남은 부분 = 이 기사만의 관점·형식·세부 초점</p></div>
+  <ul>
+    <li>같은 사건의 기사끼리는 c1·c2가 같으므로, 기사를 구별하는 일은 c3가 맡습니다. 예: 탄핵 청문회의 “일정 발표”와 “핵심 정리”는 c2가 같고 c3가 다름.</li>
+    <li>이런 요소를 대응시킬 외부 지식이 없으므로 c3는 의도적으로 데이터 주도입니다.</li>
+  </ul>
+</section>
+
+<section class="card" id="train">
+  <h2>7. 학습</h2>
+  <h3>7-1. RQ-VAE 한 번의 학습 step에서 일어나는 일 (Train 기사만)</h3>
+  <ol>
+    <li>batch 기사마다 x(a) → 인코더 → h(a)</li>
+    <li><b>c1</b> = 기사의 카테고리 번호 → q1 = 카테고리 벡터</li>
+    <li><b>c2</b>: 기사가 속한 사건 E마다 z(E) = 그 사건 기사들의 h 평균 → Q2 최근접 코드 → 사건의 모든 기사가 같은 c2, 같은 q2</li>
+    <li><b>c3</b>: 기사마다 h(a) − (q1 + q2) → Q3 최근접 코드 → q3</li>
+    <li>복원: x̂(a) = 디코더(q1 + q2 + q3)</li>
+    <li>loss = ① 복원 loss (x와 x̂ 차이) + ② codebook loss (코드 벡터를 입력 쪽으로) + ③ commitment loss (인코더 출력을 코드 쪽으로) → 인코더·디코더·코드북 학습</li>
+  </ol>
+  <p>c2의 codebook·commitment loss를 사건 단위로 계산하려면, 한 batch 안에 사건의 기사가 함께 들어와야 z(E)를 계산할 수 있습니다.</p>
+  <h3>7-2. 학습 후 Train SID 확정</h3>
+  <p>RQ-VAE를 고정하고, 최종 인코더로 각 Train 사건의 z(E)와 c2를 정합니다. 이 Train 사건의 c2가 나중에 그 사건에 합류하는 새 기사가 물려받는 값입니다. 같은 (c1, c2, c3) 안에서는 순번을 붙여 기사를 구분합니다.</p>
+  <h3>7-3. Transformer 학습 (생성형)</h3>
+  <ul>
+    <li>모든 Train 기사의 SID가 만들어진 상태에서, 사용자의 시간순 클릭 기록을 SID 토큰 순서로 바꿉니다.</li>
+    <li><b>Encoder</b>(양방향): 기록 SID 시퀀스를 읽어 사용자 문맥 표현을 만듭니다.</li>
+    <li><b>Decoder</b>: 다음에 클릭한 기사의 SID를 토큰 단위로 순서대로 예측하도록 학습합니다(c1 → c2 → c3).</li>
+  </ul>
+</section>
+
+<section class="card" id="infer">
+  <h2>8. 추론</h2>
+  <h3>8-1. 새 기사에 SID 붙이기 (발행 순간 t = 0, 클릭 기록 없이)</h3>
+  <p><b>입력</b>: 새 기사의 개체 집합 E(a_new)와 h(a_new), 살아 있는 사건들(최근 Δ시간 안에 기사가 추가된 사건), 고정된 인코더·코드북, θ, Δ.</p>
+  <ol>
+    <li><b>후보 사건 찾기</b>: 살아 있는 사건마다 개체 집합 유사도(예: IDF 가중 Jaccard) ≥ θ 이고, 그 사건의 마지막 기사로부터 Δ 이내인 사건만 후보</li>
+    <li><b>2-a. 후보가 있으면 → 합치기</b>: 유사도가 가장 큰 사건 E*에 넣고 <code>c2(a_new) ← c2(E*)</code> (상속)</li>
+    <li><b>2-b. 후보가 없으면 → 새 사건</b>: E_new = {a_new}, <code>z(E_new) ← h(a_new)</code> (첫 기사의 h), <code>c2 ← Q2에서 z(E_new)의 최근접 코드</code></li>
+    <li>c1 = 카테고리, c3 = h(a_new) − (q1 + q2)의 Q3 최근접 코드</li>
+  </ol>
+  <h3>8-2. 사건에 기사가 합쳐질 때 무엇이 바뀌나 (확정 규칙)</h3>
+  <div class="tw"><table>
+    <tr><th>사건 정보</th><th>Train 사건에 합류 (2-a)</th><th>새 사건에 합류 (2-b로 생긴 사건에 2-a)</th><th>쓰이는 곳</th></tr>
+    <tr><td>개체 집합</td><td>갱신</td><td>갱신</td><td>다음 기사와의 유사도 비교</td></tr>
+    <tr><td>마지막 기사 시각</td><td>갱신</td><td>갱신</td><td>Δ 시간 창 (사건이 살아 있는지)</td></tr>
+    <tr><td>기사 수</td><td>갱신</td><td>갱신</td><td>기록용</td></tr>
+    <tr class="hl"><td><b>z(E)</b></td><td><b>재계산 안 함</b> (Train 기사로 정한 값 유지)</td><td><b>재계산 안 함</b> (첫 기사 h 유지)</td><td>c2를 정할 때만</td></tr>
+    <tr class="hl"><td><b>c2</b></td><td><b>고정</b> (Train 사건 c2 상속)</td><td><b>고정</b> (첫 기사 때 정한 값 상속)</td><td>SID</td></tr>
+  </table></div>
+  <ul>
+    <li><b>왜 z(E)와 c2를 고정하나</b>: 이미 추천·클릭되어 사용자 기록에 들어간 기사의 SID가 나중에 들어온 기사 때문에 바뀌면 안 되기 때문입니다. 또 같은 사건의 후속 보도가 보도 각도에 따라 다른 c2를 받는 것을 막아 “같은 스토리 = 같은 c2”를 구조적으로 보장합니다.</li>
+    <li><b>왜 전체 평균이 아니라 첫 기사인가</b>: 첫 기사가 발행되는 순간에는 후속 기사가 없습니다. 전체 평균은 그 순간 알 수 없는 미래 정보입니다.</li>
+    <li>조건(θ, Δ)을 만족하는 사건이 없으면 “그나마 가까운” 사건에 억지로 붙이지 않고 새 사건을 만듭니다.</li>
+  </ul>
+  <h3>8-3. 추천</h3>
+  <ol>
+    <li>사용자의 시간순 클릭 기록을 SID로 바꿔 Transformer Encoder에 넣습니다.</li>
+    <li>Decoder가 다음 SID를 한 자리씩 생성: c1 “정치” → c2 “#47 워싱턴 정치 절차 영역” → c3 “증인 발언형 보도”.</li>
+    <li>생성한 SID를 <b>현재 추천 가능한 기사 후보와 그라운딩</b>해 최종 추천 기사를 고릅니다. 같은 c2에 여러 사건이 있으므로 c3와 후보 그라운딩이 실제 기사를 가려냅니다.</li>
+  </ol>
+</section>
+
+<section class="card" id="ex">
+  <h2>9. 처음부터 끝까지 예시</h2>
+  <p>아이디어 문서의 MIND 예시를 이어서 따라갑니다. 코드 번호(#47 등)는 설명용입니다. Δ = 72시간.</p>
+  <div class="tw"><table>
+    <tr><th>단계</th><th>일어나는 일</th><th>결과</th></tr>
+    <tr><td>학습 ① 사건</td><td>a1~a3는 개체가 겹치고 72시간 이내 → 연결. b1은 따로</td><td>E1 = {a1, a2, a3}, E2 = {b1}</td></tr>
+    <tr><td>학습 ② c1</td><td>편집 카테고리</td><td>a1~a3 정치, b1 스포츠</td></tr>
+    <tr><td>학습 ③ c2</td><td>z(E1) = mean{h(a1), h(a2), h(a3)} → Q2 최근접</td><td>a1·a2·a3 모두 #47, b1 #12</td></tr>
+    <tr><td>학습 ④ c3</td><td>각자 h − (q1 + q2) → Q3 최근접</td><td>a1(일정 발표) ≠ a3(핵심 정리)</td></tr>
+    <tr><td>추론 a4 (11/13 21:00) “증인 테일러 발언 전문”, {Impeachment inquiry, Taylor}</td><td>E1과 유사도 ≥ θ, a3에서 13시간 → <b>2-a</b></td><td>c2 = #47 상속. E1의 개체 집합·마지막 시각(11/13 21:00)·기사 수 갱신. z(E1)·c2는 그대로</td></tr>
+    <tr><td>추론 n1 (11/14 10:00) “새 총기 규제 법안 발의”, {Gun bill, Senate}</td><td>맞는 사건 없음 → <b>2-b</b></td><td>E3 = {n1}, z(E3) = h(n1) → 최근접 코드 #51 → c2 = #51 고정</td></tr>
+    <tr><td>추론 n2 (11/14 18:00) “법안 표결 일정”, {Gun bill, Senate, Schumer}</td><td>E3와 유사도 ≥ θ, n1에서 8시간 → <b>2-a</b></td><td>c2 = #51 상속. E3 개체 집합에 Schumer 추가, 마지막 시각 11/14 18:00. z(E3) = h(n1) 그대로</td></tr>
+    <tr><td>추론 n3 (11/20) 같은 법안 후속</td><td>E3 마지막 기사(n2)에서 72시간 초과 → <b>2-b</b></td><td>새 사건 E4, z(E4) = h(n3)</td></tr>
+    <tr><td>추천</td><td>사용자 기록 [a1, b1, a3] → 생성 c1 정치 → c2 #47 → c3 증인 발언형</td><td>현재 후보 중 그 SID의 기사 a4를 추천</td></tr>
+  </table></div>
+</section>
+
+<section class="card" id="hist">
+  <h2>10. 설계가 정해진 과정</h2>
+  <div class="tw"><table>
+    <tr><th>시점</th><th>정해진 것</th></tr>
+    <tr><td>07-14 아이디어 문서</td><td>4단계 논증, c1·c2·c3 의미, 사건 클러스터(θ, Δ), z(E) = 기사 임베딩 평균, 2-a/2-b, 학습 3단계</td></tr>
+    <tr><td>07-22 프로젝트 소개</td><td>h = RQ-VAE 인코더 출력, c3 = h − (q(c1)+q(c2)), 생성 + 후보 그라운딩 추천</td></tr>
+    <tr><td>08-11 설계 확정</td><td>새 사건 z(E) = 첫 기사 h, 이후 z(E)·c2 고정, 개체 집합·마지막 시각·기사 수만 갱신. Train 사건 합류 시 Train 사건 c2 상속</td></tr>
+    <tr><td>08-12 이후</td><td>z(E)의 h를 E5 768차원(초기 전처리 자료)에서 <b>RQ-VAE 인코더 출력</b>으로 명시. mean(h)</td></tr>
+    <tr><td>08-14 인수인계</td><td><code>SID_Project_HANDOFF_20260814_v2.md</code>로 규칙 정리. 사건 배정은 전처리, c2는 학습된 모델로 추론</td></tr>
+    <tr><td>10-06 구현 검토</td><td>실제 코드의 Train c2가 사건 단위가 아니라 기사별이라는 점 확인 → EventC2 실험</td></tr>
+  </table></div>
+</section>
+
+<section class="card" id="diff">
+  <h2>11. 지금 코드(백여민 코드, UNI SID)와 다른 점</h2>
+  <div class="one">설계와 다른 곳은 두 군데입니다. <b>(A) Train c2를 기사마다 정함</b>이 핵심이고, <b>(B) 새 사건 c2를 전체 평균으로 정함</b>은 영향이 작습니다. 나머지는 설계를 따릅니다.</div>
+  <div class="tw"><table>
+    <tr><th>항목</th><th>원래 설계</th><th>지금 코드</th><th>판정</th></tr>
+    <tr><td>c1</td><td>카테고리 고정</td><td>카테고리 고정</td><td><span class="tag good">같음</span></td></tr>
+    <tr><td>Train 사건 묶기</td><td>개체 유사도 ≥ θ, Δ 이내 연결 덩어리</td><td>EB-NeRD 제공 NER 개체, IDF 가중 Jaccard ≥ 0.3, 72시간, union-find 연결 덩어리 (Train 기사 1% 이상에 나오는 개체 제외)</td><td><span class="tag good">같음</span> (개체가 Wikidata가 아니라 NER)</td></tr>
+    <tr class="hl"><td><b>(A) Train c2</b></td><td>사건 단위 z(E) = mean(h) → 같은 사건 = 같은 c2</td><td>z(E)는 Q2 코드북 초기화(K-means)에만. 학습·Train SID는 <b>기사마다</b> r1 = h − q1의 최근접</td><td><span class="tag warn">다름</span> 같은 사건 c2 일치율 74%</td></tr>
+    <tr><td>Validation 사건 배정</td><td>발행 순서, 2-a/2-b, 개체 집합·마지막 시각 갱신</td><td>전처리에서 같은 규칙으로 처리</td><td><span class="tag good">같음</span></td></tr>
+    <tr><td>Train 사건 합류 시 c2</td><td>Train 사건 c2 상속, 재계산 안 함</td><td>Train 사건의 mean(h) → Q2 최근접 “사건 코드” 상속</td><td><span class="tag good">규칙은 같음</span> (단 아래 (A)의 영향)</td></tr>
+    <tr class="hl"><td><b>(B) 새 사건 c2</b></td><td>첫 기사 h → 최근접, 이후 고정</td><td>사건 배정이 다 끝난 뒤 소속 기사 <b>전체</b> h 평균 → 최근접</td><td><span class="tag warn">다름</span> 미래 기사 정보 사용</td></tr>
+    <tr><td>c3</td><td>h − (q1 + q2)</td><td>r1 − q2 = h − q1 − q2</td><td><span class="tag good">같음</span> (c2가 기사별이라 q2도 기사별)</td></tr>
+    <tr><td>Transformer</td><td>다음 SID 생성 + 후보 그라운딩</td><td>후보 5개마다 log P(c1)+log P(c2|c1)+log P(c3|c1,c2)로 순위 (1P4N)</td><td><span class="tag warn">다름</span></td></tr>
+  </table></div>
+
+  <h3>(A)에서 따라 나오는 문제</h3>
+  <ul>
+    <li><b>상속받는 c2와 Train 기사의 c2가 다를 수 있음</b>: Validation 기사는 Train 사건의 “사건 코드”(mean(h) 기준)를 물려받는데, 그 사건의 Train 기사들은 각자 기사별 c2를 갖고 있습니다. 예: Train 기사들은 c2 = 40, 41인데 후속 Validation 기사는 45.</li>
+    <li><b>코드북 학습 기준과 검색 기준이 어긋남</b>: Q2는 학습 때 기사별 r1 = h − q1에 맞춰 배우는데, 사건 코드는 mean(h)를 그대로 Q2에 넣어 찾습니다(코드에서 확인: <code>quantizer_2(mean(h))</code>). 설계대로 Train도 사건 단위 mean(h)로 학습했다면 생기지 않는 문제입니다. EventC2 실험이 이 방식으로 다시 학습한 버전입니다.</li>
+  </ul>
+  <h3>(B)의 영향 범위 (UNI SID 파일로 집계)</h3>
+  <div class="tw"><table>
+    <tr><th>Validation 기사 3,122개</th><th class="n">기사 수</th><th>설계와 결과가 같은가</th></tr>
+    <tr><td>Train 사건에 합류</td><td class="n">32</td><td>규칙은 같음 ((A)의 영향은 있음)</td></tr>
+    <tr><td>새 사건, 기사 1개 (2,931개 사건)</td><td class="n">2,931</td><td>같음 (평균 = 자기 h)</td></tr>
+    <tr class="hl"><td>새 사건, 기사 2개 이상 (70개 사건)</td><td class="n">159 (5.1%)</td><td>다름 (첫 기사 h 대신 전체 평균)</td></tr>
+  </table></div>
+  <h3>그 밖에 확인된 점</h3>
+  <ul>
+    <li>RQ-VAE best checkpoint(epoch 180)를 validation 기사 3,122개 전체의 복원 loss로 골랐습니다. Transformer test는 validation의 뒤쪽 절반이라, test 쪽 기사 내용(클릭 정답 아님)이 모델 선택에 쓰인 셈입니다. 영향은 작을 것으로 보입니다.</li>
+  </ul>
+  <h3>설계대로 맞추려면</h3>
+  <ol>
+    <li>RQ-VAE 학습에서 c2를 사건 단위 mean(h)로 정하고 codebook·commitment loss도 사건 단위로 (EventC2 방식).</li>
+    <li>새 사건은 발행 순서대로 첫 기사 h로 c2를 정하고 고정, 이후 기사는 상속.</li>
+    <li>RQ-VAE checkpoint 선택은 validation 앞쪽 절반 기사나 Train 일부만 사용.</li>
+    <li>Transformer는 생성 + 후보 그라운딩 방식. 단, 생성형 학습은 test 정답의 98% 이상이 새 기사라는 문제(우리 TIGER-style 실험 Top-1 16.77%)를 함께 다뤄야 합니다. 2-a 상속과 후보 그라운딩이 이 문제를 다루는 장치입니다.</li>
+  </ol>
+</section>
+</main>
+</div>
+</body>
+</html>
