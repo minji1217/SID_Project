@@ -948,16 +948,16 @@ epoch 2~5: 반복</pre>
   <div class="flow"><span>기사 제목+부제 → E5 768</span><i>→</i><span>RQ-VAE (UNI, epoch 180) → SID (c1, c2, c3)</span><i>→</i><span>사용자 기록을 SID 토큰열로</span><i>→</i><span>Transformer V1 → 후보 5개 채점</span><i>→</i><span>1등 = 추천</span></div>
   <div class="tw"><table>
     <tr><th>모델</th><th>후보 채점 방식</th><th>학습 방식 (loss)</th></tr>
-    <tr><td><b>Transformer V1</b> (우리 모델)</td><td>기록 SID 토큰열을 읽고 다음 SID의 c1 · c2 · c3 확률을 냄. 후보 점수 S = L1 + L2 + L3 (L = 후보 SID의 level별 log-prob)</td><td>후보 5개 점수 S에 listwise cross-entropy (정답이 오답보다 높도록). 9장 NRMS loss와 같은 형태</td></tr>
+    <tr><td><b>Transformer V1</b> (우리 모델)</td><td>T5식 encoder-decoder(d256, 8 head, 2층, d_ff 1024). encoder가 기록 기사 최근 50개의 c1 c2 c3 c4 토큰열을 읽고, decoder가 후보 SID를 [BOS, c1, c2] → c1, c2, c3 순서로 따라가며 level별 확률을 냄(level마다 별도 임베딩·출력 head). 후보 점수 S = L1 + L2 + L3 = log P(c1) + log P(c2 | c1) + log P(c3 | c1, c2)</td><td>후보 5개 점수 S에 listwise cross-entropy (정답이 오답보다 높도록). 9장 NRMS loss와 같은 형태</td></tr>
     <tr><td>V1 + level 가중치</td><td>S = 1·L1 + 0.5·L2 + 0.1·L3 (재학습 없이 점수만 다시 계산)</td><td>V1과 같음. 가중치는 validation half에서 격자로 고른 값</td></tr>
-    <tr><td>공개 TIGER (생성형)</td><td>같은 S = L1 + L2 + L3</td><td>다음 클릭 기사 SID를 생성하는 cross-entropy만 학습 (오답 후보를 쓰지 않음)</td></tr>
+    <tr><td>TIGER 비공식 재현 구현 (생성형)</td><td>같은 S = L1 + L2 + L3</td><td>다음 클릭 기사 SID를 생성하는 cross-entropy만 학습 (오답 후보를 쓰지 않음). TIGER 논문(Rajput et al., NeurIPS 2023, Google) 저자는 코드를 공개하지 않았고, 이것은 개인 연구자가 GitHub에 공개한 PyTorch 재현 구현입니다(MIT, 커밋 957d32b). 우리 RQ-VAE 코드의 원본 저장소이기도 합니다.</td></tr>
   </table></div>
   <h3 class="g">결과 (Test 122,668행)</h3>
   <div class="tw"><table>
     <tr><th>모델</th><th class="n">Top-1</th><th class="n">MRR</th><th class="n">nDCG@5</th><th class="n">AUC</th><th>seed</th></tr>
     <tr class="hl"><td><b>Transformer V1 + UNI SID</b></td><td class="n"><b>27.07%</b></td><td class="n">0.518</td><td class="n">0.637</td><td class="n">0.579</td><td>42</td></tr>
     <tr class="hl"><td><b>V1 + level 가중치 (1, 0.5, 0.1)</b></td><td class="n"><b>29.46%</b></td><td class="n">0.538</td><td class="n">0.652</td><td class="n">0.603</td><td>42</td></tr>
-    <tr><td>공개 TIGER (EdoardoBotta/RQ-VAE-Recommender, 수정 없음) + UNI SID</td><td class="n">17.36%</td><td class="n">0.440</td><td class="n">0.577</td><td class="n">0.487</td><td>42</td></tr>
+    <tr><td>TIGER 비공식 재현 구현 (EdoardoBotta/RQ-VAE-Recommender, 수정 없음) + UNI SID</td><td class="n">17.36%</td><td class="n">0.440</td><td class="n">0.577</td><td class="n">0.487</td><td>42</td></tr>
     <tr><td>(참고) NRMS 원 논문 구조 + E5 (9장)</td><td class="n">29.92%</td><td class="n">0.543</td><td class="n">0.656</td><td class="n">0.609</td><td>3개 평균</td></tr>
     <tr><td>(참고) NRMS 원 논문 구조 + SID (9장)</td><td class="n">26.09%</td><td class="n">0.511</td><td class="n">0.631</td><td class="n">0.571</td><td>3개 평균</td></tr>
     <tr><td>무작위</td><td class="n">20.00%</td><td class="n">—</td><td class="n">—</td><td class="n">0.500</td><td>이론값</td></tr>
@@ -966,8 +966,9 @@ epoch 2~5: 반복</pre>
   <ul>
     <li><b>V1은 SID만으로 무작위보다 확실히 잘 추천합니다</b>: 27.07%(+7.1%p). 같은 SID를 쓴 NRMS(26.09%)보다 약간 높고, level 가중치를 주면 29.46%로 E5를 쓴 NRMS(29.92%)에 가까워집니다. 모델이 달라 직접 비교는 아니고 수준 비교입니다.</li>
     <li><b>level 가중치가 효과 있는 이유</b>: c3 점수(L3)를 작게 반영할수록 좋아집니다. c3는 기사 수준의 세부 코드라 새 기사에 잘 일반화되지 않기 때문입니다(아래 TIGER level별 결과와 같은 현상). 가중치는 validation half로 골랐고 test에서도 +2.4%p가 유지됐습니다.</li>
-    <li><b>공개 TIGER는 무작위보다 낮습니다</b>(Top-1 17.36% &lt; 20%, AUC 0.487 &lt; 0.5). 우리가 만든 TIGER-style(EventC2 SID, 16.77%)과 같은 양상이라 구현 문제가 아닙니다.
+    <li><b>TIGER 재현 구현은 무작위보다 낮습니다</b>(Top-1 17.36% &lt; 20%, AUC 0.487 &lt; 0.5). 우리가 만든 TIGER-style(EventC2 SID, 16.77%)과 같은 양상이라 구현 문제가 아닙니다.
       <ul>
+        <li>TIGER가 무작위보다 낮다고 TIGER 방법 자체가 틀렸다는 뜻은 아닙니다. 논문은 상품 추천(Amazon)처럼 같은 아이템이 반복해서 나오는 데이터였고, 평가도 전체 아이템에서 생성하는 Recall@K였습니다. 우리는 후보 5개 비교(1P4N)라는 다른 과제에 그대로 썼습니다.</li>
         <li>원인: test 정답 기사 중 train에서 클릭된 적 있는 것은 <b>1.7%</b>, 오답은 <b>12.2%</b>. 생성형 학습은 train에서 본 기사(SID)에 확률을 몰아주므로 오답을 더 높게 봅니다.</li>
         <li>level별: c1만 쓰면 Top-1 23.0%, c1+c2 23.7%(무작위보다 조금 나음), c3까지 더하면 17.4%로 떨어짐. 카테고리·주제 수준 선호는 새 기사에도 일반화되지만, 기사 수준(c3)은 일반화되지 않습니다.</li>
         <li>V1은 같은 SID 점수 구조지만 <b>후보 5개(정답 + 오답)로 순위를 학습</b>하기 때문에 이 문제를 피합니다.</li>
