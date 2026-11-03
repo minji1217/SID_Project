@@ -301,6 +301,15 @@ code{overflow-wrap:anywhere;word-break:break-all;background:var(--code);padding:
 <section class="card" id="diff">
   <h2>11. 지금 코드(백여민 코드, UNI SID)와 다른 점</h2>
   <div class="one">설계와 다른 곳은 두 군데입니다. <b>(A) Train c2를 기사마다 정함</b>이 핵심이고, <b>(B) 새 사건 c2를 전체 평균으로 정함</b>은 영향이 작습니다. 나머지는 설계를 따릅니다.</div>
+  <div class="box" style="border-left:3px solid var(--warn);margin:10px 0 14px"><h4>RQ-VAE·SID 쪽 핵심 차이는 두 가지</h4><p>
+<b>① 새 사건(validation-only)의 c2</b><br>
+설계: 시간 창(72시간)과 개체 유사도(개체 집합의 IDF 가중 Jaccard)를 만족하는 사건이 없어 새 사건을 만들면, z(E) = 첫 기사의 h로 c2를 정하고 고정한다. 이후 기사가 추가돼도 z(E)·c2는 그대로이고, 개체 집합과 최신성(마지막 기사 시각)에는 추가된 기사가 반영된다.<br>
+코드: c2를 그 사건 validation 기사들 h의 <b>평균</b>으로 정한다 (사건 배정이 다 끝난 뒤 한 번 계산, 영향 159개 = 5.1%).<br><br>
+<b>② 학습 중 c2</b><br>
+설계: 같은 사건 기사들은 h 평균 z(E)의 argmin으로 <b>같은 c2</b>를 받는다 (codebook·commitment loss도 사건 단위).<br>
+코드: 기사마다 각자 <b>r1 = h − q1</b>의 argmin으로 c2를 받는다 (r2 = r1 − q2는 c3용).<br><br>
+②에서 따라 나오는 것(②를 고치면 함께 해결): Validation이 물려받는 Train 사건 코드가 그 사건 Train 기사들의 c2와 다를 수 있음 · Q2는 r1로 배웠는데 사건 코드는 mean(h)로 검색.<br>
+용어 주의: 사건 묶기의 유사도는 본문 TF-IDF가 아니라 <b>개체 집합의 IDF 가중 Jaccard</b>입니다(TF-IDF cosine은 SID 평가 지표).</p></div>
   <div class="tw"><table>
     <tr><th>항목</th><th>원래 설계</th><th>지금 코드</th><th>판정</th></tr>
     <tr><td>c1</td><td>카테고리 고정</td><td>카테고리 고정</td><td><span class="tag good">같음</span></td></tr>
