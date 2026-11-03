@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>백여민 코드 동작</title>
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f1f3f6; --ink:#16181d; --ink-2:#4a5160; --ink-3:#6b7280;
+  --line:#e2e5ea; --accent:#2556c4; --accent-soft:#e8eefb; --good:#17794a; --good-soft:#e5f4ec;
+  --warn:#9a5b00; --warn-soft:#fbf1e1; --code:#eef1f5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111317; --surface:#181b21; --surface-2:#1f232a; --ink:#e9ebef; --ink-2:#b4bac5; --ink-3:#8b93a1;
+    --line:#2b3039; --accent:#7ea3ff; --accent-soft:#1d2840; --good:#5fcf95; --good-soft:#15291f;
+    --warn:#f0b35a; --warn-soft:#2d2415; --code:#232832;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111317; --surface:#181b21; --surface-2:#1f232a; --ink:#e9ebef; --ink-2:#b4bac5; --ink-3:#8b93a1;
+  --line:#2b3039; --accent:#7ea3ff; --accent-soft:#1d2840; --good:#5fcf95; --good-soft:#15291f;
+  --warn:#f0b35a; --warn-soft:#2d2415; --code:#232832;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:15.5px/1.72 "Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;word-break:keep-all}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 16px 80px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:36px}
+nav{position:sticky;top:20px;align-self:start;font-size:13.5px}
+nav .h{font-weight:700;color:var(--ink-3);font-size:12px;letter-spacing:.04em;margin:0 0 8px}
+nav a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent}
+nav a:hover{background:var(--surface-2);color:var(--ink)}
+main{min-width:0}
+header h1{font-size:28px;line-height:1.3;margin:0 0 8px}
+header p.lead{color:var(--ink-2);margin:0 0 20px;font-size:16px}
+h2{font-size:22px;margin:0 0 6px;line-height:1.35}
+h3{font-size:16px;margin:22px 0 8px}
+section.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:26px 28px;margin:0 0 26px;scroll-margin-top:16px}
+.tag{display:inline-block;font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:2px 9px;border-radius:999px;margin-right:6px;vertical-align:middle}
+.tag.good{color:var(--good);background:var(--good-soft)}
+.tag.warn{color:var(--warn);background:var(--warn-soft)}
+.one{font-size:16.5px;color:var(--ink);background:var(--surface-2);border-left:3px solid var(--accent);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0 6px}
+figure{margin:16px 0 4px}
+figure img{width:100%;height:auto;border:1px solid var(--line);border-radius:10px;display:block;background:#fff}
+figcaption{font-size:12.5px;color:var(--ink-3);margin-top:6px}
+table{border-collapse:collapse;width:100%;margin:10px 0 6px;font-size:14px}
+.tw{overflow-x:auto}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-weight:700;color:var(--ink-2);white-space:nowrap}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.hl td{background:var(--accent-soft)}
+ol,ul{padding-left:22px;margin:8px 0}
+li{margin:4px 0}
+code{overflow-wrap:anywhere;word-break:break-all;background:var(--code);padding:1px 6px;border-radius:5px;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.note{background:var(--warn-soft);border-radius:10px;padding:12px 16px;margin:14px 0 4px;font-size:14.5px}
+.note b{color:var(--warn)}
+.ok{background:var(--good-soft);border-radius:10px;padding:12px 16px;margin:14px 0 4px;font-size:14.5px}
+.ok b{color:var(--good)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.box{background:var(--surface-2);border-radius:10px;padding:12px 16px}
+.box h4{margin:0 0 4px;font-size:14px}
+.box p{margin:0;font-size:14px;color:var(--ink-2)}
+.src{font-size:13px;color:var(--ink-3);margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+.flow span{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13.5px}
+.flow i{font-style:normal;color:var(--ink-3)}
+@media (max-width:860px){
+  .wrap{grid-template-columns:1fr;gap:0}
+  nav{position:static;margin-bottom:18px;display:flex;flex-wrap:wrap;gap:4px}
+  nav .h{width:100%}
+  nav a{border-left:0;background:var(--surface);border:1px solid var(--line)}
+  section.card{padding:20px 18px}
+  .grid2{grid-template-columns:1fr}
+}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <p class="h">목차</p>
+  <a href="#sum">0. 한눈에 보기</a>
+  <a href="#files">1. 코드 구성</a>
+  <a href="#input">2. 입력 (전처리)</a>
+  <a href="#train">3. RQ-VAE 학습</a>
+  <a href="#sid">4. SID 생성</a>
+  <a href="#eval">5. SID 평가 모듈</a>
+  <a href="#tf">6. Transformer</a>
+  <a href="#uni">7. UNI 실험에서 바꾼 것</a>
+  <a href="#cmp">8. 원래 설계와 비교</a>
+  <a href="#event">9. 사건 묶기의 성질</a>
+</nav>
+<main>
+<header>
+  <h1>백여민 코드의 동작 방식 (EB-NeRD)</h1>
+  <p class="lead">백여민 코드(<code>minji1217/SID_Project-transformer</code>의 <code>main</code>, 커밋 <code>14f7ca0</code>, 받은 zip과 파일 37개 동일)가 실제로 어떻게 동작하는지 파일과 함수 기준으로 정리했습니다. 원래 설계는 「SID_원래아이디어_E2E」 문서에 있고, 8절에서 둘을 비교합니다.</p>
+</header>
+
+<section class="card" id="sum">
+  <h2>0. 한눈에 보기</h2>
+  <figure><svg viewBox='0 0 1000 330' role='img' aria-label='백여민 코드 흐름' style='width:100%;height:auto;display:block'><defs><marker id='ar' viewBox='0 0 10 10' refX='9' refY='5' markerWidth='7' markerHeight='7' orient='auto-start-reverse'><path d='M0 0L10 5L0 10z' fill='var(--ink-3)'/></marker></defs><rect x='16' y='14' width='178' height='128' rx='10' fill='none' stroke='var(--chart-axis, var(--ink-3))' stroke-width='1.5' stroke-dasharray='5 4'/><text x='26' y='35' font-size='13' font-weight='700' fill='var(--ink)'>전처리 (다른 코드)</text><text x='26' y='54' font-size='11.5' fill='var(--ink-2)'>E5 x(a), c1 번호</text><text x='26' y='70' font-size='11.5' fill='var(--ink-2)'>Train 사건: union-find</text><text x='26' y='86' font-size='11.5' fill='var(--ink-2)'>Validation 사건: 시간순</text><text x='26' y='102' font-size='11.5' fill='var(--ink-2)'>→ event_id 미리 배정</text><path d='M194 78.0 L211 78.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)'/><rect x='211' y='14' width='178' height='128' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='221' y='35' font-size='13' font-weight='700' fill='var(--ink)'>Q2 초기화</text><text x='221' y='54' font-size='11.5' fill='var(--ink-2)'>학습 전 인코더로 h</text><text x='221' y='70' font-size='11.5' fill='var(--ink-2)'>Train 사건 mean(h)</text><text x='221' y='86' font-size='11.5' fill='var(--ink-2)'>9,145개 → K-means</text><text x='221' y='102' font-size='11.5' fill='var(--ink-2)'>→ Q2 초기값</text><path d='M389 78.0 L406 78.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)'/><rect x='406' y='14' width='178' height='128' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='416' y='35' font-size='13' font-weight='700' fill='var(--ink)'>RQ-VAE 학습</text><text x='416' y='54' font-size='11.5' fill='var(--ink-2)'>h → q1 = Q1[카테고리]</text><text x='416' y='70' font-size='11.5' fill='var(--ink-2)'>r1 = h − q1 → 기사별 c2</text><text x='416' y='86' font-size='11.5' fill='var(--ink-2)'>r2 → c3, x̂ 복원</text><text x='416' y='102' font-size='11.5' fill='var(--ink-2)'>loss: 복원·cb·commit</text><path d='M584 78.0 L601 78.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)'/><rect x='601' y='14' width='178' height='128' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='611' y='35' font-size='13' font-weight='700' fill='var(--ink)'>Train SID</text><text x='611' y='54' font-size='11.5' fill='var(--ink-2)'>기사별 c2·c3</text><text x='611' y='70' font-size='11.5' fill='var(--ink-2)'>Train 사건 코드 =</text><text x='611' y='86' font-size='11.5' fill='var(--ink-2)'>Q2(mean h) 따로 계산</text><path d='M779 78.0 L796 78.0' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)'/><rect x='796' y='14' width='178' height='128' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='806' y='35' font-size='13' font-weight='700' fill='var(--ink)'>Validation SID</text><text x='806' y='54' font-size='11.5' fill='var(--ink-2)'>Train 사건 → 사건 코드</text><text x='806' y='70' font-size='11.5' fill='var(--ink-2)'>새 사건 → 전체 mean(h)</text><text x='806' y='86' font-size='11.5' fill='var(--ink-2)'>→ Q2 최근접</text><text x='806' y='102' font-size='11.5' fill='var(--ink-2)'>c3, c4 부여</text><rect x='16' y='192' width='178' height='110' rx='10' fill='none' stroke='var(--chart-axis, var(--ink-3))' stroke-width='1.5' stroke-dasharray='5 4'/><text x='26' y='213' font-size='13' font-weight='700' fill='var(--ink)'>1P4N·순서 섞기</text><text x='26' y='232' font-size='11.5' fill='var(--ink-2)'>후보 5개 구성</text><text x='26' y='248' font-size='11.5' fill='var(--ink-2)'>(다른 코드)</text><path d='M194 247 L211 247' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)'/><rect x='211' y='192' width='178' height='110' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='221' y='213' font-size='13' font-weight='700' fill='var(--ink)'>split_validation</text><text x='221' y='232' font-size='11.5' fill='var(--ink-2)'>Validation 시간순</text><text x='221' y='248' font-size='11.5' fill='var(--ink-2)'>50:50 → half / test</text><path d='M389 247 L406 247' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)'/><rect x='406' y='192' width='178' height='110' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='416' y='213' font-size='13' font-weight='700' fill='var(--ink)'>Transformer 학습</text><text x='416' y='232' font-size='11.5' fill='var(--ink-2)'>history c1~c4 → T5 enc</text><text x='416' y='248' font-size='11.5' fill='var(--ink-2)'>후보 [BOS,c1,c2] → dec</text><text x='416' y='264' font-size='11.5' fill='var(--ink-2)'>5지선다 CE</text><path d='M584 247 L601 247' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)'/><rect x='601' y='192' width='178' height='110' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='611' y='213' font-size='13' font-weight='700' fill='var(--ink)'>predict · metrics</text><text x='611' y='232' font-size='11.5' fill='var(--ink-2)'>후보 점수</text><text x='611' y='248' font-size='11.5' fill='var(--ink-2)'>log P(c1)+P(c2)+P(c3)</text><text x='611' y='264' font-size='11.5' fill='var(--ink-2)'>Top-1·MRR·nDCG·AUC</text><rect x='796' y='192' width='178' height='110' rx='10' fill='var(--accent-soft)' stroke='var(--accent)' stroke-width='1.5'/><text x='806' y='213' font-size='13' font-weight='700' fill='var(--ink)'>evaluate/*.py</text><text x='806' y='232' font-size='11.5' fill='var(--ink-2)'>SID 평가 6종</text><text x='806' y='248' font-size='11.5' fill='var(--ink-2)'>c2 일치율·collision 등</text><path d='M885.0 142 L105.0 192' stroke='var(--ink-3)' stroke-width='1.5' fill='none' marker-end='url(#ar)'/><path d='M885.0 142 L885.0 192' stroke='var(--ink-3)' stroke-width='1.5' fill='none' stroke-dasharray='4 4' marker-end='url(#ar)'/></svg><figcaption>백여민 코드의 흐름 · 파란 상자가 백여민 코드, 점선 상자는 다른 코드</figcaption></figure>
+  <div class="one">구조는 원래 설계와 같지만, <b>c2를 학습할 때 사건 단위가 아니라 기사마다 따로 고른다</b>는 점이 가장 큰 차이입니다. 사건 평균 z(E)는 코드북 초기값을 정할 때와, Validation 기사가 물려받을 사건 코드를 만들 때만 쓰입니다.</div>
+</section>
+
+<section class="card" id="files">
+  <h2>1. 코드 구성</h2>
+  <div class="tw"><table>
+    <tr><th>폴더 / 파일</th><th>하는 일</th></tr>
+    <tr><td><code>RQVAE/modules/encoder.py</code>, <code>quantize.py</code>, <code>rqvae.py</code>, <code>loss.py</code></td><td>인코더·디코더(MLP), 코드북(Quantize, STE), RQ-VAE 전체 forward, loss</td></tr>
+    <tr><td><code>RQVAE/init/kmeans.py</code></td><td>K-means로 코드북 초기값 계산</td></tr>
+    <tr><td><code>RQVAE/train_rqvae.py</code></td><td>학습 루프 (Q2 초기화 → 학습 → 주기적 평가·저장)</td></tr>
+    <tr><td><code>RQVAE/generate_semantic_ids.py</code></td><td>학습된 모델로 Train·Validation SID 생성, c4 부여</td></tr>
+    <tr><td><code>RQVAE/evaluate/*.py</code></td><td>SID 평가 6종 (c1 정확도, 사건 c2 일치율, 코드 사용량, collision, 복원, 의미 유사도)</td></tr>
+    <tr><td><code>RQVAE/configs/rqvae_ebnerd.gin</code></td><td>RQ-VAE 기본 설정</td></tr>
+    <tr><td><code>Transformer/split_validation.py</code></td><td>Validation을 시간순 50:50으로 validation half / test 분할</td></tr>
+    <tr><td><code>Transformer/data/sequence.py</code></td><td>1P4N parquet → history SID, 후보 SID, 정답 위치</td></tr>
+    <tr><td><code>Transformer/modules/model.py</code>, <code>loss.py</code></td><td>T5 encoder-decoder, 후보 점수 log P(c1)+log P(c2|c1)+log P(c3|c1,c2), 5지선다 CE</td></tr>
+    <tr><td><code>Transformer/train_transformer.py</code>, <code>predict_sid.py</code>, <code>evaluate/metrics.py</code></td><td>학습, test 예측, Top-1·MRR·nDCG·AUC 등</td></tr>
+  </table></div>
+</section>
+
+<section class="card" id="input">
+  <h2>2. 입력 — 전처리가 넘겨주는 것 (백여민 코드 아님)</h2>
+  <div class="tw"><table>
+    <tr><th>파일</th><th>내용</th></tr>
+    <tr><td><code>article_master.parquet</code></td><td>Train 기사 9,738개: article_id, embedding_row, model_category_id(c1), <b>event_id</b>, published_time, model_text</td></tr>
+    <tr><td><code>validation_article_master.parquet</code></td><td>Validation 전용 기사 3,122개, 같은 컬럼. <b>event_id는 전처리에서 이미 배정됨</b></td></tr>
+    <tr><td><code>article_embeddings.npy</code></td><td>E5(<code>multilingual-e5-base</code>, “query: 제목 부제목”) 768차원 x(a)</td></tr>
+  </table></div>
+  <p>사건 배정 규칙: EB-NeRD 제공 NER 개체, IDF 가중 Jaccard ≥ 0.3, 72시간. Train은 union-find로 한꺼번에, Validation은 발행 순서대로 하나씩(개체 집합 합치기, 마지막 시각 갱신). RQ-VAE 코드는 event_id를 받아서 쓰기만 합니다.</p>
+</section>
+
+<section class="card" id="train">
+  <h2>3. RQ-VAE 학습 (<code>train_rqvae.py</code>) — Train 기사만</h2>
+  <h3>3-1. 학습 시작 전: Q2 코드북 초기화</h3>
+  <ol>
+    <li>모델을 만들면 Q1·Q2·Q3 코드북은 작은 범위(±1/코드 수)의 무작위 값으로 시작합니다.</li>
+    <li><code>initialize_c2_codebook</code>: Train 기사 전부를 <b>아직 학습 안 된 인코더</b>에 통과시켜 h를 구하고, Train 사건마다 <b>z(E) = mean(h)</b>를 계산합니다(사건 9,145개).</li>
+    <li>z(E) 9,145개에 K-means(K = Q2 크기, n_init 10)를 돌려 나온 중심점으로 Q2 코드북을 채웁니다.</li>
+  </ol>
+  <div class="note"><b>여기가 사건 정보가 학습에 들어가는 유일한 지점입니다.</b> 이후 학습 중에는 사건을 보지 않습니다. 또 초기화는 h 공간(mean(h))에서 했는데, 학습 중 Q2가 받는 입력은 r1 = h − q1입니다.</div>
+  <h3>3-2. 학습 step (<code>RqVae.forward</code>)</h3>
+  <div class="flow"><span>x (768)</span><i>→</i><span>encoder 768→512→d = h</span><i>→</i><span>q1 = Q1[카테고리]</span><i>→</i><span>r1 = h − q1 → <b>기사마다</b> Q2 최근접 = c2, q2</span><i>→</i><span>r2 = r1 − q2 → Q3 최근접 = c3, q3</span><i>→</i><span>x̂ = decoder(q1+q2+q3)</span></div>
+  <ul>
+    <li><b>c1</b>: 카테고리 번호를 정답으로 고정(<code>fixed_ids=category_ids</code>), q1 벡터만 학습</li>
+    <li><b>c2</b>: 같은 사건이어도 기사마다 r1에 가장 가까운 코드를 따로 고름. 그래서 같은 사건의 기사가 서로 다른 c2를 받을 수 있음</li>
+    <li><b>c3</b>: r2 = h − q1 − q2에 가장 가까운 코드</li>
+    <li>코드 선택은 STE(straight-through): 가장 가까운 코드를 고르고 gradient는 그대로 통과</li>
+  </ul>
+  <h3>3-3. loss (<code>loss.py</code>)</h3>
+  <div class="box"><p>loss = λ_rec · ‖x̂ − x‖² + λ_cb · Σ‖sg[입력] − 코드‖² + λ_com · Σ‖입력 − sg[코드]‖²<br>
+  sg = 그 쪽은 학습하지 않음(detach). codebook loss는 코드를 입력 쪽으로, commitment loss는 인코더 출력을 코드 쪽으로 당깁니다. 레벨(c1·c2·c3)마다 계산해 더합니다.<br>
+  기본값: λ_rec 1.0, λ_cb 1.0, λ_com 0.25</p></div>
+  <h3>3-4. 학습 설정 (<code>rqvae_ebnerd.gin</code> 기본값)</h3>
+  <div class="tw"><table>
+    <tr><th>항목</th><th>값</th></tr>
+    <tr><td>인코더</td><td>768 → 512 → 256 (latent 256)</td></tr>
+    <tr><td>코드북</td><td>Q1 25 (카테고리) · Q2 128 · Q3 256</td></tr>
+    <tr><td>optimizer</td><td>AdamW lr 1e-4, weight decay 0.01, batch 256</td></tr>
+    <tr><td>길이</td><td>1,283 epoch 고정 (early stopping 없음), 10 epoch마다 Train·Validation loss 출력, 50 epoch마다 저장</td></tr>
+    <tr><td>최종 모델</td><td>마지막 epoch checkpoint</td></tr>
+  </table></div>
+</section>
+
+<section class="card" id="sid">
+  <h2>4. SID 생성 (<code>generate_semantic_ids.py</code>) — 학습 끝난 모델 고정</h2>
+  <div class="tw"><table>
+    <tr><th>대상</th><th>c2</th><th>c3</th><th>함수</th></tr>
+    <tr><td>Train 기사</td><td>학습 때처럼 <b>기사마다</b> r1의 Q2 최근접</td><td>r2의 Q3 최근접</td><td><code>generate_train_semantic_ids</code></td></tr>
+    <tr><td>(준비) Train 사건 코드</td><td>Train 사건마다 mean(h) → <b>Q2에 그대로</b> 넣어 최근접 = “사건 코드”</td><td>—</td><td><code>build_train_event_c2_mapping</code></td></tr>
+    <tr><td>Validation 기사, Train 사건 소속 (32개)</td><td>그 Train 사건 코드를 물려받음</td><td>h − q1 − q2(물려받은 코드)의 Q3 최근접</td><td><code>build_validation_event_c2_mapping</code></td></tr>
+    <tr><td>Validation 기사, 새 사건 소속 (3,090개)</td><td>새 사건의 validation 기사 <b>전체</b> mean(h) → Q2 최근접</td><td>같은 방식</td><td>같은 함수 → <code>compute_event_c2_from_mean_h</code></td></tr>
+  </table></div>
+  <ul>
+    <li><b>c4</b>: Train·Validation 전체에서 같은 (c1, c2, c3)를 받은 기사끼리 순번(0, 1, 2, …). 의미 없는 구분 번호입니다.</li>
+    <li>결과: <code>article_semantic_ids.parquet</code> (article_id, embedding_row, event_id, split, c1, c2, c3, c4)</li>
+  </ul>
+  <div class="note"><b>주의할 점</b> · ① Validation이 물려받는 “사건 코드”는 mean(h)로 따로 계산한 값이라, 그 사건의 Train 기사들이 실제로 받은 기사별 c2와 다를 수 있습니다. ② Q2는 학습 때 r1 = h − q1을 받았는데 사건 코드는 mean(h)를 그대로 넣어 찾습니다(코드에서 <code>quantizer_2(z_events)</code> 확인). ③ 새 사건 c2는 사건이 다 모인 뒤 전체 평균으로 정하므로 나중 기사의 정보를 씁니다(영향 기사 159개, 5.1%).</div>
+</section>
+
+<section class="card" id="eval">
+  <h2>5. SID 평가 모듈 (<code>evaluate/evaluate_all.py</code>)</h2>
+  <div class="tw"><table>
+    <tr><th>파일</th><th>무엇을 재나</th></tr>
+    <tr><td><code>eval_c1_sanity.py</code></td><td>c1이 카테고리 번호와 같은가 (정의상 100%)</td></tr>
+    <tr><td><code>eval_c2_event_consistency.py</code></td><td>같은 사건 기사들이 같은 c2를 받았나 (사건 안에서 가장 많은 c2의 비율, 기사 1개 사건 제외)</td></tr>
+    <tr><td><code>eval_codebook_usage.py</code></td><td>Q2·Q3 코드 중 한 번이라도 쓰인 코드 수</td></tr>
+    <tr><td><code>eval_sid_collision.py</code></td><td>서로 다른 기사가 (c1,c2,c3)까지 같은 비율</td></tr>
+    <tr><td><code>eval_reconstruction.py</code></td><td>Train·Validation 복원 loss 평균</td></tr>
+    <tr><td><code>eval_semantic_similarity.py</code></td><td>같은 c1 안에서 같은 c2 기사끼리 vs 다른 c2 기사끼리 원본 임베딩 cosine 차이(ΔC2), c3도 같은 방식(ΔC3)</td></tr>
+  </table></div>
+</section>
+
+<section class="card" id="tf">
+  <h2>6. Transformer (<code>Transformer/</code>)</h2>
+  <h3>6-1. 데이터</h3>
+  <ul>
+    <li><code>split_validation.py</code>: Validation 1P4N의 impression을 시간순으로 정렬해 앞 절반 = validation half, 뒤 절반 = test.</li>
+    <li><code>sequence.py</code>: 행마다 history 기사들의 (c1, c2, c3, c4), 후보 5개의 (c1, c2, c3), 정답 위치. history가 빈 행은 제외. history 길이 기본 20(최근 기사부터).</li>
+  </ul>
+  <h3>6-2. 모델 (<code>model.py</code>)</h3>
+  <ol>
+    <li>history 기사마다 c1·c2·c3·c4 토큰 임베딩(+ 선택: SEP 토큰) → T5 encoder</li>
+    <li>후보마다 decoder 입력 [BOS, c1, c2] → 위치별로 c1, c2, c3 확률</li>
+    <li>후보 점수 = log P(c1) + log P(c2|c1) + log P(c3|c1,c2) (c4는 점수에 안 씀)</li>
+  </ol>
+  <h3>6-3. 학습·평가</h3>
+  <ul>
+    <li>loss: 후보 5개 점수에 softmax → 정답 후보의 cross entropy (<code>TransformerLoss</code>, λ_preference 1.0)</li>
+    <li>기본 설정: d_model 384, head 6, layer 4, d_ff 1024, dropout 0.1, SEP 사용, lr 1e-4, weight decay 0.01, batch 128, 30 epoch, patience 5, gradient clip 1.0</li>
+    <li><code>predict_sid.py</code> + <code>metrics.py</code>: test 후보 점수 저장, Top-1·MRR·nDCG@5·AUC·Preference Loss·Positive Probability</li>
+  </ul>
+  <div class="note"><b>원래 설계와의 차이</b> · 설계는 다음 SID를 생성하고 현재 후보와 그라운딩하는 방식인데, 이 코드는 주어진 후보 5개에 생성 확률로 점수를 매겨 순위를 냅니다.</div>
+</section>
+
+<section class="card" id="uni">
+  <h2>7. UNI 실험(보고서 기준)에서 백여민 코드에 더하거나 바꾼 것</h2>
+  <div class="tw"><table>
+    <tr><th>항목</th><th>백여민 기본</th><th>UNI 실험</th><th>누가</th></tr>
+    <tr><td>uniqueness loss</td><td>없음</td><td>λ 0.05, margin 0.5</td><td>정민교 (09-08)</td></tr>
+    <tr><td>latent / Q3</td><td>256 / 256</td><td>128 / 512</td><td>WD-001 설정</td></tr>
+    <tr><td>λ_cb / λ_com, lr, weight decay</td><td>1.0 / 0.25, 1e-4, 0.01</td><td>0.25 / 0.1, 2e-4, 0.0</td><td>WD-001 설정</td></tr>
+    <tr><td>학습 길이·모델 선택</td><td>1,283 epoch, 마지막 checkpoint</td><td>early stopping, Validation 복원 loss 최저(epoch 180)</td><td>저장소 <code>main</code>(09-01)부터</td></tr>
+    <tr><td>Transformer 설정</td><td>d384·6 head·4층, history 20, SEP, lr 1e-4</td><td>d256·8 head·2층, history 50, SEP 없음, lr 5e-5, dropout 0, wd 0</td><td>84-run 탐색</td></tr>
+  </table></div>
+  <p>RQ-VAE의 c2를 정하는 방식(기사별 학습, 사건 코드 상속, 새 사건 평균)은 UNI에서도 그대로입니다.</p>
+</section>
+
+<section class="card" id="cmp">
+  <h2>8. 원래 설계와 비교</h2>
+  <div class="tw"><table>
+    <tr><th>항목</th><th>원래 설계</th><th>백여민 코드</th><th>판정</th></tr>
+    <tr><td>c1</td><td>카테고리 고정</td><td>카테고리 고정</td><td><span class="tag good">같음</span></td></tr>
+    <tr class="hl"><td>Train c2 (학습)</td><td>사건 단위 z(E) = mean(h) → 같은 사건 = 같은 c2, 매 step 다시 계산</td><td>z(E)는 학습 전 Q2 초기화에만. 학습 중엔 기사마다 r1 최근접</td><td><span class="tag warn">다름</span> 사건 c2 일치율 74%</td></tr>
+    <tr><td>c2 codebook·commitment loss</td><td>사건 단위</td><td>기사 단위</td><td><span class="tag warn">다름</span></td></tr>
+    <tr><td>Train 사건 c2 상속</td><td>Train 사건 c2 상속</td><td>mean(h)로 따로 계산한 사건 코드 상속</td><td><span class="tag warn">규칙은 같음</span>, 값이 Train 기사 c2와 다를 수 있음</td></tr>
+    <tr class="hl"><td>새 사건 c2</td><td>첫 기사 h → 최근접, 고정</td><td>소속 기사 전체 mean(h) → 최근접</td><td><span class="tag warn">다름</span> 159개(5.1%)</td></tr>
+    <tr><td>c3</td><td>h − (q1 + q2)</td><td>h − q1 − q2</td><td><span class="tag good">같음</span></td></tr>
+    <tr><td>c4</td><td>없음</td><td>같은 (c1,c2,c3) 안 순번</td><td>구현에서 추가</td></tr>
+    <tr><td>추천</td><td>SID 생성 + 후보 그라운딩</td><td>후보 5개를 생성 확률로 순위</td><td><span class="tag warn">다름</span></td></tr>
+  </table></div>
+  <p>c2 관련 차이는 모두 “학습에서 c2를 기사마다 고른다” 하나에서 나옵니다. 이 부분을 사건 단위로 바꿔 다시 학습한 것이 EventC2 실험입니다(사건 c2 일치율 100%, 대신 c3 코드 절반만 사용·collision 52%).</p>
+</section>
+
+<section class="card" id="event">
+  <h2>9. 사건 묶기의 성질 — 알고 쓰면 좋은 점 (전처리 규칙, 설계와 같음)</h2>
+  <ul>
+    <li><b>새 사건에도 이후 기사가 합쳐집니다.</b> 비교 대상은 첫 기사 하나가 아니라, 지금까지 합쳐진 기사들의 <b>개체를 모두 합친 집합</b>과 <b>가장 최근 기사</b>의 시각입니다.</li>
+    <li><b>사건이 번질 수 있습니다.</b> A–B, B–C만 비슷해도 A·B·C가 한 사건이 됩니다(Train의 union-find, Validation의 개체 합집합 모두). 후속 기사가 72시간 안에 계속 이어지면 사건은 계속 살아 있습니다.</li>
+    <li><b>큰 사건일수록 들어가기 어려워집니다.</b> Jaccard의 분모(합친 개체)가 커져서, 같은 기사라도 사건이 클수록 유사도가 낮게 나옵니다.</li>
+    <li><b>소속은 넓어지는데 c2는 첫 기사로 고정</b>(설계 기준)이라, 사건이 첫 기사와 다른 방향으로 커지면 c2가 사건을 덜 대표합니다. SID를 바꾸지 않기 위한 의도된 맞바꿈입니다.</li>
+    <li>보완 아이디어: 개체 집합 크기 제한(처음 몇 기사, 또는 IDF 높은 핵심 개체만), 사건 수명 상한, 사건 크기에 덜 민감한 유사도(새 기사 개체 중 겹치는 비율 등).</li>
+  </ul>
+</section>
+</main>
+</div>
+</body>
+</html>
