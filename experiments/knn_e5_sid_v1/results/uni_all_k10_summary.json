@@ -1,0 +1,39 @@
+{
+  "sid": "/root/.claude/uploads/203c7aef-bdd1-56e1-807f-a98088550c89/deb24666-article_semantic_ids.parquet",
+  "embeddings": [
+    "/root/.claude/uploads/203c7aef-bdd1-56e1-807f-a98088550c89/16259c8c-emb_part0.npy",
+    "/root/.claude/uploads/203c7aef-bdd1-56e1-807f-a98088550c89/3296e7ad-emb_part1.npy",
+    "/root/.claude/uploads/203c7aef-bdd1-56e1-807f-a98088550c89/f969055e-emb_part2.npy",
+    "/root/.claude/uploads/203c7aef-bdd1-56e1-807f-a98088550c89/58d29e8f-emb_part3.npy",
+    "/root/.claude/uploads/203c7aef-bdd1-56e1-807f-a98088550c89/8667969f-emb_part4.npy",
+    "/root/.claude/uploads/203c7aef-bdd1-56e1-807f-a98088550c89/ae8ce799-emb_part5.npy"
+  ],
+  "split": "all",
+  "k": 10,
+  "anchors": 12860,
+  "anchor_neighbor_pairs": 128600,
+  "mean_neighbor_cosine": 0.8842820525169373,
+  "levels": {
+    "same_c1": {
+      "knn_rate": 0.7132970451010886,
+      "matched_pairs": 91730,
+      "random_baseline": 0.1528386179711833,
+      "lift": 4.666994864057041,
+      "anchors_with_any_match": 0.9668740279937792
+    },
+    "same_c12": {
+      "knn_rate": 0.2785614307931571,
+      "matched_pairs": 35823,
+      "random_baseline": 0.003072213916776735,
+      "lift": 90.67123525220356,
+      "anchors_with_any_match": 0.6936236391912908
+    },
+    "same_c123": {
+      "knn_rate": 0.03203732503888025,
+      "matched_pairs": 4120,
+      "random_baseline": 4.1556119446993996e-05,
+      "lift": 770.9412107101281,
+      "anchors_with_any_match": 0.16321928460342147
+    }
+  }
+}
