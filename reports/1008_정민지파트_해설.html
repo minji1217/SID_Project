@@ -696,6 +696,16 @@ main h4{font-size:15px;margin:16px 0 6px}
 <h4>NRMS가 하는 일 — 한 줄</h4>
   <p>사용자가 전에 읽은 기사들을 <b>관심 벡터 하나</b>로 요약하고, 후보 기사 벡터와 <b>내적</b>해서 점수가 가장 높은 후보를 고릅니다. 원 논문: Wu et al., 2019, “Neural News Recommendation with Multi-Head Self-Attention”.</p>
   <div class="flow"><span>기사 → 기사 벡터 (300차원)</span><i>→</i><span>읽은 기사 벡터들 → self-attention → attention pooling → 사용자 벡터</span><i>→</i><span>사용자 · 후보 → 5개 중 1등</span></div>
+  <h4>“동일한 NRMS 구조”의 뜻</h4>
+  <p>네 모드 모두 <b>원 논문(Wu et al., 2019) NRMS 구조</b>를 그대로 씁니다. 바꾼 것은 <b>기사를 벡터로 바꾸는 입구(기사 인코더) 하나</b>뿐이고, 사용자 인코더·점수·데이터·학습 설정·seed는 모두 같습니다. 조건을 하나만 바꿨기 때문에 Top-1 차이를 “기사 표현의 차이”로 돌릴 수 있습니다. 네 모드 중 <b>Title이 원 논문 NRMS 그대로</b>이고, 나머지는 같은 구조에서 기사 입력만 바꾼 변형입니다.</p>
+  <div class="tw"><table>
+    <tr><th>부분</th><th>네 모드에서</th><th>내용</th></tr>
+    <tr><td>기사 인코더</td><td><b>모드마다 다름</b></td><td>Title / E5 / SID / 섞은 SID (아래 “기사 → 벡터”, “모드별로 학습되는 것”)</td></tr>
+    <tr><td>사용자 인코더</td><td>같음</td><td>multi-head self-attention 20 head + additive attention 200 (아래 “사용자 인코더를 숫자로 따라가기”)</td></tr>
+    <tr><td>점수 · loss</td><td>같음</td><td>사용자 벡터 · 후보 벡터 내적 → 후보 5개 softmax → cross-entropy</td></tr>
+    <tr><td>설정</td><td>같음</td><td>300차원, dropout 0.2, Adam lr 1e-3, batch 64, 5 epoch, 기록 최근 50개</td></tr>
+    <tr><td>데이터 · seed</td><td>같음</td><td>같은 train 1P4N / validation half / test, seed 42 · 123 · 2026</td></tr>
+  </table></div>
 <h4>실제 예시로 따라가기</h4>
   <p class="src" style="border:0;margin:0 0 6px;padding:0">기사 제목·SID·단어 번호는 실제 데이터와 실제 코드 규칙(단어 사전 5,516개)으로 뽑은 값입니다. “이 사용자가 이 기사들을 읽었다”는 기록만 설명용으로 만든 예시입니다.</p>
   <div class="tw"><table>
@@ -721,6 +731,18 @@ main h4{font-size:15px;margin:16px 0 6px}
     <li><b>SID에서는</b> h3(21-117-485)와 정답(21-117-147)이 c1·c2 벡터를 공유해서, 기사 벡터 3개 중 2개 조각이 처음부터 같습니다. “자전거·빙에고르 묶음”이라는 정보가 코드에 들어 있습니다.</li>
     <li><b>SID shuffled에서는</b> 이 공유가 사라집니다. 그래서 SID와 SID shuffled의 차이가 곧 “코드가 담은 의미”의 효과입니다.</li>
   </ul>
+  <h4>모드별로 학습되는 것</h4>
+  <div class="tw"><table>
+    <tr><th>모드</th><th>기사 벡터 만드는 법</th><th>학습되는 것</th></tr>
+    <tr><td>Title (원 논문)</td><td>단어 임베딩 → <b>단어끼리</b> self-attention(20 head) → additive attention으로 단어 가중 평균</td><td>단어 임베딩, attention 전부</td></tr>
+    <tr><td>E5</td><td>E5 768 → Linear → 300</td><td>Linear만 (E5 벡터 자체는 고정)</td></tr>
+    <tr><td>SID</td><td>E1[c1] + E2[c2] + E3[c3] (각 300차원)</td><td>코드 번호마다 붙는 300차원 벡터 (처음부터 새로 학습)</td></tr>
+    <tr><td>SID shuffled</td><td>SID와 같음, 코드만 기사끼리 섞음</td><td>SID와 같음</td></tr>
+  </table></div>
+  <ul>
+    <li>SID 모드의 E1·E2·E3는 <b>RQ-VAE 코드북 벡터가 아닙니다.</b> NRMS가 번호만 받아 새로 학습하는 표입니다. 그래서 이 실험은 “SID <b>번호 체계</b>(어떤 기사끼리 같은 번호를 받았나)가 추천에 쓸모 있나”를 봅니다. 자전거 기사들이 c2 = 117을 공유하므로 E2[117]은 학습 중에 “자전거 경주” 벡터로 자리 잡습니다.</li>
+    <li>기사 인코더 안에 self-attention이 있는 것은 Title뿐입니다. E5·SID는 기사당 벡터가 하나라 서로 참고할 단어가 없습니다.</li>
+  </ul>
 <h4>사용자 벡터 → 점수 → 학습 (네 모드 모두 같음)</h4>
   <ol>
     <li>읽은 기사 벡터 [h1, h2, h3, …] (최근 50개까지)에 self-attention(20 head): 기사끼리 서로를 참고합니다. 빙에고르 기사 h2·h3는 서로를 강하게 참고하고, 정치 기사 h1은 따로 남습니다.</li>
@@ -729,6 +751,24 @@ main h4{font-size:15px;margin:16px 0 6px}
     <li>학습: loss = −log P(정답). 정답 c2의 확률이 올라가도록 기사 인코더·사용자 인코더를 같이 학습합니다.</li>
     <li>평가: 점수 1등이 정답이면 Top-1 정답. MRR·nDCG@5·AUC는 정답의 순위로 계산합니다.</li>
   </ol>
+  <h4>사용자 인코더를 숫자로 따라가기 (설명용 숫자)</h4>
+  <p><b>(a) multi-head self-attention, 20 head</b> — 읽은 기사끼리 서로 참고해 벡터를 다시 씁니다. h3(빙에고르 폭설)는 h2(빙에고르 경고)의 정보를 많이 섞고, h1(총리)은 거의 섞지 않습니다. 얼마나 섞을지는 학습으로 정해집니다. <b>20 head</b>는 300차원을 15차원씩 20조각으로 나눠 조각마다 따로 계산한다는 뜻으로, “같은 종목인가”, “같은 인물인가”처럼 20가지 관점에서 동시에 참고하는 셈입니다. 20개 결과를 이어 붙여 다시 300차원이 됩니다.</p>
+  <p><b>(b) additive attention, 200</b> — 기사 벡터마다 작은 신경망(300 → 200 → 1, tanh)으로 “이 사용자를 설명하는 데 얼마나 중요한가” 점수를 내고, softmax로 합이 1인 가중치를 만들어 가중 평균합니다. 200은 이 신경망 중간층의 크기입니다.</p>
+  <div class="tw"><table>
+    <tr><th>읽은 기사</th><th class="n">중요도 점수</th><th class="n">가중치 (softmax)</th></tr>
+    <tr><td>h1 총리 보고서</td><td class="n">−0.6</td><td class="n">0.15</td></tr>
+    <tr><td>h2 빙에고르 경고</td><td class="n">0.4</td><td class="n">0.41</td></tr>
+    <tr><td>h3 빙에고르 폭설</td><td class="n">0.45</td><td class="n">0.43</td></tr>
+  </table></div>
+  <p>사용자 벡터 u = 0.15 × h1 + 0.41 × h2 + 0.43 × h3 (300차원) → “자전거·빙에고르에 관심 있는 사용자”.</p>
+  <p><b>(c) 점수</b> — 후보마다 u · 후보 벡터(내적)를 계산하고 softmax로 확률을 냅니다.</p>
+  <div class="tw"><table>
+    <tr><th>후보</th><th class="n">점수(내적)</th><th class="n">확률</th></tr>
+    <tr class="hl"><td>c2 빙에고르의 정상까지 ✅</td><td class="n">4.1</td><td class="n">0.84</td></tr>
+    <tr><td>c3 브뢴비 팬 조롱 (축구)</td><td class="n">2.3</td><td class="n">0.14</td></tr>
+    <tr><td>c5 Side 9 인물 갤러리</td><td class="n">0.2</td><td class="n">0.02</td></tr>
+  </table></div>
+  <p>점수 1등(c2)이 실제 클릭과 같으므로 이 문제는 Top-1 정답입니다. 학습 때는 정답 확률 0.84가 1에 가까워지도록 기사 인코더와 사용자 인코더를 함께 고칩니다.</p>
 <h4>데이터와 학습 설정</h4>
   <ul>
     <li>Train 232,874 / Validation half 122,549 / Test 122,668행 (UNI SID 기준 1P4N, Transformer V1과 같은 파일). EB-NeRD는 정답이 공개된 test가 없어서 Validation을 시간순으로 반으로 나눠 뒤쪽을 test로 씁니다.</li>
