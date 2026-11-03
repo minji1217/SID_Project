@@ -20,6 +20,9 @@ EXP_DIR="${EXP_DIR:-$REPO_ROOT/data/output/experiments/uni_tiger_reference_v1}"
 OUT="$EXP_DIR/seed$SEED"
 PYTHON="${PYTHON:-python}"
 export PYTHONUNBUFFERED=1
+# 공개 구현 data/schemas.py는 .gitignore(data) 때문에 EventC2 폴더에 커밋되지 않았다.
+# EventC2 폴더는 고치지 않고, 이 폴더의 원본 사본(byte 동일)을 import 경로에 추가한다.
+export PYTHONPATH="$HERE/reference${PYTHONPATH:+:$PYTHONPATH}"
 
 [ -n "${UNI_TRAIN:-}" ] || { echo "UNI_TRAIN(1P4N 이전 UNI train_sequences.parquet)을 지정하세요" >&2; exit 1; }
 for f in "$UNI_TRAIN" "$VAL" "$TEST" "$V1_SCORES" "$V1_RUN/run_summary.json"; do

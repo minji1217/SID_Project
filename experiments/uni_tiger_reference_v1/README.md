@@ -14,6 +14,7 @@
 |---|---|
 | `check_uni_sid.py` | sequence 파일들과 SID 파일의 기사별 c1..c4가 같은지 확인 (읽기 전용) |
 | `run_aws.sh` | SID 확인 → 공개 TIGER 학습·Test → V1 비교 → seen-in-train 진단 |
+| `reference/data/schemas.py` | 공개 구현 원본(byte 동일). `.gitignore`의 `data` 규칙 때문에 EventC2 폴더에 커밋되지 않아 `run_reference.py`가 import에서 멈췄다. EventC2 폴더는 그대로 두고 `run_aws.sh`가 이 폴더를 `PYTHONPATH`에 추가 |
 | `diagnose_seen_in_train.py` | EventC2 폴더의 같은 진단을 경로 인자로 받게 한 사본 |
 
 ## 1단계: 1P4N 이전 UNI train sequences 확보 (HANDOFF 1단계)
@@ -42,4 +43,4 @@ epoch_history.csv, config.json, checkpoint_best.pt), `compare_v1_vs_reference_se
 출력 폴더가 이미 있으면 시작하지 않는다. 다른 seed는 `SEED=123`.
 
 ## 상태
-코드 준비 (합성 데이터로 동작 확인). AWS 미실행.
+합성 데이터(UNI 형식, c1<25/c2<128/c3<512/c4≤16)로 `run_aws.sh` 4단계 전체 동작 확인. AWS 미실행.
