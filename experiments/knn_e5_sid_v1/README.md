@@ -42,6 +42,6 @@ Train에서 3,122개를 무작위로 뽑아(seed 42 / 123 / 2026 평균) 같은 
 | 이웃 평균 cosine | 0.8820 | 0.871 | 0.8726 | 0.8843 |
 
 괄호는 random baseline 대비 배수. Validation random baseline은 c1,c2 0.483% / c1,c2,c3 0.00903%로 Train보다 높다
-(validation 기사가 더 적은 (c1,c2) 그룹에 몰림: 사건 c2 상속). 그래서 배수만 보면 낮아 보이지만, 같은 크기 Train 표본과 비교한
+(validation 기사가 더 적은 (c1,c2) 그룹에 몰려 있다는 뜻. 원인은 확인하지 않았음). 그래서 배수만 보면 낮아 보이지만, 같은 크기 Train 표본과 비교한
 일치율 자체는 c1 같음, c1,c2 약간 낮음(−1.3%p), c1,c2,c3 높음(+0.7%p)이다.
 결과: `results/uni_validation_k10_summary.json`, `results/uni_all_k10_summary.json`.
