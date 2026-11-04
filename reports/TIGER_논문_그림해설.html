@@ -112,6 +112,46 @@ pre{overflow-x:auto;max-width:100%;background:var(--surface-2);border:1px solid 
 <tr><td>학습</td><td>정답 SID [BOS, c1, c2, c3]</td><td>4자리를 한 번에 (causal mask)</td><td>다음 자리 입력은 그래도 정답</td></tr>
 <tr class="hl"><td>추론</td><td>모델이 만든 토큰 [BOS] → [BOS, ĉ1] → [BOS, ĉ1, ĉ2] → …</td><td>한 자리씩 순서대로, beam B개 · encoder는 한 번만</td><td>틀린 토큰이 그대로 다음 입력 → 뒤 자리도 틀어짐</td></tr></table>
 <p class="cap">완성된 SID는 “SID → 아이템” 조회표로 아이템으로 바꾸고, 없는 SID는 버립니다. 학습 때 본 적 없는 “자기가 만든 틀린 앞자리”를 추론 때 처음 보게 되는 차이를 exposure bias라고 부릅니다.</p></section>
+<section><h2>4-2. 논문 기준 beam search, 단계별 예시</h2>
+<p>논문(4.5장)의 beam search는 <b>생성 중에는 막지 않고, 다 만든 뒤 invalid를 버립니다</b>. 아이템 6개, beam B = 2인 작은 예시입니다(확률은 설명용).</p>
+<pre>아이템 SID 목록 (충돌이 없어도 c4 = 0)
+A (5, 23, 55, 0)   B (5, 23, 9, 0)   C (5, 41, 2, 0)
+D (12, 40, 7, 0)   E (12, 40, 88, 0) F (30, 6, 1, 0)      ← 마지막에 SID → 아이템으로 바꿀 때만 씀</pre>
+<h3>1단계: [BOS] → c1 · 모든 토큰의 확률 → 누적 점수 상위 2개</h3>
+<table><tr><th>c1</th><th class="n">확률</th><th class="n">누적 점수</th><th></th></tr>
+<tr class="hl"><td>5</td><td class="n">0.40</td><td class="n">−0.92</td><td>남김</td></tr>
+<tr class="hl"><td>12</td><td class="n">0.25</td><td class="n">−1.39</td><td>남김</td></tr>
+<tr><td>3</td><td class="n">0.15</td><td class="n">−1.90</td><td>점수가 낮아 탈락 (3으로 시작하는 아이템이 있는지는 확인하지 않음)</td></tr></table>
+<h3>2단계: [BOS, 5] · [BOS, 12] → c2 · 두 beam을 모두 펼친 뒤 전체에서 상위 2개</h3>
+<table><tr><th>경로</th><th class="n">확률</th><th class="n">누적 점수</th><th></th></tr>
+<tr class="hl"><td>5-23</td><td class="n">0.50</td><td class="n">−1.61</td><td>남김</td></tr>
+<tr class="hl"><td>12-40</td><td class="n">0.60</td><td class="n">−1.90</td><td>남김</td></tr>
+<tr><td>5-7</td><td class="n">0.20</td><td class="n">−2.53</td><td>탈락</td></tr>
+<tr><td>12-9</td><td class="n">0.10</td><td class="n">−3.69</td><td>탈락</td></tr></table>
+<h3>3단계: [BOS, 5, 23] · [BOS, 12, 40] → c3</h3>
+<table><tr><th>경로</th><th class="n">확률</th><th class="n">누적 점수</th><th></th></tr>
+<tr class="hl"><td>5-23-55</td><td class="n">0.70</td><td class="n">−1.97</td><td>남김</td></tr>
+<tr class="hl"><td><b>12-40-3</b></td><td class="n">0.50</td><td class="n">−2.59</td><td><b>남김 (실제 아이템이 없지만 확인하지 않음)</b></td></tr>
+<tr><td>12-40-7</td><td class="n">0.30</td><td class="n">−3.10</td><td>탈락 (D인데 점수에서 밀림)</td></tr>
+<tr><td>5-23-8</td><td class="n">0.20</td><td class="n">−3.22</td><td>탈락</td></tr></table>
+<h3>4단계: → c4</h3>
+<table><tr><th>경로</th><th class="n">확률</th><th class="n">누적 점수</th></tr>
+<tr><td>5-23-55-0</td><td class="n">0.95</td><td class="n">−2.02</td></tr>
+<tr><td>12-40-3-0</td><td class="n">0.90</td><td class="n">−2.70</td></tr></table>
+<h3>끝난 뒤: SID → 아이템, invalid 버림</h3>
+<table><tr><th>순위</th><th>생성된 SID</th><th>아이템</th></tr>
+<tr class="hl"><td>1</td><td>(5, 23, 55, 0)</td><td>A ✓</td></tr>
+<tr><td>2</td><td>(12, 40, 3, 0)</td><td>없음 → <b>invalid, 버림</b></td></tr></table>
+<p>→ 추천 목록 <b>[A]</b> 하나뿐, 2개를 원했는데 모자랍니다. invalid 경로도 beam 자리를 차지하므로 논문은 <b>B를 K보다 넉넉히</b> 잡습니다(“beam 크기를 키우고 invalid를 걸러 top-10을 채운다”). B를 키우면 3단계에서 밀린 12-40-7(D) 같은 유효한 경로가 살아남아 목록을 채웁니다. 논문의 invalid 비율은 top-10 약 0.1 ~ 1.6%, top-20 약 0.3 ~ 6%로 작습니다(학습된 모델이 실제 있는 조합에 확률을 몰아주기 때문).</p>
+<h3>같은 예시를 공개 구현(EdoardoBotta)으로 돌리면</h3>
+<p>공개 구현은 논문과 달리 ① beam마다 코드를 확률대로 <b>샘플링</b>(64개)해 후보로 쓰고 ② 매 단계 후보의 앞자리를 <b>아이템 SID 표와 비교</b>해 어떤 아이템도 그 앞자리로 시작하지 않으면 점수를 −∞로 막습니다(제약 decoding, <code>_check_valid_prefix</code>). 앞자리 목록을 미리 만들어 두지 않고 매번 표의 앞 h열과 비교하며, 결과는 앞자리 트리(trie)를 미리 만든 것과 같습니다.</p>
+<table><tr><th>단계</th><th>논문</th><th>공개 구현</th></tr>
+<tr><td>1단계 c1 = 3</td><td>점수로만 판단</td><td>3으로 시작하는 아이템 없음 → −∞</td></tr>
+<tr><td>2단계 5-7</td><td>점수로 탈락</td><td>(5, 7)로 시작하는 아이템 없음 → −∞</td></tr>
+<tr class="hl"><td>3단계 12-40-3</td><td>남음 → 끝나고 invalid로 버림</td><td>(12, 40, 3) 없음 → −∞ → 대신 12-40-7(D)이 남음</td></tr>
+<tr class="hl"><td>최종 목록 (B = 2)</td><td>[A]</td><td>[A, D]</td></tr></table>
+<p class="cap">공개 구현에서도 샘플링한 64개 중에 가능한 코드가 하나도 없으면 그 beam의 후보가 전부 −∞가 될 수 있습니다(드묾). 공개 구현은 SID를 c1 ~ c3까지만 쓰고 beam 10입니다. 우리 실험은 이 생성 과정을 쓰지 않고 1P4N 후보 5개를 채점했습니다.</p>
+</section>
 <section><h2>5. 평가</h2><figure><svg viewBox="0 0 960 222" role="img" aria-label="평가 방식 비교" xmlns="http://www.w3.org/2000/svg"><defs>
 <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
 <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
