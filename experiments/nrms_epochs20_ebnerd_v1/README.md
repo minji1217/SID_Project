@@ -33,3 +33,19 @@ python experiments/nrms_epochs20_ebnerd_v1/summarize.py
 
 예상 시간: run 하나 = 20 epoch × 약 35초 + 평가 ≈ 13분, 모드당 seed 3개 ≈ 40분.
 4개를 동시에 돌리면 GPU · CPU를 나눠 써서 epoch이 느려질 수 있어 전체 1 ~ 1.5시간 안팎(순서대로 돌리면 약 2.6시간).
+
+## 결과 (AWS 실행 완료, test 122,668행, seed 42 / 123 / 2026 평균, `summarize.py` 출력)
+
+| 모드 | Val Top-1 | **Test Top-1** | seed 표준편차 | MRR | nDCG@5 | AUC | best epoch (seed:epoch/20) | 5 epoch test |
+|---|---|---|---|---|---|---|---|---|
+| e5 | 28.89% | **29.76%** | 1.01 | 0.5426 | 0.6558 | 0.6102 | 42:9 · 123:5 · 2026:4 | 29.92% |
+| **recon** | 30.02% | **30.28%** | 0.24 | 0.5458 | 0.6582 | 0.6124 | 42:10 · 123:7 · 2026:19 | 29.99% |
+| sid | 25.94% | **26.09%** | 0.10 | 0.5107 | 0.6313 | 0.5711 | 42:2 · 123:1 · 2026:3 | 26.09% |
+| sid_shuffled | 21.03% | **21.13%** | 0.34 | 0.4676 | 0.5981 | 0.5156 | 42:9 · 123:1 · 2026:1 | 20.71% |
+
+- seed별 test Top-1: e5 29.65 / 28.81 / 30.82, recon 30.51 / 30.30 / 30.04, sid 26.20 / 26.01 / 26.05, sid_shuffled 21.51 / 20.86 / 21.02 (42 / 123 / 2026)
+- nDCG@5 평균은 로그의 seed별 값으로 계산했다 (e5 seed 123은 best epoch 5로 5 epoch run과 같은 checkpoint → v2 `metrics_e5_s123.json` 값과 test Top-1 28.81%까지 일치).
+- recon − E5 = +0.52%p (E5 seed 편차 1.01보다 작음 → 동등 이상), recon − SID = **+4.19%p**, SID ÷ E5 = 87.7%
+- SID는 세 seed 모두 best epoch 1 ~ 3이라 5 epoch과 같은 checkpoint → epoch을 늘려도 그대로. recon − SID 차이는 학습 부족 때문이 아니다.
+- E5는 epoch을 늘려도 평균이 오르지 않았다(29.92 → 29.76). seed 123 · 2026은 5 epoch 안에서 이미 최고.
+- epoch 1 ~ 5의 val 값이 5 epoch run과 같아 재현이 정확하다.
