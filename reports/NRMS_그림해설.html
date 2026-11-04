@@ -87,6 +87,28 @@ pre{overflow-x:auto;max-width:100%;background:var(--surface-2);border:1px solid 
 <li>epoch이 끝날 때마다 validation 122,549문제의 Top-1을 계산하고, 지금까지 최고면 checkpoint를 저장합니다.</li>
 <li>정해진 epoch 수(기존 5, 재실험 20)를 끝까지 돌고 <b>early stopping은 없습니다</b>. 결과는 “validation 최고 epoch 선택”이라 early stopping과 같고, 시간만 더 듭니다.</li>
 <li>끝나면 validation 최고 checkpoint로 test 122,668문제를 1번 채점하고, seed 3개 평균을 보고합니다.</li></ul>
+
+<h3 class="g">단계별 식 (impression 한 줄 기준, model.py · train.py 그대로)</h3>
+<p class="cap">기호: rᵢ = history i번째 기사의 줄 번호(i = 1 … 50), mᵢ = 1(진짜 기사) / 0(빈칸), r̃ⱼ = 후보 j의 줄 번호(j = 1 … 5), y = 정답 후보 번호. 굵은 글자 = 학습되는 가중치.</p>
+<table><tr><th>단계</th><th>식</th><th>크기</th></tr>
+<tr><td rowspan="3">② 기사 벡터<br>(모드별)</td><td><b>E5:</b> hᵢ = <b>Wₙ</b> · Dropout( E5표[rᵢ] ) + <b>bₙ</b></td><td>E5표[rᵢ] ∈ ℝ⁷⁶⁸, <b>Wₙ</b> 300 × 768 → hᵢ ∈ ℝ³⁰⁰</td></tr>
+<tr><td><b>recon:</b> hᵢ = <b>Wₙ</b> · Dropout( recon표[rᵢ] ) + <b>bₙ</b><br>recon표[rᵢ] = Dec( Q1[c1] + Q2[c2] + Q3[c3] ) (RQ-VAE, 미리 계산 · 고정)</td><td>같음</td></tr>
+<tr><td><b>SID:</b> (c1, c2, c3) = sid표[rᵢ],&nbsp; hᵢ = Dropout( <b>E1</b>[c1+1] + <b>E2</b>[c2+1] + <b>E3</b>[c3+1] )</td><td><b>E1</b> 26 × 300, <b>E2</b> 129 × 300, <b>E3</b> 513 × 300</td></tr>
+<tr><td>history · 후보</td><td>H = [h₁; h₂; …; h₅₀],&nbsp; 후보 cⱼ = (같은 인코더로) r̃ⱼ의 기사 벡터</td><td>H 50 × 300, cⱼ ∈ ℝ³⁰⁰</td></tr>
+<tr><td rowspan="4">③-1 self-attention<br>(head k = 1 … 20)</td><td>X = Dropout(H)<br>Qₖ = X <b>W<sup>Q</sup>ₖ</b> + b,&nbsp; Kₖ = X <b>W<sup>K</sup>ₖ</b> + b,&nbsp; Vₖ = X <b>W<sup>V</sup>ₖ</b> + b</td><td><b>W<sup>Q</sup>ₖ</b> 300 × 15 → Qₖ, Kₖ, Vₖ 50 × 15</td></tr>
+<tr><td>Aₖ = softmax_행( Qₖ Kₖᵀ / √15 + M ),&nbsp; M<sub>ij</sub> = 0 (mⱼ = 1) / −∞ (mⱼ = 0)</td><td>Aₖ 50 × 50, 행 합 = 1</td></tr>
+<tr><td>headₖ = Aₖ Vₖ</td><td>50 × 15</td></tr>
+<tr class="hl"><td>H′ = [head₁ | head₂ | … | head₂₀] <b>W<sup>O</sup></b> + <b>b<sup>O</sup></b>&nbsp;&nbsp;(h′ᵢ = H′의 i번째 줄)</td><td><b>W<sup>O</sup></b> 300 × 300 → H′ 50 × 300</td></tr>
+<tr><td rowspan="3">③-2 additive attention</td><td>aᵢ = <b>q</b>ᵀ · tanh( <b>Wₐ</b> h′ᵢ + <b>bₐ</b> )&nbsp;&nbsp;(기사 i의 중요도, 숫자 1개)</td><td><b>Wₐ</b> 200 × 300, <b>q</b> ∈ ℝ²⁰⁰ → aᵢ 숫자</td></tr>
+<tr><td>αᵢ = mᵢ · exp(aᵢ) / Σⱼ mⱼ · exp(aⱼ)&nbsp;&nbsp;(빈칸은 0, 합 = 1)</td><td>α 50개</td></tr>
+<tr class="hl"><td>u = Σᵢ αᵢ · h′ᵢ = α₁h′₁ + α₂h′₂ + … + α₅₀h′₅₀</td><td>u ∈ ℝ³⁰⁰</td></tr>
+<tr><td>④ 점수</td><td>sⱼ = uᵀ cⱼ = Σₖ u[k] · cⱼ[k]&nbsp;&nbsp;(j = 1 … 5, 나누기 없음)</td><td>s 5개</td></tr>
+<tr><td rowspan="2">⑤ 학습</td><td>Pⱼ = exp(sⱼ) / Σₗ exp(sₗ),&nbsp; L = −log P_y&nbsp;&nbsp;(batch 64줄 평균)</td><td>숫자 1개</td></tr>
+<tr><td>θ ← θ − Adam(∂L/∂θ), lr = 0.001,&nbsp; θ = { <b>Wₙ, bₙ</b> 또는 <b>E1, E2, E3</b> · <b>W<sup>Q,K,V,O</sup></b> · <b>Wₐ, bₐ, q</b> }</td><td></td></tr>
+<tr><td>⑥ 평가</td><td>ŷ = argmaxⱼ sⱼ,&nbsp; Top-1 = (ŷ = y인 줄 수) / (전체 줄 수)&nbsp;&nbsp;(Dropout 끔)</td><td></td></tr>
+<tr><td>Dropout</td><td>학습 중에만: Dropout(x)[k] = x[k] · zₖ / 0.8,&nbsp; zₖ = 1 (확률 0.8) / 0 (확률 0.2)</td><td>크기 그대로</td></tr></table>
+<p class="cap">학습되는 가중치(굵은 글자)는 모델 전체에 한 세트이고 모든 impression이 같이 씁니다. hᵢ · H′ · aᵢ · α · u · s는 매 impression마다 새로 계산되는 값입니다. self-attention 뒤에 residual · LayerNorm은 없습니다(원 코드 그대로).</p>
+
 <div class="note"><b>한 줄 요약</b> · 같은 SID 정보라도 RQ-VAE의 의미를 거쳐 넣으면(recon 29.99%) 원본 E5(29.92%)와 같아지고, 번호표로만 넣으면(SID 26.09%) 낮아집니다. 이 차이는 전부 ②단계에서 생깁니다.</div>
 </section>
 <section><h2>3. 기사 인코더: 모드마다 여기만 다름</h2><figure><svg viewBox="0 0 960 360" role="img" aria-label="기사 인코더 세 모드" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -171,6 +193,18 @@ pre{overflow-x:auto;max-width:100%;background:var(--surface-2);border:1px solid 
 <tr><td>h3 빙에고르</td><td>[1, 2, 0, 0]</td><td>[0.05, 0.36, 0.59]</td><td>[1.31, 1.54, 0.10, 0.05]</td><td>0.38</td></tr>
 <tr class="hl"><td colspan="4">u = 0.25 × h′1 + 0.38 × h′2 + 0.38 × h′3 (additive 점수 [0.87, 1.29, 1.29] → softmax)</td><td><b>[1.13, 1.13, 0.50, 0.25]</b></td></tr></table>
 <p class="cap">h2와 h3는 비슷한 기사라 서로를 36%씩 참고하고, h1은 혼자 다른 주제라 자기 자신을 86% 봅니다. u는 빙에고르 기사 2개 때문에 스포츠 · 자전거 쪽으로 기울었습니다. 그다음 이 u 하나를 후보 5개와 각각 내적해 점수 5개를 만듭니다.</p>
+
+<h3 class="g">같은 기사라도 impression마다 중요도가 다르다</h3>
+<p>aᵢ = <b>q</b>ᵀ · tanh(<b>Wₐ</b> h′ᵢ + <b>bₐ</b>)에서 <b>q · Wₐ · bₐ는 모든 impression에 같은 값</b>(채점 기준표 한 장)이지만, 들어가는 h′ᵢ는 self-attention으로 <b>같은 history의 다른 기사들과 섞인 벡터</b>라 impression마다 다릅니다. α는 다른 기사 점수와 비교한 비율이라 더 크게 달라집니다.</p>
+<table><tr><th>“빙에고르 폭설” 기사</th><th>impression 1</th><th>impression 2</th></tr>
+<tr><td>같은 history의 기사</td><td>총리, 빙에고르 경고, <b>빙에고르 폭설</b></td><td>총리, <b>빙에고르 폭설</b>, 선거</td></tr>
+<tr><td>self-attention 전 hᵢ</td><td>[1, 2, 0, 0]</td><td>[1, 2, 0, 0] (같음)</td></tr>
+<tr><td>self-attention 후 h′ᵢ</td><td>[1.31, 1.54, 0.10, 0.05]</td><td>[0.86, 1.72, 0.21, 0.21]</td></tr>
+<tr><td>중요도 aᵢ</td><td>1.29</td><td>1.34</td></tr>
+<tr class="hl"><td>비율 αᵢ</td><td><b>0.38</b> (비슷한 기사와 나눠 가짐)</td><td><b>0.51</b> (유일한 스포츠 기사)</td></tr>
+<tr><td>사용자 벡터 u</td><td>[1.13, 1.13, 0.50, 0.25]</td><td>[0.46, 0.92, 0.81, 0.81]</td></tr></table>
+<p class="cap">축소 예시(4차원, 같은 Wₐ = [[1,1,0,0],[0,0,1,1],[.5,.5,.5,.5]], q = [1, 0.2, 0.3], self-attention W = 단위행렬)로 실제 계산한 값입니다.</p>
+
 <h3 class="g">기준은 impression: 같은 사용자도 u가 달라진다</h3>
 <p>NRMS에는 <b>사용자 ID별로 저장된 임베딩이 없습니다.</b> 매번 그 줄의 history로 u를 새로 계산합니다. history는 사용자마다 시간순으로 늘어나는 running history라서, 같은 사용자라도 impression마다 u가 다릅니다.</p>
 <figure><svg viewBox="0 0 960 284" role="img" aria-label="impression 단위 running history" xmlns="http://www.w3.org/2000/svg"><defs>
