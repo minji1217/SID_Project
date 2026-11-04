@@ -54,6 +54,7 @@ border-radius:8px;padding:6px 9px;font-size:12.5px;line-height:1.5;box-shadow:0 
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-2);margin:4px 0 2px}
 .legend i{display:inline-block;width:18px;height:0;border-top:2px solid;vertical-align:middle;margin-right:6px}
 td.best{font-weight:700;color:var(--good)}
+pre{overflow-x:auto;max-width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.55}
 </style></head><body><main>
 <h1>NRMS · 그림으로 보는 학습과 추론</h1>
 <p class="lead">원 논문 구조 NRMS(정민교 님 코드)에서 기사 입력만 E5 · SID · 제목으로 바꿔 비교한 실험입니다. 기사 · SID · E5 숫자는 실제 데이터, 행렬 예시의 숫자는 4차원으로 줄여 실제로 계산한 설명용 값입니다.</p>
@@ -112,6 +113,36 @@ td.best{font-weight:700;color:var(--good)}
 <tr><td>① self-attention</td><td>50 × 300</td><td>50 × 300</td><td>기사끼리 서로 참고해서 다시 표현. 300차원을 head 20개 × 15차원으로 나눠 head마다 Q · K · V(50 × 15) → QKᵀ/√15 점수표 50 × 50 → 빈칸 열 mask → softmax → 가중치 × V → 20 head 이어 붙여 50 × 300</td></tr>
 <tr><td>② additive attention</td><td>50 × 300</td><td>α 50개</td><td>기사마다 점수ᵢ = qᵀ · tanh(W · h′ᵢ + b) (W: 300 → 200, q: 200 → 숫자 1개). 50개 기사에 같은 W · q. 빈칸 mask → softmax → 합 1</td></tr>
 <tr class="hl"><td>③ 가중평균</td><td>α 50개 + 50 × 300</td><td><b>300 (u 1개)</b></td><td>u = α₁ · h′₁ + … + α₅₀ · h′₅₀ (중요한 기사 위주로 합침)</td></tr></table>
+<h3 class="g">단계별 차원 (가중치 크기 포함, impression 한 줄 기준)</h3>
+<p class="cap">model.py의 UserEncoder · AdditiveAttention 코드 그대로입니다. batch 64는 생략했습니다.</p>
+<pre>H (50 × 300)
+ → dropout 0.2                       50 × 300
+ → self-attention 20 head            50 × 300   ← 개수 그대로
+ → additive attention: 점수 → α      50개 숫자
+ → α로 가중평균                       300        ← 여기서 1개
+ = u (300차원)</pre>
+<p><b>0. 입력 H: 50 × 300</b> · 읽은 기사 50개의 기사 벡터(2장 ②단계에서 E5 · recon · SID 중 하나로 만든 것). 빈칸 줄은 mask = 0.</p>
+<p><b>1. self-attention (20 head): 50 × 300 → 50 × 300</b></p>
+<table><tr><th>계산</th><th>가중치 크기</th><th>결과 크기</th></tr>
+<tr><td>Q = H · Wq, K = H · Wk, V = H · Wv</td><td>각 300 × 300</td><td>각 50 × 300</td></tr>
+<tr><td>head 20개로 자르기 (300 = 20 × 15)</td><td></td><td>head마다 Q · K · V 50 × 15</td></tr>
+<tr><td>점수 = Q · Kᵀ / √15</td><td></td><td>head마다 <b>50 × 50</b></td></tr>
+<tr><td>빈칸 기사 열을 −∞로 가리고 행마다 softmax</td><td></td><td>50 × 50 (행 합 = 1)</td></tr>
+<tr><td>가중치 × V</td><td></td><td>head마다 50 × 15</td></tr>
+<tr><td>20 head 이어 붙이기</td><td></td><td>50 × 300</td></tr>
+<tr class="hl"><td>출력 변환 × Wo</td><td>300 × 300</td><td><b>H′ = 50 × 300</b></td></tr></table>
+<p class="cap">50 × 50 점수표의 i행 = “기사 i가 다른 기사 50개를 얼마나 참고하나”. 결과는 여전히 50개이고, 각 기사 벡터에 다른 기사 정보가 섞였을 뿐입니다.</p>
+<p><b>2. additive attention: 50 × 300 → α 50개</b></p>
+<table><tr><th>계산</th><th>가중치 크기</th><th>결과 크기</th></tr>
+<tr><td>h′ᵢ × W + b</td><td>W 300 → 200, b 200</td><td>50 × 200</td></tr>
+<tr><td>tanh</td><td></td><td>50 × 200</td></tr>
+<tr><td>× q (bias 없음)</td><td>q 200 → 1</td><td><b>50 × 1 = 점수 50개</b></td></tr>
+<tr class="hl"><td>빈칸 기사 점수를 −∞로 → softmax</td><td></td><td><b>α 50개 (합 = 1)</b></td></tr></table>
+<p class="cap">50개 기사에 같은 W · q를 써서, “어떤 기사가 이 사용자를 잘 나타내나”를 같은 기준으로 매깁니다.</p>
+<p><b>3. 가중평균: α 50개 + H′ 50 × 300 → u 300</b></p>
+<pre>u = α₁ · h′₁ + α₂ · h′₂ + … + α₅₀ · h′₅₀
+  = (1 × 50) · (50 × 300) = 1 × 300        코드: torch.bmm(weight.unsqueeze(1), x)</pre>
+<p class="cap">빈칸 기사는 α = 0이라 u에 들어가지 않습니다. 그다음 후보 벡터 C (5 × 300) · u (300) → 점수 s (5).</p>
 <p><b>축소 예시</b> (기사 3개, 4차원: d1 스포츠, d2 자전거, d3 · d4 정치. 5장과 같은 숫자)</p>
 <table><tr><th>기사</th><th>H (원래)</th><th>self-attention 가중치</th><th>H′ (섞인 결과)</th><th>α</th></tr>
 <tr><td>h1 총리</td><td>[0, 0, 2, 1]</td><td>[0.86, 0.07, 0.07]</td><td>[0.21, 0.21, 1.72, 0.86]</td><td>0.25</td></tr>
