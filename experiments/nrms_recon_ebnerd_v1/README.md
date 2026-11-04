@@ -37,4 +37,11 @@ tail -f data/output/experiments/nrms_recon_ebnerd_v1.log
 
 - RQ-VAE 코드는 `gin`, `huggingface_hub`가 필요하다. NRMS python에 없으면 `RQVAE_PYTHON=<RQ-VAE 학습 때 쓴 python>`을 함께 지정한다.
 - 예상 시간: recon 표 1분 이내 + seed당 약 4분(v2 E5 기준 epoch 약 36초 × 5 + 평가) → 총 15분 안팎
-- 로그에서 `candidate 조회 실패 0/...`와 `자기복원 cosine 평균 0.9275`를 확인한다.
+- 로그에서 `candidate 조회 실패 0/...`와 자기복원 cosine을 확인한다.
+
+### AWS 실행 기록 (2026-11-04)
+
+- E5: `experiment/entity-linking-event:data/output/model_inputs/article_embeddings.npy`를 `~/minji/e5_input/`에 꺼내 사용(sha256 `89f8046d…`). `RAW_DIR=~/minji/e5_input`
+- 로그의 자기복원 cosine 0.9256, 고유 (c1,c2,c3) 10,771은 로컬(0.9275, 10,952)과 다르다. 원인: v2 `sid_codes.npy`는 1P4N 파일에 나온 기사에서만 SID를 모으므로, **1P4N에 한 번도 안 나오는 288개 기사**는 코드가 (0,0,0)으로 남는다.
+  - 288개를 빼면 고유 SID 10,770 · cosine **0.9275**로 로컬과 같다.
+  - 이 288개는 학습 · 평가에 쓰이지 않으므로 결과에 영향이 없다 (조회 실패 0).
