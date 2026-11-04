@@ -101,7 +101,8 @@ pre{overflow-x:auto;max-width:100%;background:var(--surface-2);border:1px solid 
 <ul><li>정답을 모르니 decoder 입력이 <b>모델이 방금 만든 토큰</b>입니다: [BOS] → [BOS, 5] → [BOS, 5, 23] → [BOS, 5, 23, 55].</li>
 <li>생성을 실제 존재하는 SID로 제한하지 않아서, 없는 조합(invalid ID)이 나올 수 있습니다. 논문은 그 비율이 작다고 보고하고, beam을 넉넉히 잡아 invalid를 걸러 냅니다.</li>
 <li>새 아이템도 SID가 있으므로, 생성한 SID와 앞 3자리가 같은 새 아이템을 후보에 넣는 방식으로 cold-start 추천을 합니다(7장).</li>
-<li>논문은 invalid가 나오면 앞자리(prefix)만 맞는 아이템을 찾는 방법을 향후 과제로 제안합니다.</li></ul></section>
+<li>논문은 invalid가 나오면 앞자리(prefix)만 맞는 아이템을 찾는 방법을 향후 과제로 제안합니다.</li>
+<li><b>beam 크기</b>: 논문에는 없습니다. 공개 구현(EdoardoBotta, <code>modules/model.py</code> · <code>configs/decoder_amazon.gin</code>)은 <b>beam 10</b>(= Recall@10의 K)이고, 논문과 세 가지가 다릅니다: ① 자리마다 beam별로 코드 64개를 확률에 따라 <b>샘플링</b>해 후보로 씀(256개 전부 X) ② 실제 SID에 없는 앞자리는 점수 −∞로 막아 invalid가 나오지 않게 함(제약 decoding) ③ 자리별 출력 head(레벨마다 256개 중 softmax).</li></ul></section>
 <section><h2>4-1. 학습 vs 추론: decoder에 무엇이 들어가나</h2><figure><svg viewBox="0 0 960 444" role="img" aria-label="학습 vs 추론 decoder 입력" xmlns="http://www.w3.org/2000/svg"><defs>
 <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
 <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
