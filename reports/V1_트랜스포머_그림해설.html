@@ -251,6 +251,16 @@ code{overflow-wrap:anywhere;word-break:break-all}
 <tr class="hl"><td>평가</td><td>beam search 생성 → Recall@K</td><td><b>1P4N 후보 5개 채점</b> (S = L1 + L2 + L3, 1등)</td></tr>
 <tr><td>epoch · 선택</td><td>고정 step 수</td><td>최대 30, patience 5, validation Top-1 최고 epoch → test 1회</td></tr></table>
 <p class="cap">그대로 쓴 것: 모델 클래스 · loss(생성형, 오답 없음) · 자리별 head · 모델 크기 · 최적화 설정(모두 공개 구현 기본값). 논문 쪽 설정값 일부는 원문을 직접 열지 못해 2차 자료 기준입니다.</p>
+<h3 class="g">③ 학습 vs 추론: 디코더에 무엇이 들어가나</h3>
+<p>예: 사용자가 다음에 클릭한 정답 기사 SID = (21, 117, 485)</p>
+<table><tr><th></th><th>TIGER 학습</th><th>TIGER 추론</th><th>우리 V1 학습</th><th>우리 V1 추론</th></tr>
+<tr class="hl"><td>디코더 입력</td><td><b>정답 SID</b><br><code>[BOS, 21, 117]</code></td><td><b>모델이 방금 만든 토큰</b><br><code>[BOS]</code> → <code>[BOS, ĉ1]</code> → <code>[BOS, ĉ1, ĉ2]</code></td><td><b>후보 5개 SID</b> 각각<br><code>[BOS, 후보c1, 후보c2]</code></td><td><b>후보 5개 SID</b> 각각 (학습과 동일)</td></tr>
+<tr><td>계산 방식</td><td>한 번에 (causal mask)</td><td>한 자리씩 순차 (beam search)</td><td>후보별로 한 번에 (causal mask)</td><td>후보별로 한 번에 (동일)</td></tr>
+<tr><td>비교 대상</td><td>코드북 전체 (자리마다 256개)</td><td>코드북 전체에서 상위 b개 남기기</td><td>후보 5개끼리</td><td>후보 5개끼리</td></tr>
+<tr><td>마지막</td><td>−ln p(c1=21) − ln p(c2=117) − ln p(c3=485)<br>(오답 없음, 생성형)</td><td>남은 SID 시퀀스 → 추천 목록</td><td>S 5개 → softmax → 정답 후보에 CE<br>(listwise, 판별형)</td><td>S 5개 중 최대 → 1등</td></tr>
+<tr class="hl"><td>학습 = 추론?</td><td colspan="2" style="text-align:center"><b>다름</b> (학습: 정답 입력 / 추론: 자기 생성 입력)</td><td colspan="2" style="text-align:center"><b>같음</b> (둘 다 후보 SID 입력, 같은 S 계산)</td></tr></table>
+<p class="cap">TIGER는 추론할 때 정답을 모르니 <code>&lt;bos&gt;</code>부터 생성할 수밖에 없지만, 우리는 추론할 때도 후보 SID를 이미 알고 있어서 순차 생성이 필요 없습니다. 차이의 핵심은 디코더 입력 형태보다 <b>loss를 무엇과 비교해 거느냐</b>(코드북 전체 vs 후보 4개 오답)입니다.<br>
+우리 TIGER 비교 실험은 <b>학습만 TIGER 방식</b>(정답 SID, 코드북 전체 CE)이고, <b>추론은 우리와 같은 후보 5개 채점</b>입니다. 그래서 두 모델의 실제 차이는 학습 loss와 하이퍼파라미터입니다.</p>
 <div class="note"><b>한 줄 요약</b> · 공개 구현은 원래부터 논문과 달리 충돌 토큰을 빼고 c1~c3만 학습하며(사용자 토큰도 없음), 우리는 여기에 SID를 UNI로 바꾸고 평가를 beam search 생성 대신 1P4N 후보 5개 채점으로 바꿨습니다.</div>
 </section>
 <section id="lw"><h2>10. V1 + level 가중치: 어떻게 하나 (예시)</h2>
