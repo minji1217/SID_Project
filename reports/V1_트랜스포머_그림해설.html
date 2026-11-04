@@ -237,10 +237,10 @@ code{overflow-wrap:anywhere;word-break:break-all}
 <h3 class="g">① 논문 vs 공개 구현 (코드가 원래 그렇게 되어 있음)</h3>
 <table><tr><th>항목</th><th>TIGER 논문</th><th>공개 구현 (EdoardoBotta)</th></tr>
 <tr class="hl"><td>4번째 충돌 토큰</td><td>SID에 붙여 입력 · 정답 · 생성에 포함 (코드 4개 × 256 = 어휘 1,024)</td><td><b>입력과 정답에서 뺌</b> → c1~c3만 학습 (<code>_strip_dedup_col</code>, 코드 확인)</td></tr>
-<tr><td>사용자 ID 토큰</td><td>기록 앞에 붙임 (해시 버킷)</td><td>기본값에서 사용 안 함</td></tr>
+<tr><td>사용자 ID 토큰</td><td>기록 앞에 붙임 (사용자 ID를 2,000개 토큰으로 해시)</td><td>기본값에서 사용 안 함</td></tr>
 <tr><td>출력층</td><td>SID 어휘 전체 위 softmax</td><td>자리별 head</td></tr>
-<tr><td>모델 크기</td><td>d128 · 6 head(× 64) · 4층 · MLP 1024 · dropout 0.1</td><td>d384 · 6 head · 4층 · FFN 1024 · dropout 0.1</td></tr>
-<tr><td>최적화</td><td>lr 0.01 10k step 유지 후 inverse sqrt, batch 256</td><td>AdamW lr 1e-3 · wd 1e-4 · batch 640, warmup 10k 후 inverse sqrt</td></tr>
+<tr><td>모델 크기</td><td>d128 · 6 head(× 64) · encoder 4층 + decoder 4층 · MLP 1024 · dropout 0.1 · 약 13M</td><td>d384 · 6 head · 4층 · FFN 1024 · dropout 0.1</td></tr>
+<tr><td>최적화</td><td>lr 0.01 10k step 유지 후 inverse sqrt, batch 256, 200k step (Toys 100k)</td><td>AdamW lr 1e-3 · wd 1e-4 · batch 640, warmup 10k 후 inverse sqrt</td></tr>
 <tr><td>학습 방식 · loss</td><td>생성형 (정답 SID 자리별 CE, 오답 없음)</td><td><b>같음</b></td></tr></table>
 <h3 class="g">② 공개 구현 → 우리 실험에서 바꾼 것</h3>
 <table><tr><th>항목</th><th>공개 구현 원래</th><th>우리 실험</th></tr>
@@ -250,7 +250,7 @@ code{overflow-wrap:anywhere;word-break:break-all}
 <tr><td>학습 데이터</td><td>Amazon 아이템 이력</td><td>EB-NeRD 1P4N 이전 클릭 233,161개</td></tr>
 <tr class="hl"><td>평가</td><td>beam search 생성 → Recall@K</td><td><b>1P4N 후보 5개 채점</b> (S = L1 + L2 + L3, 1등)</td></tr>
 <tr><td>epoch · 선택</td><td>고정 step 수</td><td>최대 30, patience 5, validation Top-1 최고 epoch → test 1회</td></tr></table>
-<p class="cap">그대로 쓴 것: 모델 클래스 · loss(생성형, 오답 없음) · 자리별 head · 모델 크기 · 최적화 설정(모두 공개 구현 기본값). 논문 쪽 설정값 일부는 원문을 직접 열지 못해 2차 자료 기준입니다.</p>
+<p class="cap">그대로 쓴 것: 모델 클래스 · loss(생성형, 오답 없음) · 자리별 head · 모델 크기 · 최적화 설정(모두 공개 구현 기본값). 논문 쪽 설정값은 원문(arXiv 2305.05065v3)으로 확인했습니다. 자세한 내용은 <code>reports/TIGER_논문_그림해설.html</code>.</p>
 <h3 class="g">③ 학습 vs 추론: 디코더에 무엇이 들어가나</h3>
 <p>예: 사용자가 다음에 클릭한 정답 기사 SID = (21, 117, 485)</p>
 <table><tr><th></th><th>TIGER 학습</th><th>TIGER 추론</th><th>우리 V1 학습</th><th>우리 V1 추론</th></tr>
