@@ -962,6 +962,51 @@ epoch 2~5: 반복</pre>
     <tr><td>(참고) NRMS 원 논문 구조 + SID (9장)</td><td class="n">26.09%</td><td class="n">0.511</td><td class="n">0.631</td><td class="n">0.571</td><td>3개 평균</td></tr>
     <tr><td>무작위</td><td class="n">20.00%</td><td class="n">—</td><td class="n">—</td><td class="n">0.500</td><td>이론값</td></tr>
   </table></div>
+<h3 class="g">실험 방법 상세 — train · validation · test · epoch · seed</h3>
+<div class="flow"><span>RQ-VAE (UNI, epoch 180) → 기사 12,860개 SID</span><i>→</i><span>train으로 모델 학습</span><i>→</i><span>validation half로 best epoch · level 가중치 선택</span><i>→</i><span>test로 딱 한 번 채점</span></div>
+<div class="tw"><table>
+<tr><th>묶음</th><th class="n">문제 수</th><th>어디서</th><th>쓴 곳</th></tr>
+<tr><td>train</td><td class="n">V1 232,874 (1P4N)<br>TIGER 클릭 233,161</td><td>EB-NeRD train 주 클릭 기록</td><td>모델 학습</td></tr>
+<tr><td>validation half</td><td class="n">122,549</td><td>validation 주 앞쪽 절반 (시간순)</td><td>best epoch 선택, level 가중치 선택</td></tr>
+<tr class="hl"><td>test</td><td class="n">122,668</td><td>validation 주 뒤쪽 절반</td><td>성적 보고 (한 번만)</td></tr>
+</table></div>
+<p>세 모델의 test는 같은 문제입니다(노출 · 후보 5개 · 정답 일치를 비교 스크립트로 확인). 1P4N = 클릭한 기사 1개 + 보고도 안 클릭한 기사 4개, 후보 순서는 섞음, 무작위 Top-1 20%.</p>
+<div class="tw"><table>
+<tr><th></th><th>① V1</th><th>② V1 + level 가중치</th><th>③ TIGER</th></tr>
+<tr><td>정체</td><td>우리 팀 Transformer</td><td>V1과 같은 모델, 점수식만 바꿈</td><td>비공식 공개 재현 구현 (EdoardoBotta, 수정 없음)</td></tr>
+<tr><td>train 데이터</td><td>1P4N 232,874문제 (정답 + 오답 4)</td><td>학습 안 함</td><td>1P4N 이전 기록의 클릭 233,161개 (오답 없음)</td></tr>
+<tr><td>학습 목표</td><td>후보 5개 점수에 listwise CE (정답이 오답보다 높게)</td><td>—</td><td>다음 클릭 SID를 한 자리씩 맞히기 (token CE)</td></tr>
+<tr><td>기록 입력</td><td>최근 50개 기사 (c1 c2 c3 c4)</td><td>—</td><td>최근 20개 기사 (c1 c2 c3)</td></tr>
+<tr><td>모델</td><td>d256 · 8 head · 2층 · d_ff 1024 · dropout 0</td><td>—</td><td>d384 · 6 head · 4층 · d_ff 1024 · dropout 0.1</td></tr>
+<tr><td>최적화</td><td>AdamW lr 5e-5 · wd 0 · batch 128</td><td>—</td><td>lr 1e-3 · batch 640</td></tr>
+<tr><td>최대 epoch</td><td>30 (5번 연속 개선 없으면 정지)</td><td>—</td><td>30 (같은 규칙 → epoch 6에서 정지)</td></tr>
+<tr><td>best epoch 기준</td><td>validation Top-1</td><td>—</td><td>validation Top-1</td></tr>
+<tr class="hl"><td>best epoch</td><td>1</td><td>V1 checkpoint 그대로</td><td>1</td></tr>
+<tr class="hl"><td>seed</td><td>42</td><td>42 (V1과 같음)</td><td>42</td></tr>
+<tr><td>후보 점수</td><td>S = L1 + L2 + L3</td><td>S = 1·L1 + 0.5·L2 + 0.1·L3</td><td>S = L1 + L2 + L3</td></tr>
+</table></div>
+<p>L1 = log P(c1), L2 = log P(c2 | c1), L3 = log P(c3 | c1, c2). 후보마다 S를 계산해 가장 큰 후보를 추천합니다.</p>
+<h3 class="g">level 가중치를 고른 방법</h3>
+<ol>
+<li>V1 checkpoint로 validation half와 test 문제마다 L1 · L2 · L3를 계산해 저장합니다.</li>
+<li>α2 7개 {0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5} × α3 6개 {0, 0.1, 0.25, 0.5, 0.75, 1.0} = 42가지를 <b>validation half</b>에서 비교합니다 (α1 = 1 고정).</li>
+<li>가장 좋은 (1, 0.5, 0.1)을 골라 <b>test에 한 번</b> 적용합니다. 재학습은 없습니다.</li>
+</ol>
+<h3 class="g">best epoch이 1인 이유</h3>
+<div class="tw"><table>
+<tr><th>TIGER epoch</th><th class="n">train loss</th><th class="n">val Top-1</th><th class="n">val AUC</th></tr>
+<tr><td>0 (학습 전)</td><td class="n">—</td><td class="n">20.00%</td><td class="n">0.502</td></tr>
+<tr class="hl"><td>1 (best)</td><td class="n">7.359</td><td class="n">16.38%</td><td class="n">0.458</td></tr>
+<tr><td>2</td><td class="n">6.714</td><td class="n">15.53%</td><td class="n">0.452</td></tr>
+<tr><td>3 ~ 6</td><td class="n">6.63 ~ 6.67</td><td class="n">15.0 ~ 15.7%</td><td class="n">0.441 ~ 0.446</td></tr>
+</table></div>
+<ul>
+<li>V1: 첫 epoch에서 validation Top-1이 최고(27.06%)였고, 이후에는 train loss만 내려가고 validation은 떨어졌습니다.</li>
+<li>TIGER: train loss는 내려가는데 validation은 epoch 1부터 무작위보다 낮고 계속 나빠져 epoch 6에서 멈췄습니다.</li>
+<li>공통 원인: test 정답의 98% 이상이 train에서 클릭된 적 없는 새 기사라, 오래 학습할수록 train 기사에 맞춰집니다. test 정답 중 train에서 클릭된 기사는 1.7%, 오답은 12.2%라 생성형 학습은 오답을 더 높게 봅니다. TIGER도 c1, c1 + c2까지만 쓰면 23.0%, 23.7%로 무작위보다 낫고, c3를 더하면 17.4%로 떨어집니다.</li>
+</ul>
+<div class="note"><b>주의</b> · 세 모델 모두 seed 42 한 번이라 1%p 안쪽 차이는 같은 수준으로 봅니다(V1 대 TIGER −9.7%p, level 가중치 +2.4%p는 그보다 큼). TIGER는 공개 구현 설정 그대로이고 우리 데이터에 맞춘 탐색은 하지 않았습니다. 근거: <code>experiments/uni_v1_test_eval/</code>, <code>experiments/uni_tiger_reference_v1/results_aws/summary_seed42.md</code></div>
+
   <h3 class="g">결과 분석 방법과 해석</h3>
   <ul>
     <li><b>V1은 SID만으로 무작위보다 확실히 잘 추천합니다</b>: 27.07%(+7.1%p). 같은 SID를 쓴 NRMS(26.09%)보다 약간 높고, level 가중치를 주면 29.46%로 E5를 쓴 NRMS(29.92%)에 가까워집니다. 모델이 달라 직접 비교는 아니고 수준 비교입니다.</li>
