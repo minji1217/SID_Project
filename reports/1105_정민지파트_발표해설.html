@@ -78,6 +78,7 @@ code{overflow-wrap:anywhere;word-break:break-all;background:var(--code);padding:
 .qa dd{margin:4px 0 0 0;color:var(--ink-2)}.qa dd::before{content:"A. ";font-weight:700;color:var(--good)}
 h3.g{font-size:17px;margin:24px 0 8px;padding-top:12px;border-top:1px solid var(--line);color:var(--accent)}
 .fix li{margin:3px 0}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.55;background:var(--code);border-radius:8px;padding:10px 12px;margin:8px 0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 </style>
 </head><body><div class="wrap">
 <nav><p class="h">목차</p><a href="#a">사용법 · 흐름</a><a href="#s3">3장 · RQ-VAE 탐색</a><a href="#s4">4장 · WD-001 vs UNI</a><a href="#s5">5장 · Transformer 탐색</a><a href="#s6">6장 · 최종 추천 성능</a><a href="#s7">7장 · 정성평가</a><a href="#s8">8장 · 실제 예시</a><a href="#s9">9장 · Jaccard / TF-IDF</a><a href="#s10">10장 · 임베딩 cosine</a><a href="#s11">11장 · 자기 복원</a><a href="#s12">12장 · KNN</a><a href="#s13">13장 · NRMS</a><a href="#s14">14장 · NRMS 요약</a><a href="#z">공통 예상 질문</a></nav>
@@ -255,7 +256,64 @@ h3.g{font-size:17px;margin:24px 0 8px;padding-top:12px;border-top:1px solid var(
 <tr><td>③ 점수 · 출력</td><td>후보 5개 각각 사용자 벡터와 내적 → 점수 5개가 모델 출력. 1등이 정답이면 Top-1 정답</td><td>같음</td></tr>
 <tr><td>학습</td><td>loss = −log softmax(점수)[정답] (cross-entropy). 문제 64개 평균으로 한 번 고침</td><td>같음</td></tr>
 </table></div>
-<p><b>예</b>: 사용자가 빙에고르(자전거) 기사 2개와 총리 기사 1개를 읽었으면, self-attention으로 두 빙에고르 기사가 서로 강하게 참고하고 additive attention이 이 둘에 큰 가중치를 줍니다. 사용자 벡터가 “자전거 관심”이 되어, 후보 중 빙에고르 기사(SID 21-117-147)의 점수가 가장 높게 나옵니다. SID 모드에서는 읽은 빙에고르 기사(21-117-485)와 c1 · c2 조각(c1 = 21, c2 = 117의 벡터)을 공유해서 이 연결이 처음부터 벡터에 들어 있습니다.</p>
+<h3 class="g">실제 예시로 따라가기</h3>
+<p class="src" style="border:0;margin:0 0 6px;padding:0"><b>(실제)</b> = 데이터에서 꺼낸 기사 · SID · 행 번호 · E5 값, <b>(설명용)</b> = 학습된 가중치가 필요한 값(학습된 checkpoint는 AWS에만 있음). “이 사용자가 이 기사들을 읽었다”는 상황은 설명용으로 만든 것입니다.</p>
+<p><b>0. 상황</b></p>
+<div class="tw"><table>
+<tr><th></th><th>기사 (실제)</th><th>SID</th><th class="n">행 번호</th></tr>
+<tr><td>읽음 h1</td><td>총리, 보고서 발언</td><td>12-22-288</td><td class="n">8458</td></tr>
+<tr><td>읽음 h2</td><td>투르 드 프랑스 중 전설이 빙에고르에게 경고</td><td>21-61-470</td><td class="n">7499</td></tr>
+<tr><td>읽음 h3</td><td>빙에고르, 폭설로 경기 중단</td><td>21-117-485</td><td class="n">11057</td></tr>
+<tr><td>후보 c1</td><td>해리 왕자 DNA 검사</td><td>22-105-2</td><td class="n">17</td></tr>
+<tr class="hl"><td>후보 c2 ✅</td><td>빙에고르의 정상까지 (실제 클릭)</td><td>21-117-147</td><td class="n">7532</td></tr>
+<tr><td>후보 c3</td><td>브뢴비 팬, 숨진 FCK 팬 조롱</td><td>21-88-469</td><td class="n">1077</td></tr>
+<tr><td>후보 c4</td><td>위기 테크 은행 500명 해고</td><td>15-29-449</td><td class="n">19053</td></tr>
+<tr><td>후보 c5</td><td>Side 9 인물 갤러리</td><td>20-122-349</td><td class="n">631</td></tr>
+</table></div>
+<p><b>1. 입력 만들기</b> — 기사 ID를 사전(<code>article_id2row</code>)으로 행 번호로 바꿉니다.</p>
+<pre>읽은 기사 50칸 = [8458, 7499, 11057, 빈칸, …, 빈칸]   mask = [1, 1, 1, 0, …, 0]
+후보 5칸       = [17, 7532, 1077, 19053, 631]          정답 = 2번째 칸</pre>
+<p><b>2. 기사 인코더</b> — 읽은 기사 3개와 후보 5개, 8개 모두에 같은 방법으로 300차원 벡터를 만듭니다. 모드마다 여기만 다릅니다.</p>
+<pre>SID 모드
+h3 (21-117-485) → E1[21] + E2[117] + E3[485]
+c2 (21-117-147) → E1[21] + E2[117] + E3[147]   ← h3와 두 조각이 같음
+c3 (21-88-469)  → E1[21] + E2[88]  + E3[469]   ← c1만 같음
+c4 (15-29-449)  → E1[15] + E2[29]  + E3[449]   ← 겹치는 것 없음
+
+E5 모드
+h3의 E5 (실제) = [0.008, 0.032, −0.046, 0.012, …] (768개) → Linear 768→300 → 300개</pre>
+<ul>
+<li>E1 · E2 · E3는 번호마다 300차원 벡터가 들어 있는 표로, NRMS가 처음부터 새로 학습합니다(RQ-VAE 코드북 아님). 코드에서는 0번을 빈칸 전용으로 두려고 번호에 1을 더해 씁니다(21 → 22). 의미는 같습니다.</li>
+<li>h3와 정답 c2는 “스포츠(21) · 자전거 경주(117)” 조각을 처음부터 공유합니다.</li>
+<li>E5만으로도 정답이 가장 가깝습니다(실제 계산). 읽은 기사 3개 평균과의 원본 E5 cosine: c2 <b>0.920</b>, c3 0.857, c4 0.857, c1 0.856, c5 0.844.</li>
+</ul>
+<p><b>3. 사용자 인코더</b> (모든 모드 같음)</p>
+<ul>
+<li>(a) self-attention 20 head: 읽은 기사끼리 서로 참고합니다. 실제 E5 cosine도 h2–h3 0.864로 가장 가깝고 h1–h2 0.796, h1–h3 0.777이라, 빙에고르 기사 h2 · h3는 서로를 많이 참고하고 총리 기사 h1은 따로 남습니다. 빈칸 47개는 mask로 빼고, 20 head는 300차원을 15차원씩 20조각으로 나눠 20가지 관점에서 동시에 참고하는 것입니다.</li>
+<li>(b) additive attention (설명용): 기사마다 중요도를 매겨 가중 평균합니다. h1 0.15 · h2 0.41 · h3 0.43 · 빈칸 0 → 사용자 벡터 u = 0.15·h1′ + 0.41·h2′ + 0.43·h3′ = “자전거 · 빙에고르에 관심 많은 사용자”.</li>
+</ul>
+<p><b>4. 점수 = 출력</b> (모든 모드 같음, 설명용)</p>
+<div class="tw"><table>
+<tr><th>후보</th><th class="n">점수 u · 후보</th><th class="n">확률 (softmax)</th></tr>
+<tr class="hl"><td>c2 빙에고르 정상 ✅</td><td class="n">4.1</td><td class="n">0.82</td></tr>
+<tr><td>c3 브뢴비 팬 (같은 스포츠)</td><td class="n">2.3</td><td class="n">0.13</td></tr>
+<tr><td>c1 해리 왕자</td><td class="n">0.4</td><td class="n">0.02</td></tr>
+<tr><td>c5 Side 9</td><td class="n">0.3</td><td class="n">0.02</td></tr>
+<tr><td>c4 테크 은행</td><td class="n">0.2</td><td class="n">0.02</td></tr>
+</table></div>
+<p>1등이 c2이고 실제 클릭도 c2이므로 Top-1 정답입니다. c3가 2등인 것은 SID 모드 기준 c1(스포츠) 조각을 공유하기 때문입니다.</p>
+<p><b>5. 학습</b></p>
+<ul>
+<li>loss = −log P(정답) = −log 0.82 = 0.20 (설명용). 이 loss가 줄어드는 방향으로 SID 모드는 E1 · E2 · E3 표와 attention을, E5 모드는 Linear와 attention을 고칩니다.</li>
+<li>문제 64개 평균 loss로 한 번 고치고, train 232,874문제를 한 바퀴 돌면 1 epoch, 최대 5 epoch.</li>
+<li>매 epoch 끝에 validation half 122,549문제로 Top-1을 재 가장 좋은 epoch을 저장(SID 2 · 1 · 3, E5 5 · 5 · 4)하고, 마지막에 test 122,668문제로 한 번 채점 → seed 3개 평균 <b>E5 29.92%, SID 26.09%</b>.</li>
+</ul>
+<pre>읽은 기사 3개 + 후보 5개 (행 번호)
+  → [기사 인코더] 기사마다 300차원   ← SID: E1+E2+E3 / E5: Linear(768→300)
+  → [사용자 인코더] 읽은 기사끼리 참고(20 head) → 중요도 가중 평균 → u
+  → [점수] u · 후보 5개 → c2가 1등 → 정답
+  → [학습] −log P(c2)를 줄이도록 수정</pre>
+<div class="ok"><b>SID 모드가 맞히는 이유</b> · 읽은 기사와 정답이 c1 · c2 조각을 공유하기 때문입니다. SID를 무작위로 섞으면 이 공유가 사라져 20.71%(무작위 수준)로 떨어집니다.</div>
 <h3 class="g">학습 설정과 선택</h3>
 <div class="tw"><table>
 <tr><th>항목</th><th>값</th></tr>
