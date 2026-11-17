@@ -69,11 +69,12 @@ from src.validate_data import run_validation
 #
 # [중간: RQ-VAE 팀/모듈]
 # ------------------------------------------------------------
-# rqvae_train_inputs
+# exports/rqvae_inputs/  (dataset_folder 하나)
 #     ↓
-# RQ-VAE Train
+# RQ-VAE Train (article_master.parquet)
 #     ↓
-# validation-only Frozen Inference
+# SID 생성 (Train: 기사별 nearest code,
+#           Validation-only: 발행 시각 순으로 기존 Train 사건에만 배정)
 #     ↓
 # article_semantic_ids.parquet 생성
 #
@@ -137,8 +138,7 @@ def _print_stage_result(stage_name:str, result:Any)-> None :
 # RQ-VAE 학습을 시작할 수 있는 상태까지 전처리 관련 작업 순서대로 한 번에 실행
 
 # 완료 지점 : 
-# rqvae_train_inputs/
-# rqvae_validation_inputs/
+# exports/rqvae_inputs/
 # package가 만들어진 상태 
 
 def run_preprocess_pipeline() -> dict[str, Any]:
@@ -153,13 +153,14 @@ def run_preprocess_pipeline() -> dict[str, Any]:
         valid article 생성
         train-used article 수집
         category mapping
+        article entity 정규화 (article_entities.parquet)
         e5 embedding
         train event clustering
         article_master 생성
 
     STEP10. Validation build
         validation-used/validation-only 분리
-        validation dynamic event assignment
+        validation dynamic event assignment (평가 전용 라벨, SID 생성 입력 아님)
         validation_article_master 생성
 
     STEP12. RQ-VAE INPUT EXPORT
@@ -203,11 +204,13 @@ def run_preprocess_pipeline() -> dict[str, Any]:
     #
     # build_valid_articles()
     #     ↓
-    # collect_train_used_article_ids()
+    # collect_train_used_article_ids()   (history + 현재 + 클릭 + 노출 목록 inview)
     #     ↓
     # build_category_mapping()
     #     ↓
     # apply_category_mapping_to_articles()
+    #     ↓
+    # build_article_entities()           (article_entities.parquet, Train fit)
     #     ↓
     # build_article_embedding_input()
     #     ↓
@@ -254,8 +257,7 @@ def run_preprocess_pipeline() -> dict[str, Any]:
     # model_inputs에 흩어져있는 파일을 RQ-VAE 파트에서 바로 사용할 수 있는 패키지로 묶기 
     # 결과 예:
     # data/output/exports/
-    #   rqvae_train_inputs/
-    #   rqvae_validation_inputs/
+    #   rqvae_inputs/   (RQ-VAE dataset_folder 하나)
 
     rqvae_export_result = export_rqvae_inputs()
 

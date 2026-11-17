@@ -449,7 +449,8 @@ def validate_articles() -> dict[str, Any]:
     )
 
     # STEP 7-9. published_time null 검사 
-    # 발행 시간이 없는 클러스터링 처리 불가
+    # 발행 시간이 없으면 사건 클러스터링·시간순 처리가 불가능하므로
+    # build_train.build_valid_articles()에서 기사 자체를 제외한다 (사건 계산만 빼는 것이 아님)
     published_time_null_count = count_null_rows(
     dataframe=articles,
     column_name="published_time",
@@ -462,7 +463,8 @@ def validate_articles() -> dict[str, Any]:
     # entity_groups = ["ORG", "LOC"]
 
     # -> 각 행의 리스트 길이 계산해서 리스트 자체가 null이면 0으로 처리하고, 길이가 다른 기사 확인
-    # 이후 NER 기반 event 구성 단계에서 제외 ㅇ
+    # 길이가 다르면 개체와 TYPE 대응을 믿을 수 없으므로
+    # build_train.build_valid_articles()에서 기사 자체를 제외한다 (사건 계산만 빼는 것이 아님)
     ner_entity_length_mismatch_count = (
         articles.select(
             (
@@ -483,8 +485,8 @@ def validate_articles() -> dict[str, Any]:
     # STEP 7-12. 경고 조건 확인 
     # 1. title과 subtitle 모두 빈 기사: 임베딩 생성 대상에서 제외
     # 2. category 또는 category_str 누락: 원본 확인 또는 <UNK>=0 처리
-    # 3. published_time 누락: 시간 기반 event clustering에서 제외
-    # 4. NER 길이 불일치: NER 기반 event 구성에서 제외
+    # 3. published_time 누락: 유효 기사에서 제외 (build_valid_articles)
+    # 4. NER 길이 불일치: 유효 기사에서 제외 (build_valid_articles)
     has_warning = (
         empty_title_and_subtitle_count > 0
         or category_null_count > 0

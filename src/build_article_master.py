@@ -3,6 +3,47 @@ import numpy as np
 import polars as pl
 from src import config 
 
+
+def check_embedding_array_matches_input(
+        article_embeddings: np.ndarray,
+) -> dict[str, int]:
+    """
+    article_embeddings.npy 행 수가 임베딩 입력 기사 수와 같은지 검사한다.
+
+    embedding_row 범위 검사만으로는 "배열이 더 길다"(다른 실행의 npy가 남아 있음)
+    같은 불일치를 잡지 못하므로, 아래를 모두 확인한다.
+    1. npy 행 수 == article_embedding_input.parquet 행 수
+    2. embedding_row 가 0..N-1 을 빠짐없이 한 번씩 가진다
+    """
+    embedding_input = pl.read_parquet(
+        config.ARTICLE_EMBEDDING_INPUT_PATH,
+        columns=["embedding_row"],
+    )
+    input_row_count = int(embedding_input.height)
+    array_row_count = int(article_embeddings.shape[0])
+
+    if array_row_count != input_row_count:
+        raise ValueError(
+            "article_embeddings.npy 행 수와 임베딩 입력 기사 수가 다릅니다. "
+            f"npy 행 수={array_row_count}, "
+            f"article_embedding_input 행 수={input_row_count}"
+        )
+
+    rows = embedding_input.get_column("embedding_row").cast(pl.Int64)
+    if (
+        rows.n_unique() != input_row_count
+        or int(rows.min()) != 0
+        or int(rows.max()) != input_row_count - 1
+    ):
+        raise ValueError(
+            "article_embedding_input.embedding_row가 0..N-1 연속 번호가 아닙니다."
+        )
+
+    return {
+        "embedding_input_row_count": input_row_count,
+        "embedding_array_row_count": array_row_count,
+    }
+
 # STEP 8. Train article master 생성
 
 # 이전 스텝에서 각각 따로 생성한 TRAIN 기사 정보를 article_id 기준으로 하나의 최종 테이블로 합치기
@@ -272,6 +313,9 @@ def build_train_article_master() -> dict[str, Any]:
     embedding_array_row_count = int(
         article_embeddings.shape[0]
     )
+
+    # npy 행 수 == 임베딩 입력 기사 수 (범위 검사보다 강한 검사)
+    check_embedding_array_matches_input(article_embeddings)
 
     minimum_embedding_row = int(
         article_master

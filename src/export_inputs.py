@@ -10,6 +10,7 @@ import numpy as np
 import polars as pl
 
 from src import config
+from src.build_article_master import check_embedding_array_matches_input
 
 # ============================================================
 # STEP 12. Model Input Export
@@ -93,8 +94,7 @@ from src import config
 #     export_inputs.py
 #          ↓
 # data/output/exports/
-#   ├─ rqvae_train_inputs/
-#   ├─ rqvae_validation_inputs/
+#   ├─ rqvae_inputs/          (RQ-VAE dataset_folder 하나)
 #   └─ transformer_inputs/
 #
 #
@@ -111,7 +111,9 @@ from src import config
 # 1. data/output/model_inputs 안의 원본 산출물은 수정하지 않는다.
 # 2. export 폴더에 복사본만 만든다.
 # 3. export 전에 최소 정합성 검사를 한다.
-# 4. RQ-VAE Train / Validation Frozen Inference / Transformer를 분리한다.
+# 4. RQ-VAE 입력(한 폴더) / Transformer 입력을 분리한다.
+#    RQ-VAE 안에서 Train / Validation-only 는 파일(article_master vs
+#    validation_article_master)로 구분한다.
 # ============================================================
 
 
@@ -124,14 +126,14 @@ from src import config
 # 결과 예:
 #
 # data/output/exports/
-# ├─ rqvae_train_inputs/
+# ├─ rqvae_inputs/
 # │   ├─ article_master.parquet
-# │   ├─ article_embeddings.npy
-# │   └─ manifest.json
-# │
-# ├─ rqvae_validation_inputs/
 # │   ├─ validation_article_master.parquet
 # │   ├─ article_embeddings.npy
+# │   ├─ event_master.parquet
+# │   ├─ entity_idf.parquet
+# │   ├─ entity_idf_meta.json
+# │   ├─ article_entities.parquet
 # │   └─ manifest.json
 # │
 # └─ transformer_inputs/
@@ -143,8 +145,8 @@ from src import config
 
 
 EXPORT_ROOT_DIR = config.OUTPUT_DIR / "exports"
-RQ_VAE_TRAIN_EXPORT_DIR = EXPORT_ROOT_DIR / "rqvae_train_inputs"
-RQ_VAE_VALIDATION_EXPORT_DIR = EXPORT_ROOT_DIR / "rqvae_validation_inputs"
+# RQ-VAE dataset_folder (Train + Validation-only + 사건/개체/IDF 를 한 폴더에)
+RQ_VAE_EXPORT_DIR = EXPORT_ROOT_DIR / "rqvae_inputs"
 TRANSFORMER_EXPORT_DIR = EXPORT_ROOT_DIR / "transformer_inputs"
 
 # STEP 12-1. 공통 헬퍼 함수
@@ -188,10 +190,10 @@ def _copy_file(
       = data/output/model_inputs/article_master.parquet
 
     destination_dir
-      = data/output/exports/rqvae_train_inputs
+      = data/output/exports/rqvae_inputs
 
     결과
-      = data/output/exports/rqvae_train_inputs/article_master.parquet
+      = data/output/exports/rqvae_inputs/article_master.parquet
 
     shutil.copy2()를 사용하여 파일 내용뿐 아니라
     가능한 범위에서 수정 시간 등의 메타데이터도 함께 복사한다.
@@ -505,6 +507,9 @@ def _validate_rqvae_train_inputs() -> dict[str, Any]:
         article_embeddings.shape[1]
     )
 
+    # npy 행 수 == 임베딩 입력 기사 수
+    check_embedding_array_matches_input(article_embeddings)
+
 
 
     # STEP 12-2-5. embedding_row 범위 검사 
@@ -654,6 +659,9 @@ def _validate_rqvae_validation_inputs() -> dict[str, Any]:
         article_embeddings.shape[0]
     )
 
+    # npy 행 수 == 임베딩 입력 기사 수
+    check_embedding_array_matches_input(article_embeddings)
+
     if validation_master.height > 0:
         minimum_embedding_row = int(
             validation_master
@@ -686,8 +694,8 @@ def _validate_rqvae_validation_inputs() -> dict[str, Any]:
 
 
     # STEP 12-3-4. Validation article의 event_id 참조 정합성 검사
-    # validation_article_master의 event_id는 반드시
-    # event_master_with_validation.parquet 안에 존재해야함
+    # validation_article_master의 event_id는 평가 전용 라벨이다 (SID 생성 입력 아님).
+    # 라벨이 깨지지 않았는지만 확인: event_master_with_validation.parquet 안에 존재해야함
     event_ids = set(
         int(event_id)
         for event_id
@@ -967,207 +975,295 @@ def _validate_transformer_inputs() -> dict[str, Any]:
 # STEP 12-5. RQ-VAE 입력 패키지 EXPORT
 # ============================================================
 #
-# 이 함수는 RQ-VAE에 필요한 전달물을 두 package로 나눈다.
+# RQ-VAE는 dataset_folder 하나를 읽으므로 한 폴더에 모은다.
 #
-# 1. rqvae_train_inputs
-#    -> Train 기사로 RQ-VAE를 학습할 때 사용
+# data/output/exports/rqvae_inputs/          (= RQ-VAE gin의 dataset_folder)
+# ├─ article_master.parquet              Train 기사 (RQ-VAE 학습)
+# ├─ validation_article_master.parquet   Validation-only 기사 (학습 후 SID 생성)
+# │                                       event_id 는 평가 전용 라벨
+# ├─ article_embeddings.npy              전체 유효 기사 E5 임베딩 (embedding_row 로 조회)
+# ├─ event_master.parquet                Train 사건만 (Validation 반영본 아님)
+# ├─ entity_idf.parquet                  Train 기준 개체 IDF (entity, idf, is_high_df, ...)
+# ├─ entity_idf_meta.json                {"train_article_count": N, ...}
+# ├─ article_entities.parquet            (article_id, canonical_entity_key)
+# │                                       Train + Validation-only 기사
+# └─ manifest.json
 #
-# 2. rqvae_validation_inputs
-#    -> 학습 완료 checkpoint를 고정하고
-#       Validation-only 기사 SID를 inference할 때 사용
-#
-# 왜 둘을 나누는가?
-# ------------------------------------------------------------
-# Validation-only 기사를 Train DataLoader에 넣으면
-# validation 정보가 학습에 들어가는 leakage가 발생할 수 있기 때문이다.
+# Leakage 방지는 폴더가 아니라 파일로 구분한다.
+# - RQ-VAE Train DataLoader 는 article_master.parquet 만 학습에 쓴다.
+# - validation_article_master.parquet 는 학습 후 SID 생성에만 쓴다.
+# - 사건·IDF·개체 정규화는 모두 Train 기준으로 고정된 값이다.
 # ============================================================
+
+# article_entities export 에 남길 컬럼
+_RQ_VAE_ARTICLE_ENTITY_COLUMNS = ["article_id", "canonical_entity_key"]
+
+# 개체 키는 "TYPE::surface" 형식 (src/entity_processing.make_entity_key)
+# event_entity_linking 버전의 "WD::Q..." 키가 섞이면 안 된다.
+_ENTITY_KEY_PATTERN = r"^[A-Z_]+::.+$"
+
+
+def _validate_rqvae_event_entity_inputs(
+        train_article_ids: set[int],
+        validation_article_ids: set[int],
+) -> tuple[dict[str, Any], pl.DataFrame]:
+    """
+    사건·개체·IDF 파일이 같은 버전(src/ 파이프라인)에서 나왔는지 검사하고
+    export 할 article_entities 표를 만든다.
+
+    검사
+    --------------------------------------------------------
+    1. event_master.parquet 은 Train 사건만 가진다.
+    2. article_master.event_id 는 모두 event_master 에 있다.
+    3. 개체 키 형식이 모두 TYPE::surface 이다 (WD:: 등 다른 형식 혼용 금지).
+    4. Train 기사의 개체 키 집합 == entity_idf.entity 집합.
+    5. entity_idf 의 idf 가 entity_idf_meta.json 의 N 으로 다시 계산한 값과 같다.
+    """
+    article_master = pl.read_parquet(
+        config.ARTICLE_MASTER_PATH,
+        columns=["article_id", "event_id"],
+    )
+
+    # 1. Train 사건만
+    event_master = pl.read_parquet(config.EVENT_MASTER_PATH)
+    _validate_required_columns(
+        event_master,
+        {
+            "event_id",
+            "event_origin_split",
+            "event_start_time",
+            "event_last_added_time",
+            "event_entities",
+            "first_article_id",
+        },
+        "event_master.parquet",
+    )
+    _validate_unique_non_null_id(event_master, "event_id", "event_master.parquet")
+
+    non_train_event_count = event_master.filter(
+        pl.col("event_origin_split") != "train"
+    ).height
+    if non_train_event_count != 0:
+        raise ValueError(
+            "event_master.parquet 에 Train 이 아닌 사건이 있습니다. "
+            f"개수={non_train_event_count}"
+        )
+
+    # 2. article_master.event_id ⊆ event_master.event_id
+    train_event_ids = set(event_master.get_column("event_id").to_list())
+    missing_train_event_ids = sorted(
+        set(article_master.get_column("event_id").to_list()) - train_event_ids
+    )
+    if missing_train_event_ids:
+        raise ValueError(
+            "article_master.event_id 중 event_master 에 없는 값이 있습니다. "
+            f"예시={missing_train_event_ids[:10]}"
+        )
+
+    # article_entities: Train + Validation-only 기사, (article_id, canonical_entity_key) 고유 쌍
+    export_article_ids = train_article_ids | validation_article_ids
+    article_entities = (
+        pl.read_parquet(
+            config.ARTICLE_ENTITIES_PATH,
+            columns=_RQ_VAE_ARTICLE_ENTITY_COLUMNS,
+        )
+        .with_columns(pl.col("article_id").cast(pl.Int64))
+        .filter(
+            pl.col("article_id").is_in(sorted(export_article_ids))
+            & pl.col("canonical_entity_key").is_not_null()
+        )
+        .unique()
+        .sort(_RQ_VAE_ARTICLE_ENTITY_COLUMNS)
+    )
+
+    # 3. 키 형식
+    bad_key_count = article_entities.filter(
+        ~pl.col("canonical_entity_key").str.contains(_ENTITY_KEY_PATTERN)
+    ).height
+    wikidata_key_count = article_entities.filter(
+        pl.col("canonical_entity_key").str.starts_with("WD::")
+    ).height
+    if bad_key_count != 0 or wikidata_key_count != 0:
+        raise ValueError(
+            "article_entities 의 개체 키 형식이 TYPE::surface 가 아닙니다. "
+            f"형식 오류={bad_key_count}, WD:: 키={wikidata_key_count}"
+        )
+
+    # 4. Train 개체 키 집합 == entity_idf
+    entity_idf = pl.read_parquet(config.ENTITY_IDF_PATH)
+    _validate_required_columns(
+        entity_idf,
+        {"entity", "idf", "is_high_df", "document_frequency"},
+        "entity_idf.parquet",
+    )
+    idf_entities = set(entity_idf.get_column("entity").to_list())
+    train_entity_keys = set(
+        article_entities
+        .filter(pl.col("article_id").is_in(sorted(train_article_ids)))
+        .get_column("canonical_entity_key")
+        .to_list()
+    )
+    if train_entity_keys != idf_entities:
+        raise ValueError(
+            "Train 기사의 개체 키와 entity_idf.entity 가 다릅니다 "
+            "(사건/IDF 와 article_entities 가 다른 버전에서 나왔을 수 있음). "
+            f"article_entities 에만 있음={len(train_entity_keys - idf_entities)}, "
+            f"entity_idf 에만 있음={len(idf_entities - train_entity_keys)}"
+        )
+
+    # 5. IDF 와 N 일치
+    with config.ENTITY_IDF_META_PATH.open(encoding="utf-8") as meta_file:
+        entity_idf_meta = json.load(meta_file)
+    meta_train_article_count = int(entity_idf_meta["train_article_count"])
+    if meta_train_article_count != len(train_article_ids):
+        raise ValueError(
+            "entity_idf_meta.train_article_count 와 Train 기사 수가 다릅니다. "
+            f"meta={meta_train_article_count}, article_master={len(train_article_ids)}"
+        )
+    expected_idf = (
+        (pl.lit(meta_train_article_count + 1, dtype=pl.Float64)
+         / (pl.col("document_frequency").cast(pl.Float64) + 1.0)).log()
+        + 1.0
+    )
+    max_idf_error = float(
+        entity_idf.select((pl.col("idf") - expected_idf).abs().max()).item() or 0.0
+    )
+    if max_idf_error > 1e-9:
+        raise ValueError(
+            "entity_idf.idf 가 entity_idf_meta 의 N 으로 계산한 값과 다릅니다. "
+            f"최대 오차={max_idf_error}"
+        )
+
+    validation_entity_keys = set(
+        article_entities
+        .filter(pl.col("article_id").is_in(sorted(validation_article_ids)))
+        .get_column("canonical_entity_key")
+        .to_list()
+    )
+
+    return (
+        {
+            "status": "PASS",
+            "entity_pipeline": "src (entity_processing normalize_only, TYPE::surface 키)",
+            "train_event_count": int(event_master.height),
+            "entity_idf_count": int(entity_idf.height),
+            "high_df_entity_count": int(
+                entity_idf.filter(pl.col("is_high_df")).height
+            ),
+            "train_article_count_for_idf": meta_train_article_count,
+            "article_entity_pair_count": int(article_entities.height),
+            "articles_with_entities": int(
+                article_entities.get_column("article_id").n_unique()
+            ),
+            "validation_entity_key_count": int(len(validation_entity_keys)),
+            "validation_unseen_entity_key_count": int(
+                len(validation_entity_keys - idf_entities)
+            ),
+        },
+        article_entities,
+    )
 
 
 def export_rqvae_inputs() -> dict[str, Any]:
     """
-    RQ-VAE Train package + Validation Frozen Inference package 생성.
+    RQ-VAE dataset_folder 하나(exports/rqvae_inputs/)를 만든다.
 
-    Train 핵심 파일
+    파일
     --------------------------------------------------------
     article_master.parquet
-      -> 어떤 Train article을 사용할지
-      -> embedding_row / category / event_id 연결
-
-    article_embeddings.npy
-      -> embedding_row로 x(a) 조회
-
-    Train 보조 파일
-    --------------------------------------------------------
-    category_mapping.parquet
-      -> model_category_id 해석
-
-    article_events.parquet
-      -> article_id -> event_id 관계 확인
-
-    event_master.parquet
-      -> Train Event 분석/검증
-
-    Validation 핵심 파일
-    --------------------------------------------------------
+      -> Train 기사. article_id, embedding_row, model_category_id, event_id,
+         published_time, model_text
     validation_article_master.parquet
-      -> validation-only 기사 목록 및 metadata
-
+      -> Validation-only 기사. 같은 컬럼.
+         event_id 는 전처리 Validation 사건 배정 결과로 평가 전용 라벨이며
+         SID 생성 입력으로 쓰지 않는다 (이름은 RQ-VAE 요구로 그대로 유지).
     article_embeddings.npy
-      -> 동일한 전체 기사 embedding 배열 재사용
-
-    event_master_with_validation.parquet
-      -> Train-origin / Validation-origin Event 상태 확인
-
-    Validation 보조
-    --------------------------------------------------------
-    validation_article_events.parquet
-      -> validation-only article -> event_id mapping 확인
+      -> 전체 유효 기사 임베딩
+    event_master.parquet
+      -> Train 사건만 (event_entities, event_last_added_time 등)
+    entity_idf.parquet / entity_idf_meta.json
+      -> Train 기준 IDF 와 N
+    article_entities.parquet
+      -> (article_id, canonical_entity_key), Train + Validation-only 기사
     """
 
-    # STEP 12-5-1. 반드시 있어야 하는 TRAIN 입력 
-    required_train_paths = {
-        "article_master": (
-            config.ARTICLE_MASTER_PATH
-        ),
-        "article_embeddings": (
-            config.ARTICLE_EMBEDDINGS_PATH
-        ),
+    required_paths = {
+        "article_master": config.ARTICLE_MASTER_PATH,
+        "validation_article_master": config.VALIDATION_ARTICLE_MASTER_PATH,
+        "article_embeddings": config.ARTICLE_EMBEDDINGS_PATH,
+        "article_embedding_input": config.ARTICLE_EMBEDDING_INPUT_PATH,
+        "event_master": config.EVENT_MASTER_PATH,
+        "event_master_with_validation": config.EVENT_MASTER_WITH_VALIDATION_PATH,
+        "entity_idf": config.ENTITY_IDF_PATH,
+        "entity_idf_meta": config.ENTITY_IDF_META_PATH,
+        "article_entities": config.ARTICLE_ENTITIES_PATH,
     }
+    _require_paths(required_paths)
 
-    # STEP 12-5-2. 반드시 있어야 하는 VALIDATION inference 입력
-    required_validation_paths = {
-        "validation_article_master": (
-            config.VALIDATION_ARTICLE_MASTER_PATH
-        ),
-        "article_embeddings": (
-            config.ARTICLE_EMBEDDINGS_PATH
-        ),
-        "event_master_with_validation": (
-            config.EVENT_MASTER_WITH_VALIDATION_PATH
-        ),
-    }
+    # STEP 12-5-1. 복사하기 전 정합성 검사
+    train_validation = _validate_rqvae_train_inputs()
+    validation_validation = _validate_rqvae_validation_inputs()
 
+    train_article_ids = set(
+        pl.read_parquet(config.ARTICLE_MASTER_PATH, columns=["article_id"])
+        .get_column("article_id").cast(pl.Int64).to_list()
+    )
+    validation_article_ids = set(
+        pl.read_parquet(config.VALIDATION_ARTICLE_MASTER_PATH, columns=["article_id"])
+        .get_column("article_id").cast(pl.Int64).to_list()
+    )
+    overlap = train_article_ids & validation_article_ids
+    if overlap:
+        raise ValueError(
+            "Train 과 Validation-only 기사가 겹칩니다. "
+            f"예시={sorted(overlap)[:10]}"
+        )
 
-    # 파일이 없으면 여기서 즉시 중단
-    _require_paths(
-        required_train_paths
+    event_entity_validation, article_entities = _validate_rqvae_event_entity_inputs(
+        train_article_ids=train_article_ids,
+        validation_article_ids=validation_article_ids,
     )
 
-    _require_paths(
-        required_validation_paths
-    )
+    # STEP 12-5-2. 폴더 초기화 후 복사
+    _reset_directory(RQ_VAE_EXPORT_DIR)
 
-    # STEP 12-5-3. 복사하기 전 정합성 검사
-    train_validation = (
-        _validate_rqvae_train_inputs()
-    )
-
-    validation_validation = (
-        _validate_rqvae_validation_inputs()
-    )
-
-    # STEP 12-5-4. 이전 export 폴더 초기화 
-    _reset_directory(
-        RQ_VAE_TRAIN_EXPORT_DIR
-    )
-
-    _reset_directory(
-        RQ_VAE_VALIDATION_EXPORT_DIR
-    )
-
-
-    # STEP 12-5-5. RQ-VAE train 핵심 파일 복사
-    train_exported_files = [
-        _copy_file(
-            config.ARTICLE_MASTER_PATH,
-            RQ_VAE_TRAIN_EXPORT_DIR,
-        ),
-        _copy_file(
-            config.ARTICLE_EMBEDDINGS_PATH,
-            RQ_VAE_TRAIN_EXPORT_DIR,
-        ),
+    exported_files = [
+        _copy_file(config.ARTICLE_MASTER_PATH, RQ_VAE_EXPORT_DIR),
+        _copy_file(config.VALIDATION_ARTICLE_MASTER_PATH, RQ_VAE_EXPORT_DIR),
+        _copy_file(config.ARTICLE_EMBEDDINGS_PATH, RQ_VAE_EXPORT_DIR),
+        _copy_file(config.EVENT_MASTER_PATH, RQ_VAE_EXPORT_DIR),
+        _copy_file(config.ENTITY_IDF_PATH, RQ_VAE_EXPORT_DIR),
+        _copy_file(config.ENTITY_IDF_META_PATH, RQ_VAE_EXPORT_DIR),
     ]
 
-    # STEP 12-5-6. Train 분석 / 검증용 보조 파일 복사
-    # 없어도 핵심 RQ-VAE Train package 생성은 가능하도록 optional 처리
-    for optional_path in [
-        config.CATEGORY_MAPPING_PATH,
-        config.ARTICLE_EVENTS_PATH,
-        config.EVENT_MASTER_PATH,
-    ]:
-        copied = _copy_optional_file(
-            optional_path,
-            RQ_VAE_TRAIN_EXPORT_DIR,
-        )
+    article_entities_path = RQ_VAE_EXPORT_DIR / "article_entities.parquet"
+    article_entities.write_parquet(article_entities_path, compression="zstd")
+    exported_files.append(article_entities_path)
 
-        if copied is not None:
-            train_exported_files.append(
-                copied
-            )
-
-    # STEP 12-5-7. Validation frozen infer 핵심 파일 복사 
-    validation_exported_files = [
-        _copy_file(
-            config.VALIDATION_ARTICLE_MASTER_PATH,
-            RQ_VAE_VALIDATION_EXPORT_DIR,
-        ),
-        _copy_file(
-            config.ARTICLE_EMBEDDINGS_PATH,
-            RQ_VAE_VALIDATION_EXPORT_DIR,
-        ),
-        _copy_file(
-            config.EVENT_MASTER_WITH_VALIDATION_PATH,
-            RQ_VAE_VALIDATION_EXPORT_DIR,
-        ),
-    ]
-
-    # validation article -> event mapping은 보조 파일
-    copied_validation_events = (
-        _copy_optional_file(
-            config.VALIDATION_ARTICLE_EVENTS_PATH,
-            RQ_VAE_VALIDATION_EXPORT_DIR,
-        )
+    manifest_path = _write_manifest(
+        RQ_VAE_EXPORT_DIR,
+        "rqvae_inputs",
+        {
+            "train": train_validation,
+            "validation_only": validation_validation,
+            "event_entity": event_entity_validation,
+            "notes": [
+                "RQ-VAE 학습은 article_master.parquet 만 사용한다.",
+                "validation_article_master.event_id 는 전처리 Validation 사건 배정 결과(평가 전용 라벨)이며 SID 생성 입력이 아니다.",
+                "event_master / entity_idf / entity_idf_meta / 개체 정규화는 모두 Train 기준으로 고정된 값이다.",
+            ],
+        },
+        exported_files,
     )
 
-    if copied_validation_events is not None:
-        validation_exported_files.append(
-            copied_validation_events
-        )
-
-    # STEP 12-5-8. Train package manifest 저장
-    train_manifest_path = _write_manifest(
-        RQ_VAE_TRAIN_EXPORT_DIR,
-        "rqvae_train_inputs",
-        train_validation,
-        train_exported_files,
-    )
-
-    # STEP 12-5-9. Validation package manifest 저장
-    validation_manifest_path = _write_manifest(
-        RQ_VAE_VALIDATION_EXPORT_DIR,
-        "rqvae_validation_inputs",
-        validation_validation,
-        validation_exported_files,
-    )
-
-    # 호출한 main.py가 결과를 로그로 보여줄 수 있게
-    # 생성된 경로와 validation 결과 반환
     return {
         "status": "SUCCESS",
-        "rqvae_train_export_dir": str(
-            RQ_VAE_TRAIN_EXPORT_DIR
-        ),
-        "rqvae_validation_export_dir": str(
-            RQ_VAE_VALIDATION_EXPORT_DIR
-        ),
-        "train_manifest_path": str(
-            train_manifest_path
-        ),
-        "validation_manifest_path": str(
-            validation_manifest_path
-        ),
+        "rqvae_export_dir": str(RQ_VAE_EXPORT_DIR),
+        "manifest_path": str(manifest_path),
+        "exported_files": [path.name for path in exported_files],
         "train_validation": train_validation,
         "validation_validation": validation_validation,
+        "event_entity_validation": event_entity_validation,
     }
 
 

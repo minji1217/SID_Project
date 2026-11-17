@@ -19,6 +19,10 @@ from src.entity_processing import (
     load_canonical_entity_lookup,
 )
 
+from src.build_article_master import (
+    check_embedding_array_matches_input,
+)
+
 
 # ==============================================
 # train event 생성에서 사용했던 entity 처리 로직 그대로 사용
@@ -33,6 +37,22 @@ from src.build_train import(
 # STEP 10. Validation article / event build
 # train 전처리가 끝난 뒤 validation에서 새롭게 필요한 기사들을
 # RQ-VAE inference에 사용할 수 있는 형태로 준비한다
+
+# [중요] Validation event_id는 평가 전용 라벨이다.
+# ------------------------------------------------------------
+# 이 파일의 사건 배정(_assign_validation_events, validation-origin 사건 생성 포함)과
+# event_master_with_validation.parquet, validation_article_master.event_id 는
+# "전처리 기준 사건 라벨"을 평가·분석용으로 남기는 것이다.
+# Validation-only 기사의 SID(c2 포함)를 만드는 입력으로 쓰지 않는다.
+#
+# Validation-only 기사의 SID는 RQ-VAE 학습 후 SID 생성 단계
+# (RQVAE/generate_semantic_ids_timeupdate)에서 발행 시각 순으로
+# "기존 Train 사건"에만 배정해 만든다. 그 단계는 Train 전용 산출물
+# (event_master.parquet, entity_idf.parquet, entity_idf_meta.json,
+#  article_entities.parquet)만 읽는다.
+#
+# validation_article_master.parquet 의 event_id 컬럼 이름은 RQ-VAE 코드
+# (RQVAE/data/news.py 등)가 필수 컬럼으로 요구하므로 바꾸지 않는다.
 
 # validation에서는 아래 5가지 금지 
 # 1. category mapping 재생성
@@ -375,7 +395,11 @@ def _assign_validation_events(
         config.EVENT_TIME_WINDOW_HOURS
     )) -> dict[str, Any]:
     """
-    validation-only 기사에 event id 부여 
+    validation-only 기사에 event id 부여 (평가 전용 라벨)
+
+    여기서 만든 event_id(새 validation-origin 사건 포함)는 평가·분석용 라벨로만 남긴다.
+    Validation-only 기사의 SID 생성 입력으로 사용하지 않는다.
+    (SID 생성은 RQ-VAE 단계에서 Train 사건에만 배정하는 별도 규칙을 쓴다.)
 
     train event를 다시 클러스터링 하지 않는다.
     train에서 만들어진 event_master.parquet, entity_idf.parquet 그대로 시작 상태로 사용
@@ -1009,6 +1033,12 @@ def build_validation_article_master() -> dict[str, Any]:
 
     따라서 validation_article_master.parquet은 
     RQ-VAE Train DataLoader에 포함하면 안됨
+
+    event_id 컬럼
+    -----------------------
+    전처리의 Validation 사건 배정 결과(평가 전용 라벨)다.
+    SID 생성 입력으로 사용하지 않는다. RQ-VAE 코드가 이 컬럼을 필수로
+    요구하므로 이름은 event_id 그대로 둔다.
     """
 
     # STEP 10-4-1. 필요한 선행 산출물 존재 여부 검사 
@@ -1189,6 +1219,9 @@ def build_validation_article_master() -> dict[str, Any]:
 
     embedding_array_row_count = int(article_embeddings.shape[0])
 
+    # npy 행 수 == 임베딩 입력 기사 수 (범위 검사보다 강한 검사)
+    check_embedding_array_matches_input(article_embeddings)
+
     if validation_article_count > 0:
         minimum_embedding_row = int(
             validation_article_master.get_column("embedding_row").min()
@@ -1277,6 +1310,7 @@ def build_validation() -> dict[str, Any]:
         - train과 겹치는 기사
         - validation-only 기사
     4. validation-only 기사에 dynamic event assignment 수행
+       (평가 전용 라벨. SID 생성 입력으로 사용하지 않음)
     5. RQ-VAE frozen inference용 
         validation_article_master.parquet 생성
     

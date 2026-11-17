@@ -73,9 +73,16 @@ EVENT_BUILD_SUMMARY_PATH = EVENT_OUTPUT_DIR / "event_build_summary.txt"
 # Frozen experiment hyperparameters.
 # Before/After comparison changes Entity representation only.
 # -----------------------------------------------------------------------------
-EVENT_ENTITY_SIMILARITY_THRESHOLD = 0.3
-EVENT_TIME_WINDOW_HOURS = 72
-EVENT_MAX_ENTITY_DF_RATIO = 0.01
+# 사건 하이퍼파라미터는 src/config.py 와 같은 값을 읽는다.
+# (기본값 0.3 / 72 / 0.01, SID_EVENT_SIMILARITY_THRESHOLD / SID_EVENT_TIME_WINDOW_HOURS /
+#  SID_EVENT_MAX_ENTITY_DF_RATIO 환경변수로 바꾸면 두 버전이 같이 바뀐다)
+# 참고: python -m src.main preprocess 의 사건/개체/IDF 산출물은 src/ 버전에서 나온다.
+#       이 패키지는 GPT/Wikidata 연결 결과(WD:: 키)로 사건을 다시 만드는 별도 실험용이다.
+from src import config as _src_config
+
+EVENT_ENTITY_SIMILARITY_THRESHOLD = _src_config.EVENT_ENTITY_SIMILARITY_THRESHOLD
+EVENT_TIME_WINDOW_HOURS = _src_config.EVENT_TIME_WINDOW_HOURS
+EVENT_MAX_ENTITY_DF_RATIO = _src_config.EVENT_MAX_ENTITY_DF_RATIO
 
 
 def create_output_directories() -> None:

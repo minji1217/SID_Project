@@ -163,7 +163,8 @@ def build_baseline_entity_set(
         if entity_group is None: continue 
         entity_set.add(make_entity_key(entity_group, normalized_entity))
 
-        return entity_set 
+    # return이 for 문 안에 있으면 첫 개체만 담고 끝나므로 루프 밖에서 반환한다
+    return entity_set 
 
 # 2. Train mention table 
 

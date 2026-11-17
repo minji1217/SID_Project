@@ -113,6 +113,12 @@ ENTITY_IDF_PATH = (
     MODEL_INPUT_DIR / "entity_idf.parquet"
 )
 
+# entity IDF 계산에 쓴 Train 기사 수 N 등 메타데이터
+# SID 생성 단계에서 Train에 없던 개체의 IDF = log(N+1)+1 을 같은 값으로 계산하기 위함
+ENTITY_IDF_META_PATH = (
+    MODEL_INPUT_DIR / "entity_idf_meta.json"
+)
+
 
 # 기사 임베딩 생성에 사용하는 모델 설정
 

@@ -15,6 +15,9 @@ from src.build_train import (
 from src.build_article_master import (
     build_train_article_master,
 )
+from src.entity_processing import (
+    build_article_entities,
+)
 
 
 # ============================================================
@@ -171,6 +174,20 @@ def main() -> None:
 
     _print_step_result(
         "STEP 5 - Category Mapping 적용",
+        result,
+    )
+
+    # STEP 5-1. 사건 계산용 개체 정규화 (article_entities.parquet)
+    # Train 사용 기사(STEP 3)가 확정되고 articles_with_category(STEP 5)가 생긴 직후,
+    # Train 사건 생성(STEP 7)과 Validation 사건 배정(STEP 10)보다 먼저 실행해야 한다.
+    # 정규화 mapping은 Train 사용 기사로만 fit하고 전체 유효 기사에 적용한다.
+    # (예전에는 run_entity_experiment.py에서만 호출돼, 처음부터 돌리면 실패하거나
+    #  예전 article_entities.parquet가 그대로 쓰였다.)
+    result = (
+        build_article_entities()
+    )
+    _print_step_result(
+        "STEP 5-1 - Article Entity 정규화 (Train fit)",
         result,
     )
 

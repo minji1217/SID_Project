@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from collections import Counter
 from datetime import timedelta
 import math 
+import json
 import unicodedata # entity 문자열 정규화용 
 
 from rich.progress import track
@@ -28,6 +29,7 @@ from src.config import (
     ARTICLE_EVENTS_PATH,
     EVENT_MASTER_PATH,
     ENTITY_IDF_PATH,
+    ENTITY_IDF_META_PATH,
 
     ARTICLE_EMBEDDING_MODEL_NAME,
     ARTICLE_EMBEDDING_MAX_LENGTH,
@@ -282,6 +284,15 @@ def collect_train_used_article_ids() -> dict[str,Any]:
     1. train history의 article_id_fixed
     2. 사용 가능한 클릭 behavior의 현재 article_id
     3. 사용 가능한 클릭 behavior의 클릭 target article_id
+    4. 사용 가능한 클릭 behavior의 노출 목록(article_ids_inview) 전체
+
+    노출 목록(inview)을 수집하는 이유
+    -----------------
+    Transformer는 Train에서도 impression의 후보 5개(1 positive + 4 negative)를
+    비교한다. build_sequences.py는 후보 중 SID가 없는 기사가 하나라도 있으면
+    impression을 통째로 버리므로, Train 기간에 노출된 기사도 Train 기사로 확정해
+    Train 기준 SID를 받게 한다. (validation 수집 규칙과 동일)
+    노출 목록의 클릭 여부(label)는 기사 집합에만 쓰이고 사건/SID 계산에는 쓰이지 않는다.
 
     behavior 처리 규칙
     -----------------
@@ -337,6 +348,7 @@ def collect_train_used_article_ids() -> dict[str,Any]:
             "impression_time",
             "article_id",
             "article_ids_clicked",
+            "article_ids_inview",
         ]
     )
 
@@ -423,6 +435,9 @@ def collect_train_used_article_ids() -> dict[str,Any]:
     # stable dedup 후 고유 클릭이 1개인 target 기사 ID
     target_article_ids: set[Any] = set()
 
+    # 노출 목록(article_ids_inview)에 있던 후보 기사 ID
+    inview_article_ids: set[Any] = set()
+
     # 실제 클릭 학습 샘플로 사용할 수 있는 behavior 행 수
     usable_behavior_row_count = 0 
 
@@ -506,6 +521,15 @@ def collect_train_used_article_ids() -> dict[str,Any]:
                 current_article_id
             )
 
+        # 노출 목록 후보 기사. 내부 null은 원소만 제거
+        inview_ids = row["article_ids_inview"]
+        if inview_ids is not None:
+            inview_article_ids.update(
+                inview_article_id
+                for inview_article_id in inview_ids
+                if inview_article_id is not None
+            )
+
     # STEP 3-9. train에서 참조된 전체 기사 ID 합치기 
     # train history, 현재 기사, 클릭 target에서 수집한 기사 ID를 
     # 하나의 전체 집합으로 합치기 
@@ -513,6 +537,7 @@ def collect_train_used_article_ids() -> dict[str,Any]:
         history_article_ids
         | current_article_ids
         | target_article_ids
+        | inview_article_ids
     )
 
     # STEP 3-10. 유효 기사 ID와 교집합 계산 
@@ -574,6 +599,20 @@ def collect_train_used_article_ids() -> dict[str,Any]:
         # 모든 조건을 통과한 단일 클릭 behavior 행 수
         "usable_behavior_row_count": int(
             usable_behavior_row_count
+        ),
+
+        # 출처별 참조 기사 수 (유효 기사 교집합 전, 서로 겹칠 수 있음)
+        "history_article_count": int(len(history_article_ids)),
+        "current_article_count": int(len(current_article_ids)),
+        "target_article_count": int(len(target_article_ids)),
+        "inview_article_count": int(len(inview_article_ids)),
+
+        # inview를 넣기 전 기준(history ∪ 현재 ∪ 클릭)의 유효 기사 수. 변화량 확인용
+        "train_used_article_count_without_inview": int(
+            len(
+                (history_article_ids | current_article_ids | target_article_ids)
+                & valid_article_ids
+            )
         ),
 
         # train history와 behavior에서 참조된 고유 기사 수
@@ -2127,6 +2166,24 @@ def build_article_events(
         ENTITY_IDF_PATH,
         compression="zstd",
     )
+
+    # IDF 계산에 쓴 Train 기사 수 N 저장
+    # SID 생성 단계에서 처음 보는 개체 IDF = log(N+1)+1 을 Train과 같은 값으로 계산하는 데 쓴다.
+    with ENTITY_IDF_META_PATH.open("w", encoding="utf-8") as meta_file:
+        json.dump(
+            {
+                "train_article_count": int(train_article_count),
+                "unseen_entity_idf": float(unseen_entity_idf),
+                "idf_formula": "idf(e) = log((N+1)/(df(e)+1)) + 1, unseen = log(N+1) + 1",
+                "max_entity_df_ratio": float(max_entity_df_ratio),
+                "high_df_entity_count": int(len(high_df_entities)),
+                "entity_similarity_threshold": float(entity_similarity_threshold),
+                "time_window_hours": int(time_window_hours),
+            },
+            meta_file,
+            ensure_ascii=False,
+            indent=2,
+        )
 
     # STEP 7-6-6. Train graph 생성
 
