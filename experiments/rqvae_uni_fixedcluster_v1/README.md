@@ -32,36 +32,53 @@ UNI(`WD-001-UNI-lu0.05-m0.5`)와 **같은 코드·같은 하이퍼파라미터**
 
 ## AWS 실행
 
+기존 결과를 덮어쓰지 않도록 전처리 출력은 새 폴더(`SID_OUTPUT_DIR`)에 둔다.
+
 ```bash
 cd ~/minji/SID_Project
-git fetch origin claude/preprocess-fixed-cluster && git checkout claude/preprocess-fixed-cluster
+git status --short                     # 수정된 파일이 없어야 함
+git fetch origin claude/preprocess-fixed-cluster experiment/entity-linking-event uniqueness-loss-experiment
+git checkout claude/preprocess-fixed-cluster
 
-# 1) 전처리 (원본 data/raw 5개 필요. 없으면 experiment/entity-linking-event 브랜치에서 꺼냄)
-git fetch origin experiment/entity-linking-event
+# 1) 원본 5개 (없는 것만 git 에서 꺼냄) + 해시 확인
 mkdir -p data/raw/train data/raw/validation
 for f in articles.parquet train/behaviors.parquet train/history.parquet validation/behaviors.parquet validation/history.parquet; do
   [ -f data/raw/$f ] || git cat-file -p origin/experiment/entity-linking-event:data/raw/$f > data/raw/$f
 done
-python -m src.main preprocess > data/output/preprocess.log 2>&1
-tail -5 data/output/preprocess.log     # PREPROCESS_COMPLETE
+(cd data/raw && sha256sum articles.parquet train/*.parquet validation/*.parquet)
 
-# 2) 패키지 (torch 는 서버 CUDA 빌드가 이미 있으면 그대로)
-pip install gin-config einops accelerate scikit-learn huggingface-hub wandb
+# 2) 패키지
+pip install gin-config einops accelerate scikit-learn huggingface-hub wandb rich
 
-# 3) (선택) 1 epoch 스모크 테스트, 몇 분
-SMOKE=1 CUDA_VISIBLE_DEVICES=0 bash experiments/rqvae_uni_fixedcluster_v1/run_aws.sh
+# 3) 전처리 → data/output/fixedcluster_v1/
+export SID_OUTPUT_DIR=~/minji/SID_Project/data/output/fixedcluster_v1
+CUDA_VISIBLE_DEVICES=0 python -m src.main preprocess > ~/minji/preprocess_fixedcluster_v1.log 2>&1
+tail -3 ~/minji/preprocess_fixedcluster_v1.log      # PREPROCESS_COMPLETE
 
-# 4) 본 학습
-SEED=42 CUDA_VISIBLE_DEVICES=0 nohup bash experiments/rqvae_uni_fixedcluster_v1/run_aws.sh \
-    > data/output/rqvae_uni_fixedcluster_s42.log 2>&1 &
-tail -f data/output/rqvae_uni_fixedcluster_s42.log
-grep -a "Validation epoch\|EarlyStopping" data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s42/train.log | tail
+# 4) 기존 UNI checkpoint 찾기 (sha256 dcb276f8…)
+find ~ -name "*.pt" -size +5M 2>/dev/null | xargs -r sha256sum | grep dcb276f8
+
+# 5) (선택) 1 epoch 스모크 테스트
+INPUT_DIR=$SID_OUTPUT_DIR/exports/rqvae_inputs SMOKE=1 CUDA_VISIBLE_DEVICES=0 \
+  bash experiments/rqvae_uni_fixedcluster_v1/run_aws.sh
+
+# 6) 본 학습
+INPUT_DIR=$SID_OUTPUT_DIR/exports/rqvae_inputs A_CKPT=<4번 경로> SEED=42 CUDA_VISIBLE_DEVICES=0 \
+  nohup bash experiments/rqvae_uni_fixedcluster_v1/run_aws.sh > ~/minji/rqvae_uni_fixedcluster_s42.log 2>&1 &
+tail -f ~/minji/rqvae_uni_fixedcluster_s42.log
 ```
 
-- **기존 UNI checkpoint와 설정 비교(권장)**: `A_CKPT=<기존 UNI checkpoint_best_rec.pt 경로>` 를 주면 그 checkpoint 안의 `gin_config` 와 이번 gin 을 항목별로 비교한다. 다르면 학습하지 않고 멈춘다. 경로 3개(dataset_folder, save_dir_root, pretrained_rqvae_path)만 비교에서 뺀다.
-  ```bash
-  A_CKPT=~/minji/<UNI 폴더>/checkpoint_best_rec.pt SEED=42 CUDA_VISIBLE_DEVICES=0 nohup bash experiments/rqvae_uni_fixedcluster_v1/run_aws.sh > data/output/rqvae_uni_fixedcluster_s42.log 2>&1 &
-  ```
+원본 해시 기대값:
+
+| 파일 | sha256 |
+|---|---|
+| `articles.parquet` | `b1cea52ee4c152086ff6b70962fe543a43de50c684c1ec0735a4f061bded43d2` |
+| `train/behaviors.parquet` | `eeedd1b5cb42e952b7688f3199c5eb97da5596e6245a52714083eea3cb8e3736` |
+| `train/history.parquet` | `3f5ac2216f5807677c6225909cef80f1a84d08126c21e3cfeedacb54e3dd323c` |
+| `validation/behaviors.parquet` | `7a212113f427d218f3f36b3f52de876fb2868844e9657474b4be07872674c61d` |
+| `validation/history.parquet` | `4471f22424011192c892fecf3bb4fa3dcf769ebefd8e9fff05b625c3518ac861` |
+
+- `A_CKPT` 를 주면 기존 UNI checkpoint 안의 `gin_config` 와 이번 gin 을 항목별로 비교한다. 다르면 학습하지 않고 멈춘다. 경로 3개(dataset_folder, save_dir_root, pretrained_rqvae_path)만 비교에서 뺀다.
 - 학습 코드는 `~/minji/rqvae_uni_code_127ae7e/` 에 worktree로 꺼낸다. 지금 checkout은 바뀌지 않는다.
 - 결과는 `data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s<SEED>/` 에만 쓴다. 폴더가 이미 있으면 멈춘다.
 
