@@ -1,6 +1,6 @@
 """기존 UNI(A) checkpoint 안의 gin_config 와 이번 gin 의 하이퍼파라미터가 같은지 비교한다.
 
-dataset_folder / save_dir_root / pretrained_rqvae_path 는 경로라 비교에서 뺀다.
+dataset_folder / save_dir_root / pretrained_rqvae_path 는 경로라, seed 는 일부러 바꿀 수 있어서 비교에서 뺀다.
 그 밖에 하나라도 다르면 종료 코드 1 로 멈춘다.
 
 사용: python check_against_a.py <A checkpoint_best_rec.pt> <이번 rqvae_uni.gin> <학습 코드 RQVAE 폴더>
@@ -19,7 +19,8 @@ a_gin = ck.get("gin_config")
 if not a_gin:
     raise SystemExit("A checkpoint 에 gin_config 가 없습니다.")
 
-SKIP = {"train.dataset_folder", "train.save_dir_root", "train.pretrained_rqvae_path"}
+# 경로 3개와 seed 는 비교에서 뺀다 (seed 는 일부러 바꿔서 여러 번 돌릴 수 있음. 값은 아래에 출력)
+SKIP = {"train.dataset_folder", "train.save_dir_root", "train.pretrained_rqvae_path", "train.seed"}
 
 
 def parse(text):
@@ -51,4 +52,4 @@ if diff:
     for k, x, y in diff:
         print(f"   다름 {k}: A={x} · 이번={y}")
     raise SystemExit(1)
-print("   A 와 하이퍼파라미터가 모두 같습니다 (경로 제외).")
+print("   A 와 하이퍼파라미터가 모두 같습니다 (경로 · seed 제외).")

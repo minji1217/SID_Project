@@ -78,7 +78,7 @@ tail -f ~/minji/rqvae_uni_fixedcluster_s42.log
 | `validation/behaviors.parquet` | `7a212113f427d218f3f36b3f52de876fb2868844e9657474b4be07872674c61d` |
 | `validation/history.parquet` | `4471f22424011192c892fecf3bb4fa3dcf769ebefd8e9fff05b625c3518ac861` |
 
-- `A_CKPT` 를 주면 기존 UNI checkpoint 안의 `gin_config` 와 이번 gin 을 항목별로 비교한다. 다르면 학습하지 않고 멈춘다. 경로 3개(dataset_folder, save_dir_root, pretrained_rqvae_path)만 비교에서 뺀다.
+- `A_CKPT` 를 주면 기존 UNI checkpoint 안의 `gin_config` 와 이번 gin 을 항목별로 비교한다. 다르면 학습하지 않고 멈춘다. 경로 3개(dataset_folder, save_dir_root, pretrained_rqvae_path)와 seed 는 비교에서 뺀다 (seed 는 출력만 함).
 - 학습 코드는 `~/minji/rqvae_uni_code_127ae7e/` 에 worktree로 꺼낸다. 지금 checkout은 바뀌지 않는다.
 - 결과는 `data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s<SEED>/` 에만 쓴다. 폴더가 이미 있으면 멈춘다.
 
