@@ -58,15 +58,45 @@ tail -f data/output/rqvae_uni_fixedcluster_s42.log
 grep -a "Validation epoch\|EarlyStopping" data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s42/train.log | tail
 ```
 
+- **기존 UNI checkpoint와 설정 비교(권장)**: `A_CKPT=<기존 UNI checkpoint_best_rec.pt 경로>` 를 주면 그 checkpoint 안의 `gin_config` 와 이번 gin 을 항목별로 비교한다. 다르면 학습하지 않고 멈춘다. 경로 3개(dataset_folder, save_dir_root, pretrained_rqvae_path)만 비교에서 뺀다.
+  ```bash
+  A_CKPT=~/minji/<UNI 폴더>/checkpoint_best_rec.pt SEED=42 CUDA_VISIBLE_DEVICES=0 nohup bash experiments/rqvae_uni_fixedcluster_v1/run_aws.sh > data/output/rqvae_uni_fixedcluster_s42.log 2>&1 &
+  ```
 - 학습 코드는 `~/minji/rqvae_uni_code_127ae7e/` 에 worktree로 꺼낸다. 지금 checkout은 바뀌지 않는다.
 - 결과는 `data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s<SEED>/` 에만 쓴다. 폴더가 이미 있으면 멈춘다.
-  - 결과 파일: `checkpoint_best_rec.pt`, `train.log`, `rqvae_uni.gin`, `operative_config.gin`, `provenance.txt`, `inputs.sha256`, `inputs_manifest.json`
+
+## 저장되는 것 (결과 폴더)
+
+| 파일 | 언제 | 내용 |
+|---|---|---|
+| `train.log` | 계속 | 전체 로그 (매 epoch 학습 지표, 10 epoch마다 validation 지표, early stopping 상태) |
+| `metrics_train.csv` | 학습 후 (중간에도 `parse_log.py` 로 생성 가능) | **매 epoch**: loss, rec, cb, com, uniq, rqvae, t, global_step |
+| `metrics_validation.csv` | 〃 | **평가한 epoch마다** (10, 20, …): loss, rec, cb, com, uniq, rqvae |
+| `early_stopping.csv` | 〃 | 평가마다: 개선 여부, counter, 그 시점 best_total / best_rec 와 epoch |
+| `summary.json` | 〃 | best_rec / best_total 값과 epoch, 마지막 epoch, 조기 종료 여부 |
+| `checkpoint_best_rec.pt` | validation 복원 손실이 좋아질 때마다 덮어씀 | **SID 생성에 쓸 모델** (A 와 같은 기준) |
+| `checkpoint_best_total.pt` | validation total loss 가 좋아질 때마다 | 비교용 |
+| `checkpoint_epoch_<N>.pt` | 50 epoch마다 | 중간 모델 (재개·분석용) |
+| `checkpoint_final.pt` | 끝날 때 | 마지막 epoch 모델 |
+| `operative_config.gin`, `rqvae_uni.gin` | 시작 | 실제 적용된 설정 / 입력한 설정 |
+| `provenance.txt` | 시작·끝 | 전처리 커밋, 학습 코드 커밋, 입력 폴더, seed, 시작·끝 시각, 종료 코드, (A_CKPT 를 줬으면) A checkpoint 해시 |
+| `inputs.sha256`, `inputs_manifest.json` | 시작 | 학습 입력 파일 해시와 전처리 검사 결과 |
+| `check_against_a.txt` | 시작 (A_CKPT 줬을 때) | A 와 설정 비교 결과 |
+
+모든 checkpoint 에는 모델·optimizer·epoch·`model_config`·`gin_config`·loss 가중치가 들어 있다.
+
+validation 은 A 와 같게 **10 epoch마다** 평가한다. 매 epoch로 바꾸면 early stopping(patience = 평가 20번)의 의미가 달라져 A 와 다른 학습이 된다. 그래서 바꾸지 않았다. 학습 지표는 매 epoch 남는다.
+
+학습 중 진행 표 보기:
+```bash
+python experiments/rqvae_uni_fixedcluster_v1/parse_log.py data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s42
+```
 - GPU는 1장만 쓴다 (`CUDA_VISIBLE_DEVICES`). 다른 사람이 쓰는 GPU는 피한다.
 - 시작할 때 입력을 검사한다. 기대값은 train 10,419 / validation-only 2,741 / train 사건 9,794 이고, 다르면 경고를 출력한다.
 
 ## 확인한 것 (이 세션, CPU)
 
-`SMOKE=1 ALLOW_CPU=1` 로 1 epoch을 돌려 다음을 확인했다.
+`SMOKE=1 ALLOW_CPU=1` 로 1 epoch을 돌려 다음을 확인했다. `parse_log.py` 와 `check_against_a.py` 도 이 결과로 시험했다 (같은 설정이면 통과, 다른 설정이면 다른 항목만 표시).
 - 입력 연결: 학습 기사 10,419, validation 2,741
 - Q2 초기화: Train 사건 9,794로 K-means
 - uniqueness loss 계산

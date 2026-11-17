@@ -19,6 +19,7 @@
 #   PYTHON      기본 python   (gin-config, accelerate, einops, scikit-learn, huggingface-hub, wandb 필요)
 #   SMOKE=1     1 epoch 만 돌려 입력/코드 연결만 확인 (OUT 이름에 _smoke)
 #   ALLOW_CPU=1 GPU 없이도 실행 (스모크 테스트용)
+#   A_CKPT      기존 UNI checkpoint_best_rec.pt 경로. 주면 그 안의 gin_config 와 하이퍼파라미터를 비교해서 다르면 멈춤 (권장)
 set -euo pipefail
 CODE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$CODE/../.." && pwd)"
@@ -102,12 +103,22 @@ fi
 (cd "$INPUT" && sha256sum article_master.parquet validation_article_master.parquet article_embeddings.npy event_master.parquet) > "$OUT/inputs.sha256"
 cp "$INPUT/manifest.json" "$OUT/inputs_manifest.json"
 
-echo "== 4. 학습 (로그: $OUT/train.log)"
-cd "$UNI_DIR/RQVAE"
-"$PYTHON" train_rqvae.py "$OUT/rqvae_uni.gin" > "$OUT/train.log" 2>&1 || { echo "학습 실패. 마지막 로그:"; tail -30 "$OUT/train.log"; exit 1; }
+if [[ -n "${A_CKPT:-}" && "${SMOKE:-0}" != "1" ]]; then
+    echo "== 3-1. 기존 UNI(A) checkpoint 설정과 비교"
+    "$PYTHON" "$CODE/check_against_a.py" "$A_CKPT" "$OUT/rqvae_uni.gin" "$UNI_DIR/RQVAE" | tee "$OUT/check_against_a.txt" \
+        || { echo "A 와 설정이 다릅니다. 학습하지 않고 멈춥니다."; exit 1; }
+    echo "a_checkpoint    $A_CKPT ($(sha256sum "$A_CKPT" | cut -c1-12))" >> "$OUT/provenance.txt"
+fi
 
-echo "== 5. 결과"
-grep -a "Best\|best_rec\|Early\|early stop\|Final epoch" "$OUT/train.log" | tail -8 || true
+echo "== 4. 학습 (로그: $OUT/train.log · 진행 중 지표 표: python $CODE/parse_log.py $OUT)"
+cd "$UNI_DIR/RQVAE"
+STATUS=0
+"$PYTHON" train_rqvae.py "$OUT/rqvae_uni.gin" > "$OUT/train.log" 2>&1 || STATUS=$?
+date -u +"finished_utc    %Y-%m-%dT%H:%M:%SZ (exit $STATUS)" >> "$OUT/provenance.txt"
+
+echo "== 5. 지표 CSV (metrics_train / metrics_validation / early_stopping / summary.json)"
+"$PYTHON" "$CODE/parse_log.py" "$OUT" || true
+if [[ $STATUS -ne 0 ]]; then echo "학습 실패 (exit $STATUS). 마지막 로그:"; tail -30 "$OUT/train.log"; exit $STATUS; fi
 ls -la "$OUT" | grep -E "checkpoint|gin|log" || true
 echo "SID 생성에 쓸 checkpoint: $OUT/checkpoint_best_rec.pt"
 echo "== DONE"
