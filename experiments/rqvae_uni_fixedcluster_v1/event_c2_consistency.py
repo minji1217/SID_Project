@@ -8,8 +8,10 @@ c2 는 학습 때와 같은 방식(기사별 r1 = h - Q1[c1] 최근접 Q2 코드
   mode_share    사건마다 가장 많은 c2 를 가진 기사 수의 합 ÷ 기사 수 (사건 안 c2 다수결 일치율)
   pair_same     사건 안 기사 쌍 중 c2 가 같은 쌍 비율
   pair_same_c12 사건 안 기사 쌍 중 (c1, c2) 가 같은 쌍 비율
+  n_c2          사건 하나가 몇 개의 서로 다른 c2 로 갈라지나 (평균 · 중앙값 · 최대)
   baseline      우연 수준: 서로 다른 사건이지만 c1(카테고리)이 같은 Train 기사 쌍에서 c2 가 같은 비율 (무작위 20만 쌍)
                 72h 안 + 같은 c1 인 다른 사건 쌍 기준도 같이 계산 (시기가 비슷한 기사끼리의 우연 수준)
+                c1 조건 없이 다른 사건 쌍 기준도 같이 계산 (전체 우연 수준)
   크기별(2 / 3~5 / 6+) pair_same
 
 사용 (AWS):
@@ -64,6 +66,8 @@ def main():
     j = rng.integers(0, n, 600_000)
     ok = (i != j) & (ev[i] != ev[j]) & (c1[i] == c1[j])
     rand_pairs = (i[ok][:200_000], j[ok][:200_000])
+    ok_any = (i != j) & (ev[i] != ev[j])
+    any_pairs = (i[ok_any][:200_000], j[ok_any][:200_000])
     order = np.argsort(t)
     ts = t[order]
     near_i, near_j = [], []
@@ -110,29 +114,34 @@ def main():
 
         all_same = np.mean([len(set(c2[g])) == 1 for g in groups])
         mode_share = sum(np.bincount(c2[g]).max() for g in groups) / len(multi)
+        n_c2 = np.array([len(set(c2[g])) for g in groups])
         pair_same = float(np.mean(c2[pi] == c2[pj]))
         pair_same_c12 = float(np.mean((c2[pi] == c2[pj]) & (c1[pi] == c1[pj])))
         base_rand = float(np.mean(c2[rand_pairs[0]] == c2[rand_pairs[1]]))
         base_near = float(np.mean(c2[near_pairs[0]] == c2[near_pairs[1]]))
+        base_any = float(np.mean(c2[any_pairs[0]] == c2[any_pairs[1]]))
         by = {}
         for b in ["2", "3~5", "6+"]:
             sel = np.array([bucket(gsize[x]) == b for x in pi])
             by[b] = {"pairs": int(sel.sum()), "pair_same": float(np.mean(c2[pi][sel] == c2[pj][sel])) if sel.any() else None}
         r = {"epoch": int(ck.get("epoch", -1)) + 1, "all_same": float(all_same), "mode_share": float(mode_share),
              "pair_same": pair_same, "pair_same_c12": pair_same_c12,
-             "baseline_same_c1_random": base_rand, "baseline_same_c1_within72h": base_near, "pair_same_by_size": by}
+             "n_c2_mean": float(n_c2.mean()), "n_c2_median": float(np.median(n_c2)), "n_c2_max": int(n_c2.max()),
+             "baseline_same_c1_random": base_rand, "baseline_same_c1_within72h": base_near,
+             "baseline_any_random": base_any, "pair_same_by_size": by}
         report["models"][name] = r
         rows.append({"model": name, **{k: v for k, v in r.items() if k != "pair_same_by_size"},
                      **{f"pair_same_size{b}": v["pair_same"] for b, v in by.items()}})
         print(f"[{name}] epoch {r['epoch']} · 전부 같은 사건 {all_same:.1%} · 다수결 일치 {mode_share:.1%} · "
-              f"쌍 일치 {pair_same:.1%} (우연: 같은 c1 {base_rand:.1%} · 72h 안 같은 c1 {base_near:.1%}) · "
+              f"쌍 일치 {pair_same:.1%} (우연: 같은 c1 {base_rand:.1%} · 72h 안 같은 c1 {base_near:.1%} · 전체 {base_any:.1%}) · "
+              f"사건당 c2 수 평균 {n_c2.mean():.2f} (최대 {n_c2.max()}) · "
               f"크기별 " + " / ".join(f"{b}: {v['pair_same']:.1%}" for b, v in by.items() if v['pair_same'] is not None))
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(out / "event_c2_consistency.csv", index=False)
     (out / "event_c2_consistency.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n[쌍] 사건 안 쌍 {len(pairs):,} · 비교 쌍: 같은 c1 무작위 {len(rand_pairs[0]):,} · 72h 안 같은 c1 {len(near_pairs[0]):,}")
+    print(f"\n[쌍] 사건 안 쌍 {len(pairs):,} · 비교 쌍: 같은 c1 무작위 {len(rand_pairs[0]):,} · 72h 안 같은 c1 {len(near_pairs[0]):,} · 전체 무작위 {len(any_pairs[0]):,}")
     print(f"저장: {out}/event_c2_consistency.csv, .json")
 
 

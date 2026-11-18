@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EB-NeRD 파이프라인 전체 흐름</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --ink:#1d2330; --sub:#5b6475; --line:#e3e6ec;
+    --blue:#2f6fed; --blue-bg:#eaf1ff;
+    --green:#1f9d61; --green-bg:#e6f6ee;
+    --amber:#b7791f; --amber-bg:#fff4dd;
+    --red:#d14343; --red-bg:#fdecec;
+    --violet:#7a4fd6; --violet-bg:#f1ebff;
+    --gray-bg:#f1f3f6; --code-bg:#f2f4f8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+    font-size:15px;line-height:1.6}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 16px 80px}
+  h1{font-size:26px;margin:0 0 6px}
+  h2{font-size:20px;margin:48px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:17px;margin:0}
+  .muted{color:var(--sub)}
+  code{background:var(--code-bg);padding:1px 6px;border-radius:5px;font-size:13px;font-family:"Consolas","D2Coding",ui-monospace,monospace}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:16px 0}
+  .summary{background:var(--blue-bg);border:1px solid #cfdcfb;border-radius:14px;padding:16px 20px;margin-top:18px}
+
+  /* figures */
+  .fig{overflow-x:auto;margin:12px 0 6px}
+  .fig svg{width:100%;min-width:600px;height:auto;display:block}
+  .cap{font-size:14px;color:var(--sub);margin:8px 0 0}
+  .cap b{color:var(--ink)}
+  svg text{fill:var(--ink);font-size:14px}
+  svg .b{font-weight:700}
+  svg .s{font-size:12px;fill:var(--sub)}
+  svg .xs{font-size:11px;fill:var(--sub)}
+  svg .box{fill:#fff;stroke:#d3d9e3;stroke-width:1.3}
+  svg .ln{stroke:#8a93a3;stroke-width:1.6;fill:none}
+  svg a:hover .box{stroke:var(--blue);stroke-width:2}
+
+  /* stage header */
+  .stage-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+  .num{width:32px;height:32px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+  .files{font-size:13px;color:var(--sub);margin:4px 0 6px}
+  .tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px}
+  .t-ok{background:var(--green-bg);color:var(--green)}
+  .t-fix{background:var(--red-bg);color:var(--red)}
+  .t-talk{background:var(--amber-bg);color:var(--amber)}
+  .t-mj{background:var(--violet-bg);color:var(--violet)}
+  .t-ym{background:var(--blue-bg);color:var(--blue)}
+  .note{margin-top:12px;padding:10px 14px;border-radius:10px;font-size:14px}
+  .note.fix{background:var(--red-bg)}
+  .note.talk{background:var(--amber-bg)}
+  .note a{color:inherit}
+
+  /* chips & mini-diagrams in HTML */
+  .chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0}
+  .chip{display:inline-flex;align-items:center;justify-content:center;min-width:34px;padding:4px 10px;border-radius:8px;
+    background:var(--gray-bg);border:1px solid var(--line);font-size:13.5px;font-weight:600}
+  .chip.g{background:var(--green-bg);border-color:#bfe5d1;color:var(--green)}
+  .chip.r{background:var(--red-bg);border-color:#f3c4c4;color:var(--red);text-decoration:line-through}
+  .chip.bl{background:var(--blue-bg);border-color:#cfdcfb;color:var(--blue)}
+  .chip.v{background:var(--violet-bg);border-color:#ddd0fb;color:var(--violet)}
+  .chip.a{background:var(--amber-bg);border-color:#f1dcae;color:var(--amber)}
+  .arrow{color:#9aa2b0;font-weight:700}
+  .lane{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line)}
+  .lane:last-child{border-bottom:none}
+  .lane > .lbl{font-weight:700;font-size:14px}
+  .lane > .lbl small{display:block;font-weight:400;color:var(--sub);font-size:12px}
+
+  .phases{display:grid;grid-template-columns:1fr 32px 1fr 32px 1fr;align-items:stretch;gap:0;margin:10px 0}
+  .phase{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fcfcfd}
+  .phase h4{margin:0 0 6px;font-size:14.5px}
+  .phase p{margin:0;font-size:13.5px;color:var(--sub)}
+  .phase.p1{border-top:4px solid var(--blue)}
+  .phase.p2{border-top:4px solid var(--amber)}
+  .phase.p3{border-top:4px solid var(--green)}
+  .ph-arrow{display:flex;align-items:center;justify-content:center;color:#9aa2b0;font-size:20px;font-weight:700}
+  .mini-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+  .mini-tbl td,.mini-tbl th{border:1px solid var(--line);padding:3px 6px;text-align:center}
+  .mini-tbl th{background:var(--amber-bg);color:var(--amber)}
+
+  .formula{background:#fafbfd;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:12px}
+  .formula .eq{font-size:16px;font-weight:700;text-align:center;margin:4px 0 10px}
+
+  .seq-row{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:center;padding:10px 0;border-bottom:1px dashed var(--line)}
+  .seq-row:last-child{border-bottom:none}
+  .seq-row .lbl{font-weight:700;font-size:14px}
+  .seq-row .lbl small{display:block;color:var(--sub);font-weight:400;font-size:12px}
+  .grp{display:inline-flex;gap:4px;align-items:center;padding:4px 8px;border-radius:10px;border:1px dashed #c8ceda}
+  .grp .gl{font-size:12px;color:var(--sub);margin-right:2px}
+
+  .cands{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:10px 0}
+  .cand{border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center;font-size:13px}
+  .cand b{display:block;font-size:15px}
+  .cand.pos{background:var(--green-bg);border-color:#bfe5d1}
+  .cand.out{background:var(--red-bg);border-color:#f3c4c4;opacity:.85}
+  .cand.out b{text-decoration:line-through}
+
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top}
+  th{background:#f3f5f9;font-weight:700}
+  .tbl{overflow-x:auto}
+  .policy td,.policy th{text-align:center}
+  .yes{color:var(--green);font-weight:800}
+  .no{color:#b4bac5;font-weight:800}
+
+  .rerun{display:grid;grid-template-columns:170px repeat(9,1fr);gap:4px;font-size:13px;align-items:center;min-width:640px}
+  .rerun .h{font-weight:700;text-align:center;color:var(--sub)}
+  .rerun .rl{font-weight:700}
+  .rerun .c{height:30px;border-radius:6px;background:var(--gray-bg)}
+  .rerun .c.on{background:var(--blue)}
+  .rerun .c.start{background:var(--red)}
+
+  /* checklist */
+  .progress{display:flex;align-items:center;gap:12px;margin:6px 0 4px;font-size:14px}
+  .bar{flex:1;height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+  .bar > div{height:100%;background:var(--green);width:0;transition:width .2s}
+  .group-title{font-weight:700;margin:22px 0 6px}
+  .check{display:flex;gap:12px;align-items:flex-start;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);margin:7px 0;cursor:pointer}
+  .check:hover{border-color:#c9d3e6}
+  .check input{width:18px;height:18px;margin-top:3px;accent-color:var(--green);flex:none;cursor:pointer}
+  .check .body b{display:block}
+  .check .body span{font-size:13.5px;color:var(--sub)}
+  .check.done{background:#f6fbf8}
+  .check.done .body b{text-decoration:line-through;color:var(--sub)}
+  .done-list{list-style:none;padding:0;margin:0}
+  .done-list li{padding:8px 0 8px 30px;position:relative;border-bottom:1px dashed var(--line)}
+  .done-list li::before{content:"✓";position:absolute;left:6px;top:7px;color:var(--green);font-weight:800}
+  .btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:5px 12px;cursor:pointer;color:var(--sub)}
+  .btn:hover{border-color:var(--red);color:var(--red)}
+
+  @media (max-width:700px){
+    .phases{grid-template-columns:1fr}
+    .ph-arrow{transform:rotate(90deg);height:28px}
+    .lane,.seq-row{grid-template-columns:1fr}
+    .cands{grid-template-columns:repeat(3,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<!-- shared arrow markers -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a93a3"/></marker>
+    <marker id="ahR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d14343"/></marker>
+    <marker id="ahG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f9d61"/></marker>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+  <h1>EB-NeRD 파이프라인 전체 흐름</h1>
+  <div class="muted">기준: 여민 저장소 <code>main</code> (bcd1168) · 민지 저장소 전처리 브랜치 · <b>11/18 팀미팅 결정 반영</b> (z(E) 공간 실험 · 동점 규칙 · validation event_id 용도)</div>
+
+  <div class="summary">
+    <b>한 줄 요약</b> — 기사를 4자리 번호(SID)로 바꾸고, 사용자가 본 기사들의 SID 순서를 보고 다음에 클릭할 기사의 SID를 맞히는 구조.
+    핵심은 <b>c2가 "사건"을 담게</b> 하는 것이고, validation에 처음 나온 기사는 <b>기존 train 사건에 붙어서 그 사건의 c2를 물려받습니다.</b>
+  </div>
+
+  <!-- ===================== 1. 전체 그림 ===================== -->
+  <h2>1. 전체 그림</h2>
+  <div class="card">
+    <div class="fig">
+    <svg viewBox="0 0 960 290" role="img" aria-label="파이프라인 9단계 흐름도">
+      <!-- row 1 -->
+      <a href="#s1"><rect class="box" x="16" y="30" width="160" height="86" rx="12"/><rect x="16" y="30" width="6" height="86" rx="3" fill="#8a93a3"/>
+        <text x="34" y="58" class="b">① 원천 데이터</text><text x="34" y="82" class="s">EB-NeRD</text><text x="34" y="100" class="s">기사·노출·히스토리</text></a>
+      <a href="#s2"><rect class="box" x="204" y="30" width="160" height="86" rx="12"/><rect x="204" y="30" width="6" height="86" rx="3" fill="#7a4fd6"/>
+        <text x="222" y="58" class="b">② 전처리</text><text x="222" y="82" class="s">임베딩·c1·개체</text><text x="222" y="100" class="s">train 사건 묶기</text></a>
+      <a href="#s3"><rect class="box" x="392" y="30" width="160" height="86" rx="12"/><rect x="392" y="30" width="6" height="86" rx="3" fill="#2f6fed"/>
+        <text x="410" y="58" class="b">③ RQ-VAE 학습</text><text x="410" y="82" class="s">train 기사만</text><text x="410" y="100" class="s">인코더 + Q1·Q2·Q3</text></a>
+      <a href="#s4"><rect class="box" x="580" y="30" width="160" height="86" rx="12"/><rect x="580" y="30" width="6" height="86" rx="3" fill="#2f6fed"/>
+        <text x="598" y="58" class="b">④ SID 생성</text><text x="598" y="82" class="s">기사 → c1·c2·c3·c4</text><text x="598" y="100" class="s">새 기사 → 사건 배정</text></a>
+      <a href="#s5"><rect class="box" x="768" y="30" width="160" height="86" rx="12"/><rect x="768" y="30" width="6" height="86" rx="3" fill="#7a4fd6"/>
+        <text x="786" y="58" class="b">⑤ 시퀀스 생성</text><text x="786" y="82" class="s">사용자 history를</text><text x="786" y="100" class="s">SID 순서로</text></a>
+      <!-- badges -->
+      <rect x="300" y="20" width="58" height="20" rx="10" fill="#fff4dd" stroke="#b7791f"/><text x="329" y="34" text-anchor="middle" style="font-size:11px;fill:#b7791f;font-weight:700">확인</text>
+      <rect x="676" y="20" width="58" height="20" rx="10" fill="#fdecec" stroke="#d14343"/><text x="705" y="34" text-anchor="middle" style="font-size:11px;fill:#d14343;font-weight:700">수정</text>
+      <!-- row1 arrows -->
+      <line class="ln" x1="176" y1="73" x2="202" y2="73" marker-end="url(#ah)"/>
+      <line class="ln" x1="364" y1="73" x2="390" y2="73" marker-end="url(#ah)"/>
+      <line class="ln" x1="552" y1="73" x2="578" y2="73" marker-end="url(#ah)"/>
+      <line class="ln" x1="740" y1="73" x2="766" y2="73" marker-end="url(#ah)"/>
+      <line class="ln" x1="848" y1="116" x2="848" y2="188" marker-end="url(#ah)"/>
+      <!-- row 2 (right to left) -->
+      <a href="#s6"><rect class="box" x="768" y="190" width="160" height="86" rx="12"/><rect x="768" y="190" width="6" height="86" rx="3" fill="#7a4fd6"/>
+        <text x="786" y="218" class="b">⑥ 1pos4neg</text><text x="786" y="242" class="s">정답 1 + 오답 4</text><text x="786" y="260" class="s">같은 앞 3자리 제외</text></a>
+      <a href="#s7"><rect class="box" x="580" y="190" width="160" height="86" rx="12"/><rect x="580" y="190" width="6" height="86" rx="3" fill="#2f6fed"/>
+        <text x="598" y="218" class="b">⑦ split</text><text x="598" y="242" class="s">노출 시각 순</text><text x="598" y="260" class="s">앞 절반 val · 뒤 test</text></a>
+      <a href="#s8"><rect class="box" x="392" y="190" width="160" height="86" rx="12"/><rect x="392" y="190" width="6" height="86" rx="3" fill="#2f6fed"/>
+        <text x="410" y="218" class="b">⑧ Transformer</text><text x="410" y="242" class="s">history 읽고</text><text x="410" y="260" class="s">c1→c2→c3 예측</text></a>
+      <a href="#s9"><rect class="box" x="204" y="190" width="160" height="86" rx="12"/><rect x="204" y="190" width="6" height="86" rx="3" fill="#2f6fed"/>
+        <text x="222" y="218" class="b">⑨ 예측·평가</text><text x="222" y="242" class="s">후보 점수로 순위</text><text x="222" y="260" class="s">AUC·MRR·nDCG</text></a>
+      <rect x="476" y="180" width="70" height="20" rx="10" fill="#fdecec" stroke="#d14343"/><text x="511" y="194" text-anchor="middle" style="font-size:11px;fill:#d14343;font-weight:700">설정 수정</text>
+      <line class="ln" x1="768" y1="233" x2="742" y2="233" marker-end="url(#ah)"/>
+      <line class="ln" x1="580" y1="233" x2="554" y2="233" marker-end="url(#ah)"/>
+      <line class="ln" x1="392" y1="233" x2="366" y2="233" marker-end="url(#ah)"/>
+      <!-- legend -->
+      <text x="20" y="206" class="b" style="font-size:13px">누가 맡나</text>
+      <rect x="20" y="218" width="12" height="12" rx="3" fill="#7a4fd6"/><text x="38" y="229" class="s">민지 (전처리·시퀀스)</text>
+      <rect x="20" y="240" width="12" height="12" rx="3" fill="#2f6fed"/><text x="38" y="251" class="s">여민 (RQ-VAE·Transformer)</text>
+      <rect x="20" y="262" width="12" height="12" rx="3" fill="#8a93a3"/><text x="38" y="273" class="s">원천 데이터</text>
+    </svg>
+    </div>
+    <p class="cap">상자를 누르면 해당 단계 설명으로 이동합니다.</p>
+  </div>
+
+  <div class="card">
+    <h3>SID 4자리 읽는 법</h3>
+    <div class="fig">
+    <svg viewBox="0 0 760 210" role="img" aria-label="SID 네 자리 의미">
+      <text x="150" y="80" text-anchor="end" class="b" style="font-size:15px">기사의 SID =</text>
+      <text x="215" y="30" text-anchor="middle" class="s b">c1</text>
+      <text x="335" y="30" text-anchor="middle" class="s b">c2</text>
+      <text x="455" y="30" text-anchor="middle" class="s b">c3</text>
+      <text x="575" y="30" text-anchor="middle" class="s b">c4</text>
+      <rect x="160" y="42" width="110" height="64" rx="10" fill="#f1f3f6" stroke="#c9d0db"/>
+      <rect x="280" y="42" width="110" height="64" rx="10" fill="#fff4dd" stroke="#b7791f" stroke-width="2"/>
+      <rect x="400" y="42" width="110" height="64" rx="10" fill="#e6f6ee" stroke="#1f9d61"/>
+      <rect x="520" y="42" width="110" height="64" rx="10" fill="#fafbfc" stroke="#d3d9e3" stroke-dasharray="4 3"/>
+      <text x="215" y="83" text-anchor="middle" class="b" style="font-size:24px">3</text>
+      <text x="335" y="83" text-anchor="middle" class="b" style="font-size:24px">41</text>
+      <text x="455" y="83" text-anchor="middle" class="b" style="font-size:24px">120</text>
+      <text x="575" y="83" text-anchor="middle" class="b" style="font-size:24px;fill:#8a93a3">0</text>
+      <line class="ln" x1="215" y1="106" x2="215" y2="132"/>
+      <line class="ln" x1="335" y1="106" x2="335" y2="132"/>
+      <line class="ln" x1="455" y1="106" x2="455" y2="132"/>
+      <line class="ln" x1="575" y1="106" x2="575" y2="132"/>
+      <text x="215" y="152" text-anchor="middle" class="b">카테고리</text><text x="215" y="172" text-anchor="middle" class="s">예: 스포츠</text>
+      <text x="335" y="152" text-anchor="middle" class="b" style="fill:#b7791f">사건 ★</text><text x="335" y="172" text-anchor="middle" class="s">예: A선수 이적 사건</text>
+      <text x="455" y="152" text-anchor="middle" class="b">사건 안 세부</text><text x="455" y="172" text-anchor="middle" class="s">예: 계약 조건 기사</text>
+      <text x="575" y="152" text-anchor="middle" class="b">충돌 번호</text><text x="575" y="172" text-anchor="middle" class="s">앞 3자리가 같을 때 0,1,2…</text>
+      <text x="575" y="192" text-anchor="middle" class="xs">Transformer 점수엔 안 씀</text>
+    </svg>
+    </div>
+  </div>
+
+  <!-- ===================== 2. 단계별 ===================== -->
+  <h2>2. 단계별 그림</h2>
+
+  <!-- 1 -->
+  <div class="card" id="s1">
+    <div class="stage-head"><div class="num">1</div><h3>원천 데이터 (EB-NeRD)</h3></div>
+    <div class="lane"><div class="lbl">articles<small>기사</small></div>
+      <div class="chips"><span class="chip">기사 id</span><span class="chip">제목·부제·본문</span><span class="chip">카테고리</span><span class="chip">발행 시각</span><span class="chip">NER 개체</span></div></div>
+    <div class="lane"><div class="lbl">behaviors<small>노출 기록</small></div>
+      <div class="chips"><span class="chip">사용자</span><span class="chip">노출 시각</span><span class="chip">노출된 후보(inview)</span><span class="chip g">클릭한 기사</span></div></div>
+    <div class="lane"><div class="lbl">history<small>이전 클릭</small></div>
+      <div class="chips"><span class="chip">사용자별 과거 클릭 순서</span></div></div>
+    <div class="fig">
+    <svg viewBox="0 0 900 96" role="img" aria-label="train과 validation 기간">
+      <rect x="20" y="20" width="520" height="34" rx="8" fill="#eaf1ff" stroke="#2f6fed"/>
+      <rect x="540" y="20" width="340" height="34" rx="8" fill="#e6f6ee" stroke="#1f9d61"/>
+      <text x="280" y="42" text-anchor="middle" class="b" style="fill:#2f6fed">train 기간</text>
+      <text x="710" y="42" text-anchor="middle" class="b" style="fill:#1f9d61">validation 기간</text>
+      <circle cx="600" cy="76" r="6" fill="#d14343"/><circle cx="680" cy="76" r="6" fill="#d14343"/><circle cx="790" cy="76" r="6" fill="#d14343"/>
+      <text x="580" y="81" text-anchor="end" class="s" style="fill:#d14343">validation에 처음 나온 기사 (validation-only) →</text>
+    </svg>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div class="card" id="s2">
+    <div class="stage-head"><div class="num">2</div><h3>전처리</h3><span class="tag t-mj">민지</span><span class="tag t-talk">일부 확인</span></div>
+    <div class="files"><code>src/build_article_master.py</code> · <code>src/entity_processing.py</code> · <code>src/build_train.py</code> · <code>src/build_validation.py</code> · <code>src/export_inputs.py</code></div>
+
+    <div class="lane"><div class="lbl">임베딩</div>
+      <div class="chips"><span class="chip">기사 텍스트</span><span class="arrow">→</span><span class="chip bl">E5</span><span class="arrow">→</span><span class="chip g">768차원 벡터 x</span></div></div>
+    <div class="lane"><div class="lbl">카테고리</div>
+      <div class="chips"><span class="chip">카테고리 이름</span><span class="arrow">→</span><span class="chip g">c1 번호</span></div></div>
+    <div class="lane"><div class="lbl">개체</div>
+      <div class="chips"><span class="chip">NER 개체</span><span class="arrow">→</span><span class="chip a">train으로 IDF · 흔한 개체 제외</span><span class="arrow">→</span><span class="chip g">기사별 개체</span></div></div>
+
+    <h4 style="margin:22px 0 4px">train 사건 묶는 방법</h4>
+    <div class="fig">
+    <svg viewBox="0 0 880 300" role="img" aria-label="train 사건 묶기 예시">
+      <!-- groups -->
+      <rect x="40" y="50" width="340" height="88" rx="14" fill="#f1ebff" stroke="#c9b6f5"/>
+      <text x="54" y="70" class="b" style="font-size:13px;fill:#7a4fd6">사건 1</text>
+      <rect x="205" y="152" width="330" height="88" rx="14" fill="#eaf1ff" stroke="#b9cdf8"/>
+      <text x="219" y="172" class="b" style="font-size:13px;fill:#2f6fed">사건 2</text>
+      <rect x="722" y="50" width="130" height="88" rx="14" fill="#f1ebff" stroke="#c9b6f5"/>
+      <text x="736" y="70" class="b" style="font-size:13px;fill:#7a4fd6">사건 3</text>
+      <!-- edges -->
+      <line x1="97" y1="94" x2="191" y2="94" stroke="#1f9d61" stroke-width="2.2"/>
+      <text x="144" y="86" text-anchor="middle" class="xs" style="fill:#1f9d61">J=0.42 ✓</text>
+      <line x1="217" y1="94" x2="335" y2="94" stroke="#1f9d61" stroke-width="2.2"/>
+      <text x="276" y="86" text-anchor="middle" class="xs" style="fill:#1f9d61">J=0.33 ✓</text>
+      <line x1="265" y1="196" x2="479" y2="196" stroke="#1f9d61" stroke-width="2.2"/>
+      <text x="372" y="188" text-anchor="middle" class="xs" style="fill:#1f9d61">J=0.61 ✓</text>
+      <line x1="361" y1="94" x2="767" y2="94" stroke="#d14343" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <text x="560" y="86" text-anchor="middle" class="xs" style="fill:#d14343">개체는 같지만 90h 차이 &gt; 72h → 안 이음</text>
+      <!-- nodes row 1 -->
+      <circle cx="84" cy="94" r="13" fill="#fff" stroke="#7a4fd6" stroke-width="2"/><text x="84" y="99" text-anchor="middle" class="b" style="font-size:12px">a1</text>
+      <circle cx="204" cy="94" r="13" fill="#fff" stroke="#7a4fd6" stroke-width="2"/><text x="204" y="99" text-anchor="middle" class="b" style="font-size:12px">a2</text>
+      <circle cx="348" cy="94" r="13" fill="#fff" stroke="#7a4fd6" stroke-width="2"/><text x="348" y="99" text-anchor="middle" class="b" style="font-size:12px">a3</text>
+      <circle cx="780" cy="94" r="13" fill="#fff" stroke="#7a4fd6" stroke-width="2"/><text x="780" y="99" text-anchor="middle" class="b" style="font-size:12px">a6</text>
+      <!-- nodes row 2 -->
+      <circle cx="252" cy="196" r="13" fill="#fff" stroke="#2f6fed" stroke-width="2"/><text x="252" y="201" text-anchor="middle" class="b" style="font-size:12px">a4</text>
+      <circle cx="492" cy="196" r="13" fill="#fff" stroke="#2f6fed" stroke-width="2"/><text x="492" y="201" text-anchor="middle" class="b" style="font-size:12px">a5</text>
+      <!-- axis -->
+      <line class="ln" x1="60" y1="266" x2="850" y2="266" marker-end="url(#ah)"/>
+      <text x="856" y="290" text-anchor="end" class="xs">발행 시각</text>
+      <text x="60" y="284" text-anchor="middle" class="xs">0h</text><text x="406" y="284" text-anchor="middle" class="xs">72h</text><text x="751" y="284" text-anchor="middle" class="xs">144h</text>
+      <circle cx="84" cy="266" r="3.5" fill="#7a4fd6"/><circle cx="204" cy="266" r="3.5" fill="#7a4fd6"/><circle cx="348" cy="266" r="3.5" fill="#7a4fd6"/>
+      <circle cx="780" cy="266" r="3.5" fill="#7a4fd6"/><circle cx="252" cy="266" r="3.5" fill="#2f6fed"/><circle cx="492" cy="266" r="3.5" fill="#2f6fed"/>
+    </svg>
+    </div>
+    <p class="cap"><b>연결 조건</b>: 발행 시각 차 ≤ 72h <b>그리고</b> IDF 가중 Jaccard ≥ 0.3 → 이어진 기사들을 한 사건으로 묶음.</p>
+
+    <div class="formula">
+      <div class="eq">IDF 가중 Jaccard(A, B) = Σ<sub>겹친 개체</sub> idf ÷ Σ<sub>합친 개체</sub> idf</div>
+      <div class="chips" style="justify-content:center">
+        <span class="grp"><span class="gl">기사 A</span><span class="chip g">A선수 2.1</span><span class="chip">B구단 1.5</span><span class="chip">런던 0.9</span></span>
+        <span class="grp"><span class="gl">기사 B</span><span class="chip g">A선수 2.1</span><span class="chip">C구단 1.8</span></span>
+        <span class="arrow">→</span>
+        <span class="chip a">2.1 ÷ (2.1+1.5+0.9+1.8) = 0.33 ≥ 0.3 ✓</span>
+      </div>
+    </div>
+    <div class="note talk"><b>확인할 것</b> — 개체 파일 생성이 <code>main.py</code>에 안 붙어 있음 · 0.3 / 72 / 0.01 하드코딩 → <a href="#todo">체크리스트</a></div>
+  </div>
+
+  <!-- 2+ validation-only event_id -->
+  <div class="card" id="s2v">
+    <div class="stage-head"><div class="num">2</div><h3>전처리 보충 — validation-only 기사의 event_id</h3><span class="tag t-mj">민지</span><span class="tag t-ok">유지</span></div>
+    <div class="files"><code>src/build_validation.py</code></div>
+
+    <div class="phases">
+      <div class="phase p1"><h4>시작 상태</h4>
+        <p>train 사건 · train IDF 그대로</p></div>
+      <div class="ph-arrow">→</div>
+      <div class="phase p2"><h4>처리 순서</h4>
+        <p>발행 시각 순으로 하나씩</p></div>
+      <div class="ph-arrow">→</div>
+      <div class="phase p3"><h4>결과</h4>
+        <p>기존 사건에 붙거나 새 사건</p></div>
+    </div>
+
+    <h4 style="margin:20px 0 4px">기사 하나가 event_id를 받는 순서</h4>
+    <div class="fig">
+    <svg viewBox="0 0 900 312" role="img" aria-label="전처리의 validation-only 사건 배정 흐름도">
+      <rect x="290" y="8" width="320" height="44" rx="22" fill="#f1ebff" stroke="#7a4fd6"/>
+      <text x="450" y="35" text-anchor="middle" class="b">validation-only 기사 a</text>
+      <line class="ln" x1="450" y1="52" x2="450" y2="74" marker-end="url(#ah)"/>
+      <!-- diamond -->
+      <polygon points="450,76 640,124 450,172 260,124" fill="#fff" stroke="#8a93a3" stroke-width="1.5"/>
+      <text x="450" y="118" text-anchor="middle" class="b" style="font-size:13px">72h 안 · Jaccard ≥ 0.3</text>
+      <text x="450" y="138" text-anchor="middle" class="b" style="font-size:13px">사건이 있나?</text>
+      <!-- yes -->
+      <line class="ln" x1="640" y1="124" x2="680" y2="124" marker-end="url(#ah)"/>
+      <text x="652" y="116" class="xs" style="fill:#1f9d61;font-weight:700">예</text>
+      <rect x="682" y="96" width="202" height="56" rx="10" fill="#e6f6ee" stroke="#1f9d61"/>
+      <text x="783" y="119" text-anchor="middle" class="b">점수 최고 사건에 붙음</text>
+      <text x="783" y="139" text-anchor="middle" class="xs" style="fill:#1f9d61;font-weight:700">동점 → id 작은 사건</text>
+      <!-- no -->
+      <line class="ln" x1="450" y1="172" x2="450" y2="198" marker-end="url(#ah)"/>
+      <text x="458" y="190" class="xs" style="font-weight:700">아니오</text>
+      <rect x="340" y="200" width="220" height="48" rx="10" fill="#f1ebff" stroke="#7a4fd6"/>
+      <text x="450" y="229" text-anchor="middle" class="b">새 사건 만들기</text>
+      <!-- result -->
+      <line class="ln" x1="783" y1="152" x2="783" y2="262" marker-end="url(#ah)"/>
+      <line class="ln" x1="450" y1="248" x2="450" y2="262" marker-end="url(#ah)"/>
+      <rect x="300" y="264" width="584" height="40" rx="10" fill="#fff" stroke="#7a4fd6" stroke-width="1.8"/>
+      <text x="592" y="289" text-anchor="middle" class="b">기사마다 event_id 하나</text>
+    </svg>
+    </div>
+    <p class="cap"><b>동점이면 event_id 숫자가 작은 사건</b> — ④ SID 생성도 이 규칙에 맞추기로 결정 (11/18).</p>
+
+    <h4 style="margin:22px 0 4px">④ SID 생성의 사건 배정과 다른 점</h4>
+    <div class="tbl">
+    <table>
+      <tr><th></th><th>② 전처리</th><th>④ SID 생성</th></tr>
+      <tr><td><b>후보 사건</b></td><td>train + 새로 생긴 사건</td><td><b>train 사건만</b></td></tr>
+      <tr><td><b>못 붙으면</b></td><td><b>새 사건</b> 생성</td><td>h 코사인으로 기존 사건에</td></tr>
+      <tr><td><b>동점</b></td><td>event_id 숫자 순</td><td><b>숫자 순으로 수정 (결정)</b></td></tr>
+      <tr><td><b>결과</b></td><td>event_id (평가용)</td><td>c2 (Transformer 입력)</td></tr>
+    </table>
+    </div>
+
+    <h4 style="margin:22px 0 4px">이 event_id는 어디에 쓰이나</h4>
+    <div class="fig">
+    <svg viewBox="0 0 900 252" role="img" aria-label="validation-only event_id 사용처">
+      <rect x="16" y="94" width="196" height="64" rx="12" fill="#f1ebff" stroke="#7a4fd6" stroke-width="1.8"/>
+      <text x="114" y="121" text-anchor="middle" class="b">validation-only</text>
+      <text x="114" y="142" text-anchor="middle" class="b">event_id</text>
+      <path class="ln" d="M212,126 C250,126 250,40 296,40" marker-end="url(#ahG)" style="stroke:#1f9d61"/>
+      <line class="ln" x1="212" y1="126" x2="296" y2="126" marker-end="url(#ah)"/>
+      <path class="ln" d="M212,126 C250,126 250,212 296,212" marker-end="url(#ahR)" style="stroke:#d14343"/>
+      <!-- 1 eval -->
+      <rect x="298" y="14" width="586" height="52" rx="10" fill="#e6f6ee" stroke="#bfe5d1"/>
+      <text x="314" y="45" class="b">RQ-VAE 평가 — c2 일관성의 정답 묶음</text>
+      <rect x="790" y="30" width="84" height="20" rx="10" fill="#fff" stroke="#1f9d61"/><text x="832" y="44" text-anchor="middle" style="font-size:11px;fill:#1f9d61;font-weight:700">실제 용도</text>
+      <!-- 2 loader -->
+      <rect x="298" y="100" width="586" height="52" rx="10" fill="#f1f3f6" stroke="#c9d0db"/>
+      <text x="314" y="131" class="b">RQ-VAE 데이터 로더 — 컬럼만 필요</text>
+      <rect x="790" y="116" width="84" height="20" rx="10" fill="#fff" stroke="#8a93a3"/><text x="832" y="130" text-anchor="middle" style="font-size:11px;fill:#5b6475;font-weight:700">형식상 필요</text>
+      <!-- 3 sid gen -->
+      <rect x="298" y="186" width="586" height="52" rx="10" fill="#fdecec" stroke="#f3c4c4"/>
+      <text x="314" y="217" class="b">④ SID 생성 (지금 코드) — 개체 읽기 고치면 안 씀</text>
+      <rect x="790" y="202" width="84" height="20" rx="10" fill="#fff" stroke="#d14343"/><text x="832" y="216" text-anchor="middle" style="font-size:11px;fill:#d14343;font-weight:700">수정 후 제거</text>
+    </svg>
+    </div>
+    <p class="cap">RQ-VAE 학습 · SID · Transformer에는 <b>영향 없음</b> — 만든 SID가 사건을 잘 담았는지 <b>채점할 때만</b> 씀.</p>
+  </div>
+
+  <!-- 3 -->
+  <div class="card" id="s3">
+    <div class="stage-head"><div class="num">3</div><h3>RQ-VAE 학습</h3><span class="tag t-ym">여민</span><span class="tag t-talk">실험 2가지</span></div>
+    <div class="files"><code>RQVAE/train_rqvae.py</code> — <b>train 기사만</b> 사용</div>
+    <div class="fig">
+    <svg viewBox="0 0 900 260" role="img" aria-label="RQ-VAE 잔차 양자화 구조">
+      <!-- x -->
+      <rect class="box" x="10" y="95" width="95" height="52" rx="10"/>
+      <text x="57" y="126" text-anchor="middle" class="b">x</text>
+      <line class="ln" x1="105" y1="121" x2="126" y2="121" marker-end="url(#ah)"/>
+      <!-- encoder -->
+      <polygon points="128,92 218,104 218,138 128,150" fill="#eaf1ff" stroke="#2f6fed"/>
+      <text x="170" y="126" text-anchor="middle" class="b" style="font-size:13px">인코더</text>
+      <line class="ln" x1="218" y1="121" x2="238" y2="121" marker-end="url(#ah)"/>
+      <!-- h -->
+      <rect class="box" x="240" y="95" width="80" height="52" rx="10"/>
+      <text x="280" y="126" text-anchor="middle" class="b">h</text>
+      <line class="ln" x1="320" y1="121" x2="341" y2="121" marker-end="url(#ah)"/>
+      <!-- Q1 -->
+      <rect x="300" y="8" width="120" height="48" rx="10" fill="#f1f3f6" stroke="#c9d0db"/>
+      <text x="360" y="37" text-anchor="middle" class="b" style="font-size:13px">Q1 카테고리</text>
+      <line class="ln" x1="360" y1="56" x2="360" y2="102" marker-end="url(#ah)"/>
+      <line class="ln" x1="420" y1="32" x2="446" y2="32" marker-end="url(#ah)"/>
+      <rect x="448" y="19" width="56" height="26" rx="8" fill="#e6f6ee" stroke="#1f9d61"/><text x="476" y="37" text-anchor="middle" class="b" style="fill:#1f9d61">c1</text>
+      <!-- minus 1 -->
+      <circle cx="360" cy="121" r="17" fill="#fff" stroke="#8a93a3" stroke-width="1.6"/><text x="360" y="127" text-anchor="middle" class="b" style="font-size:18px">−</text>
+      <line class="ln" x1="377" y1="121" x2="398" y2="121" marker-end="url(#ah)"/>
+      <!-- r1 -->
+      <rect class="box" x="400" y="95" width="70" height="52" rx="10"/>
+      <text x="435" y="117" text-anchor="middle" class="b">r1</text><text x="435" y="136" text-anchor="middle" class="xs">h − q1</text>
+      <line class="ln" x1="470" y1="121" x2="498" y2="121" marker-end="url(#ah)"/>
+      <!-- Q2 -->
+      <rect x="500" y="95" width="120" height="52" rx="10" fill="#fff4dd" stroke="#b7791f"/>
+      <text x="560" y="117" text-anchor="middle" class="b" style="font-size:13px">Q2 코드북</text><text x="560" y="136" text-anchor="middle" class="xs">128개</text>
+      <line class="ln" x1="620" y1="121" x2="650" y2="121" marker-end="url(#ah)"/>
+      <rect x="652" y="108" width="56" height="26" rx="8" fill="#e6f6ee" stroke="#1f9d61"/><text x="680" y="126" text-anchor="middle" class="b" style="fill:#1f9d61">c2</text>
+      <!-- second row -->
+      <path class="ln" d="M435,147 L435,215 L541,215" marker-end="url(#ah)"/>
+      <line class="ln" x1="560" y1="147" x2="560" y2="196" marker-end="url(#ah)"/>
+      <circle cx="560" cy="215" r="17" fill="#fff" stroke="#8a93a3" stroke-width="1.6"/><text x="560" y="221" text-anchor="middle" class="b" style="font-size:18px">−</text>
+      <line class="ln" x1="577" y1="215" x2="598" y2="215" marker-end="url(#ah)"/>
+      <rect class="box" x="600" y="189" width="70" height="52" rx="10"/>
+      <text x="635" y="211" text-anchor="middle" class="b">r2</text><text x="635" y="230" text-anchor="middle" class="xs">r1 − q2</text>
+      <line class="ln" x1="670" y1="215" x2="698" y2="215" marker-end="url(#ah)"/>
+      <rect x="700" y="189" width="120" height="52" rx="10" fill="#e6f6ee" stroke="#1f9d61"/>
+      <text x="760" y="211" text-anchor="middle" class="b" style="font-size:13px">Q3 코드북</text><text x="760" y="230" text-anchor="middle" class="xs">256개</text>
+      <line class="ln" x1="820" y1="215" x2="842" y2="215" marker-end="url(#ah)"/>
+      <rect x="844" y="202" width="50" height="26" rx="8" fill="#e6f6ee" stroke="#1f9d61"/><text x="869" y="220" text-anchor="middle" class="b" style="fill:#1f9d61">c3</text>
+    </svg>
+    </div>
+    <p class="cap">카테고리를 빼고 남은 <b>r1</b>로 c2를, 또 빼고 남은 <b>r2</b>로 c3를 고름.</p>
+    <h4 style="margin:22px 0 4px">z(E) 공간 실험 — 두 곳을 같은 벡터로 맞춰 쌍으로 돌리기 <span class="tag t-talk">11/18 팀미팅 결정</span></h4>
+    <div class="fig">
+    <svg viewBox="0 0 900 236" role="img" aria-label="z(E) 공간 실험 두 가지">
+      <!-- column heads -->
+      <text x="330" y="26" text-anchor="middle" class="b" style="font-size:13px">Q2 KMeans 초기화</text>
+      <text x="580" y="26" text-anchor="middle" class="b" style="font-size:13px">사건 C2</text>
+      <text x="800" y="26" text-anchor="middle" class="b" style="font-size:13px">어느 사건에 붙일지</text>
+      <!-- row R -->
+      <rect x="16" y="42" width="170" height="70" rx="12" fill="#fff4dd" stroke="#b7791f" stroke-width="1.8"/>
+      <text x="101" y="72" text-anchor="middle" class="b">실험 R</text>
+      <text x="101" y="94" text-anchor="middle" class="s">(잔차, 잔차)</text>
+      <rect x="230" y="48" width="200" height="58" rx="10" fill="#fff" stroke="#b7791f"/>
+      <text x="330" y="82" text-anchor="middle" class="b">평균 r1</text>
+      <rect x="480" y="48" width="200" height="58" rx="10" fill="#fff" stroke="#b7791f"/>
+      <text x="580" y="82" text-anchor="middle" class="b">Q2(평균 r1)</text>
+      <!-- row H -->
+      <rect x="16" y="130" width="170" height="70" rx="12" fill="#eaf1ff" stroke="#2f6fed" stroke-width="1.8"/>
+      <text x="101" y="160" text-anchor="middle" class="b">실험 H</text>
+      <text x="101" y="182" text-anchor="middle" class="s">(인코더, 인코더)</text>
+      <rect x="230" y="136" width="200" height="58" rx="10" fill="#fff" stroke="#2f6fed"/>
+      <text x="330" y="170" text-anchor="middle" class="b">평균 h</text>
+      <rect x="480" y="136" width="200" height="58" rx="10" fill="#fff" stroke="#2f6fed"/>
+      <text x="580" y="170" text-anchor="middle" class="b">Q2(평균 h)</text>
+      <!-- common matching -->
+      <rect x="720" y="48" width="164" height="146" rx="12" fill="#e6f6ee" stroke="#1f9d61" stroke-width="1.8"/>
+      <text x="802" y="114" text-anchor="middle" class="b">h 코사인</text>
+      <text x="802" y="136" text-anchor="middle" class="s">두 실험 공통</text>
+      <text x="16" y="226" class="s">실험 H = 지금 코드 그대로 · 실험 R = 새로 구현</text>
+    </svg>
+    </div>
+    <p class="cap">바뀌는 건 <b>Q2 시작점</b>과 <b>물려주는 사건 C2</b>뿐. 기사가 어느 사건에 붙는지는 두 실험이 같음. 실험 R은 ③ 재학습부터 다시 돌림.</p>
+  </div>
+
+  <!-- 4 -->
+  <div class="card" id="s4">
+    <div class="stage-head"><div class="num">4</div><h3>SID 생성 (timeupdate)</h3><span class="tag t-ym">여민</span><span class="tag t-fix">수정 필요</span></div>
+    <div class="files"><code>RQVAE/generate_semantic_ids_timeupdate.py</code></div>
+
+    <div class="phases">
+      <div class="phase p1"><h4>A. train 기사</h4>
+        <p>c1 = 카테고리<br><b>c2 = 기사마다 r1 최근접</b><br>c3 = r2 최근접</p></div>
+      <div class="ph-arrow">→</div>
+      <div class="phase p2"><h4>B. 사건 요약표 만들기 (고정)</h4>
+        <p>train 기사로 <b>한 번만</b> 계산</p>
+        <table class="mini-tbl">
+          <tr><th>사건</th><th>매칭용</th><th>C2</th><th>개체</th><th>마지막</th></tr>
+          <tr><td>E7</td><td>평균 h</td><td>41</td><td>A선수…</td><td>3/14</td></tr>
+          <tr><td>E8</td><td>평균 h</td><td>12</td><td>D회사…</td><td>3/15</td></tr>
+        </table>
+        <p style="margin-top:6px;font-size:12px">평균 h·C2 고정 / 개체·시각 갱신</p></div>
+      <div class="ph-arrow">→</div>
+      <div class="phase p3"><h4>C. validation-only 기사</h4>
+        <p>발행 시각 순으로 하나씩<br>기존 train 사건에 붙어<br>그 사건의 C2를 물려받음</p></div>
+    </div>
+
+    <h4 style="margin:20px 0 4px">C. 새 기사 하나가 처리되는 순서</h4>
+    <div class="fig">
+    <svg viewBox="0 0 900 484" role="img" aria-label="validation-only 기사 사건 배정 흐름도">
+      <rect x="290" y="8" width="320" height="48" rx="24" fill="#eaf1ff" stroke="#2f6fed"/>
+      <text x="450" y="38" text-anchor="middle" class="b">validation-only 기사 a</text>
+      <line class="ln" x1="450" y1="56" x2="450" y2="78" marker-end="url(#ah)"/>
+      <!-- diamond 1 -->
+      <polygon points="450,80 620,130 450,180 280,130" fill="#fff" stroke="#8a93a3" stroke-width="1.5"/>
+      <text x="450" y="125" text-anchor="middle" style="font-size:13px">최근 72h 안 사건 중</text>
+      <text x="450" y="144" text-anchor="middle" class="b" style="font-size:13px">IDF Jaccard ≥ 0.3 있나?</text>
+      <line class="ln" x1="620" y1="130" x2="660" y2="130" marker-end="url(#ah)"/>
+      <text x="638" y="122" class="xs" style="fill:#1f9d61;font-weight:700">예</text>
+      <rect x="662" y="104" width="200" height="52" rx="10" fill="#e6f6ee" stroke="#1f9d61"/>
+      <text x="762" y="126" text-anchor="middle" class="b">점수 최고 사건 E</text>
+      <text x="762" y="145" text-anchor="middle" class="xs" style="fill:#1f9d61;font-weight:700">동점 → id 작은 사건</text>
+      <line class="ln" x1="450" y1="180" x2="450" y2="208" marker-end="url(#ah)"/>
+      <text x="458" y="198" class="xs" style="font-weight:700">아니오</text>
+      <!-- diamond 2 -->
+      <polygon points="450,210 620,258 450,306 280,258" fill="#fff" stroke="#8a93a3" stroke-width="1.5"/>
+      <text x="450" y="253" text-anchor="middle" style="font-size:13px">최근 72h 안에</text>
+      <text x="450" y="272" text-anchor="middle" class="b" style="font-size:13px">사건이 있나?</text>
+      <line class="ln" x1="620" y1="258" x2="660" y2="258" marker-end="url(#ah)"/>
+      <text x="638" y="250" class="xs" style="fill:#1f9d61;font-weight:700">예</text>
+      <rect x="662" y="232" width="200" height="52" rx="10" fill="#fff4dd" stroke="#b7791f"/>
+      <text x="762" y="263" text-anchor="middle" class="b">창 안 h 코사인 최고</text>
+      <line class="ln" x1="450" y1="306" x2="450" y2="330" marker-end="url(#ah)"/>
+      <text x="458" y="322" class="xs" style="font-weight:700">아니오</text>
+      <rect x="330" y="332" width="240" height="52" rx="10" fill="#fff4dd" stroke="#b7791f"/>
+      <text x="450" y="363" text-anchor="middle" class="b">전체 사건 h 코사인 최고</text>
+      <!-- merges -->
+      <path class="ln" d="M862,130 L884,130 L884,408" marker-end="url(#ah)"/>
+      <line class="ln" x1="762" y1="284" x2="762" y2="408" marker-end="url(#ah)"/>
+      <line class="ln" x1="450" y1="384" x2="450" y2="408" marker-end="url(#ah)"/>
+      <!-- result -->
+      <rect x="150" y="410" width="744" height="66" rx="12" fill="#fff" stroke="#2f6fed" stroke-width="1.8"/>
+      <text x="520" y="436" text-anchor="middle" class="b">c2 = 사건 E의 C2 물려받기</text>
+      <text x="520" y="460" text-anchor="middle" class="s">그다음 E의 개체·마지막 시각 갱신 (정책 A/B/C)</text>
+    </svg>
+    </div>
+    <p class="cap"><b>동점이면 event_id 숫자가 작은 사건</b> — 전처리와 같은 규칙 (11/18 결정). 지금 코드는 문자열 순이라 숫자 순으로 수정.</p>
+
+    <h4 style="margin:22px 0 4px">사건 시각을 갱신하면 뭐가 달라지나</h4>
+    <div class="fig">
+    <svg viewBox="0 0 900 220" role="img" aria-label="사건 마지막 시각 갱신 효과">
+      <!-- row1 -->
+      <text x="10" y="58" class="b" style="fill:#1f9d61">시각 갱신 O</text><text x="10" y="76" class="xs">정책 A · B</text>
+      <rect x="140" y="46" width="245" height="26" rx="6" fill="#eaf1ff"/>
+      <rect x="310" y="46" width="245" height="26" rx="6" fill="#e6f6ee" opacity=".85"/>
+      <text x="262" y="40" text-anchor="middle" class="xs" style="fill:#2f6fed">처음 창 (72h)</text>
+      <text x="470" y="40" text-anchor="middle" class="xs" style="fill:#1f9d61">a 이후 늘어난 창</text>
+      <rect x="133" y="52" width="14" height="14" fill="#7a4fd6"/>
+      <circle cx="310" cy="59" r="8" fill="#fff" stroke="#2f6fed" stroke-width="2"/><text x="310" y="92" text-anchor="middle" class="xs">a (50h) 붙음</text>
+      <circle cx="480" cy="59" r="8" fill="#1f9d61"/><text x="480" y="92" text-anchor="middle" class="xs" style="fill:#1f9d61;font-weight:700">b (100h) 창 안 ✓</text>
+      <!-- row2 -->
+      <text x="10" y="146" class="b" style="fill:#d14343">시각 갱신 X</text><text x="10" y="164" class="xs">정책 C</text>
+      <rect x="140" y="134" width="245" height="26" rx="6" fill="#eaf1ff"/>
+      <rect x="133" y="140" width="14" height="14" fill="#7a4fd6"/>
+      <circle cx="310" cy="147" r="8" fill="#fff" stroke="#2f6fed" stroke-width="2"/><text x="310" y="180" text-anchor="middle" class="xs">a (50h) 붙음</text>
+      <circle cx="480" cy="147" r="8" fill="#d14343"/><text x="480" y="180" text-anchor="middle" class="xs" style="fill:#d14343;font-weight:700">b (100h) 창 밖 ✗</text>
+      <!-- axis -->
+      <line class="ln" x1="140" y1="200" x2="830" y2="200" marker-end="url(#ah)"/>
+      <text x="140" y="216" text-anchor="middle" class="xs">0h</text><text x="385" y="216" text-anchor="middle" class="xs">72h</text><text x="630" y="216" text-anchor="middle" class="xs">144h</text>
+      <rect x="660" y="52" width="14" height="14" fill="#7a4fd6"/><text x="682" y="64" class="xs">= train 사건 E의 마지막 시각</text>
+    </svg>
+    </div>
+    <div class="tbl">
+    <table class="policy">
+      <tr><th style="text-align:left">정책</th><th>개체로 붙었을 때<br><span class="muted" style="font-weight:400">개체 / 시각</span></th><th>코사인으로 붙었을 때<br><span class="muted" style="font-weight:400">개체 / 시각</span></th><th style="text-align:left">한 줄 특징</th></tr>
+      <tr><td style="text-align:left"><b>A</b></td><td><span class="yes">✓</span> / <span class="yes">✓</span></td><td><span class="yes">✓</span> / <span class="yes">✓</span></td><td style="text-align:left">사건이 가장 빨리 커짐 — 엉뚱한 개체가 섞일 위험</td></tr>
+      <tr><td style="text-align:left"><b>B</b> <span class="tag t-ok">추천</span></td><td><span class="yes">✓</span> / <span class="yes">✓</span></td><td><span class="no">✗</span> / <span class="yes">✓</span></td><td style="text-align:left">사건은 계속 "살아 있게", 개체는 확실할 때만 추가</td></tr>
+      <tr><td style="text-align:left"><b>C</b></td><td><span class="yes">✓</span> / <span class="yes">✓</span></td><td><span class="no">✗</span> / <span class="no">✗</span></td><td style="text-align:left">가장 보수적 — 오래된 사건이 창 밖으로 빨리 밀려남</td></tr>
+    </table>
+    </div>
+
+    <h4 style="margin:22px 0 4px">D. c4 붙이기</h4>
+    <div class="chips">
+      <span class="chip">train 기사 1 → 3·41·120·<b style="color:var(--blue)">0</b></span>
+      <span class="chip">train 기사 2 → 3·41·120·<b style="color:var(--blue)">1</b></span>
+      <span class="chip g">validation 기사 → 3·41·120·<b>2</b></span>
+      <span class="muted" style="font-size:13px">앞 3자리가 같으면 순번 (train 먼저)</span>
+    </div>
+
+    <div class="note fix"><b>고칠 것</b> — 기사 개체를 파일에서 읽기 · 점수를 IDF 가중 Jaccard로 · 정책 A/B/C 옵션 · 사건 id 숫자 정렬 · z(E) 공간 옵션</div>
+  </div>
+
+  <!-- 5 -->
+  <div class="card" id="s5">
+    <div class="stage-head"><div class="num">5</div><h3>시퀀스 생성</h3><span class="tag t-mj">민지</span><span class="tag t-ok">유지</span></div>
+    <div class="files"><code>src/build_sequences.py</code> — train / validation 따로</div>
+    <div class="seq-row"><div class="lbl">시작<small>history.parquet</small></div>
+      <div class="chips"><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span></div></div>
+    <div class="seq-row"><div class="lbl">노출 1</div>
+      <div class="chips">
+        <span class="grp"><span class="gl">입력</span><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span></span>
+        <span class="grp"><span class="gl">후보</span><span class="chip g">40</span><span class="chip">50</span><span class="chip">60</span><span class="chip">70</span><span class="chip">80</span></span>
+        <span class="arrow">→</span><span class="chip g">정답 40</span></div></div>
+    <div class="seq-row"><div class="lbl">노출 2<small>40이 history에 추가</small></div>
+      <div class="chips">
+        <span class="grp"><span class="gl">입력</span><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span><span class="chip bl">40</span></span>
+        <span class="grp"><span class="gl">후보</span><span class="chip">55</span><span class="chip g">65</span><span class="chip">75</span><span class="chip">85</span><span class="chip">95</span></span>
+        <span class="arrow">→</span><span class="chip g">정답 65</span></div></div>
+    <div class="seq-row"><div class="lbl">마지막<small>id → SID</small></div>
+      <div class="chips"><span class="chip">40</span><span class="arrow">→</span><span class="chip v">3 · 41 · 120 · 0</span></div></div>
+    <p class="cap">기사 id를 SID로 바꿔 저장. 노출 때 읽던 기사도 history 끝에 붙임.</p>
+  </div>
+
+  <!-- 6 -->
+  <div class="card" id="s6">
+    <div class="stage-head"><div class="num">6</div><h3>1pos4neg 후보 만들기</h3><span class="tag t-mj">민지</span><span class="tag t-ok">유지</span></div>
+    <div class="files"><code>src/build_1pos4neg_sequences.py</code> (브랜치 <code>claude/festive-bell-a5sfbx</code>)</div>
+    <div class="cands">
+      <div class="cand pos"><b>40</b>3·41·120<br><span style="color:var(--green);font-weight:700">정답</span></div>
+      <div class="cand out"><b>70</b>3·41·120<br><span style="color:var(--red);font-weight:700">정답과 같음 → 제외</span></div>
+      <div class="cand"><b>50</b>2·7·33<br>오답</div>
+      <div class="cand"><b>60</b>3·12·88<br>오답</div>
+      <div class="cand"><b>80</b>5·90·14<br>오답</div>
+      <div class="cand"><b>90</b>3·41·77<br>오답</div>
+    </div>
+    <p class="cap">정답 1 + 오답 4. <b>정답과 (c1,c2,c3)가 똑같은 오답은 뺌</b> — 점수에 c4를 안 써서 구분이 안 되기 때문.</p>
+  </div>
+
+  <!-- 7 -->
+  <div class="card" id="s7">
+    <div class="stage-head"><div class="num">7</div><h3>validation / test 나누기</h3><span class="tag t-ym">여민</span><span class="tag t-ok">유지</span></div>
+    <div class="files"><code>Transformer/split_validation.py</code></div>
+    <div class="fig">
+    <svg viewBox="0 0 900 96" role="img" aria-label="validation과 test 분할">
+      <rect x="20" y="16" width="430" height="36" rx="8" fill="#eaf1ff" stroke="#2f6fed"/>
+      <rect x="450" y="16" width="430" height="36" rx="8" fill="#e6f6ee" stroke="#1f9d61"/>
+      <text x="235" y="39" text-anchor="middle" class="b" style="fill:#2f6fed">validation (앞 절반)</text>
+      <text x="665" y="39" text-anchor="middle" class="b" style="fill:#1f9d61">test (뒤 절반)</text>
+      <line class="ln" x1="20" y1="72" x2="878" y2="72" marker-end="url(#ah)"/>
+      <text x="878" y="90" text-anchor="end" class="xs">노출 시각</text>
+    </svg>
+    </div>
+    <p class="cap">validation 1pos4neg를 노출 시각 순으로 정렬해 <b>노출(impression) 단위</b>로 반 나눔 — 같은 노출이 양쪽에 섞이지 않음.</p>
+  </div>
+
+  <!-- 8 + 9 -->
+  <div class="card" id="s8">
+    <div class="stage-head"><div class="num">8</div><h3>Transformer 학습</h3><div class="num" id="s9" style="margin-left:6px">9</div><h3>예측·평가</h3><span class="tag t-ym">여민</span><span class="tag t-fix">설정 수정</span></div>
+    <div class="files"><code>Transformer/train_transformer.py</code> · <code>modules/model.py</code> · <code>predict_sid.py</code> · <code>evaluate/metrics.py</code></div>
+    <div class="fig">
+    <svg viewBox="0 0 900 250" role="img" aria-label="Transformer 구조와 후보 점수">
+      <text x="10" y="24" class="s b">history (기사마다 SID 토큰)</text>
+      <rect x="10" y="36" width="34" height="26" rx="6" fill="#f1f3f6"/><text x="27" y="54" text-anchor="middle" style="font-size:12px">3</text>
+      <rect x="48" y="36" width="34" height="26" rx="6" fill="#fff4dd"/><text x="65" y="54" text-anchor="middle" style="font-size:12px">41</text>
+      <rect x="86" y="36" width="34" height="26" rx="6" fill="#e6f6ee"/><text x="103" y="54" text-anchor="middle" style="font-size:12px">120</text>
+      <rect x="132" y="36" width="34" height="26" rx="6" fill="#f1f3f6"/><text x="149" y="54" text-anchor="middle" style="font-size:12px">5</text>
+      <rect x="170" y="36" width="34" height="26" rx="6" fill="#fff4dd"/><text x="187" y="54" text-anchor="middle" style="font-size:12px">12</text>
+      <rect x="208" y="36" width="34" height="26" rx="6" fill="#e6f6ee"/><text x="225" y="54" text-anchor="middle" style="font-size:12px">77</text>
+      <rect x="254" y="36" width="34" height="26" rx="6" fill="#f1f3f6"/><text x="271" y="54" text-anchor="middle" style="font-size:12px">3</text>
+      <rect x="292" y="36" width="34" height="26" rx="6" fill="#fff4dd"/><text x="309" y="54" text-anchor="middle" style="font-size:12px">41</text>
+      <rect x="330" y="36" width="34" height="26" rx="6" fill="#e6f6ee"/><text x="347" y="54" text-anchor="middle" style="font-size:12px">98</text>
+      <line class="ln" x1="187" y1="64" x2="187" y2="88" marker-end="url(#ah)"/>
+      <rect x="10" y="90" width="354" height="44" rx="10" fill="#eaf1ff" stroke="#2f6fed"/>
+      <text x="187" y="117" text-anchor="middle" class="b">인코더: 사용자 history 읽기</text>
+      <line class="ln" x1="187" y1="134" x2="187" y2="158" marker-end="url(#ah)"/>
+      <rect x="10" y="160" width="354" height="44" rx="10" fill="#eaf1ff" stroke="#2f6fed"/>
+      <text x="187" y="187" text-anchor="middle" class="b">디코더: p(c1) → p(c2|c1) → p(c3|c1,c2)</text>
+      <line class="ln" x1="364" y1="182" x2="404" y2="182" marker-end="url(#ah)"/>
+      <!-- scores -->
+      <text x="420" y="24" class="s b">후보 점수 = log p(c1) + log p(c2|c1) + log p(c3|c1,c2)</text>
+      <text x="420" y="62" style="font-size:13px" class="b">1위  후보 40 (정답)</text>
+      <rect x="560" y="48" width="152" height="20" rx="4" fill="#1f9d61"/><text x="720" y="63" class="xs">−1.2</text>
+      <text x="420" y="98" style="font-size:13px">2위  후보 90</text>
+      <rect x="560" y="84" width="100" height="20" rx="4" fill="#b4bcc9"/><text x="668" y="99" class="xs">−2.5</text>
+      <text x="420" y="134" style="font-size:13px">3위  후보 60</text>
+      <rect x="560" y="120" width="76" height="20" rx="4" fill="#b4bcc9"/><text x="644" y="135" class="xs">−3.1</text>
+      <text x="420" y="170" style="font-size:13px">4위  후보 50</text>
+      <rect x="560" y="156" width="48" height="20" rx="4" fill="#b4bcc9"/><text x="616" y="171" class="xs">−3.8</text>
+      <text x="420" y="206" style="font-size:13px">5위  후보 80</text>
+      <rect x="560" y="192" width="24" height="20" rx="4" fill="#b4bcc9"/><text x="592" y="207" class="xs">−4.4</text>
+      <text x="420" y="240" class="xs">순위로 AUC · MRR · nDCG@5/10 · Top-1 계산 (c4는 점수에 안 씀)</text>
+    </svg>
+    </div>
+    <div class="note fix"><b>고칠 것</b> — c3 크기 512 → 256 (RQ-VAE와 맞추기) · c4 크기 다시 계산 · 경로 맞추기</div>
+  </div>
+
+  <!-- ===================== 3. 재실행 ===================== -->
+  <h2>3. 무엇이 바뀌면 어디부터 다시 돌리나</h2>
+  <div class="card">
+    <div class="tbl">
+    <div class="rerun">
+      <div></div><div class="h">①</div><div class="h">②</div><div class="h">③</div><div class="h">④</div><div class="h">⑤</div><div class="h">⑥</div><div class="h">⑦</div><div class="h">⑧</div><div class="h">⑨</div>
+      <div class="rl">SID 생성 로직<br><span class="muted" style="font-weight:400;font-size:12px">정책 A/B/C 등</span></div>
+      <div class="c"></div><div class="c"></div><div class="c"></div><div class="c start"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div>
+      <div class="rl">z(E) 공간 실험<br><span class="muted" style="font-weight:400;font-size:12px">실험 R (잔차) — KMeans 입력이 바뀜</span></div>
+      <div class="c"></div><div class="c"></div><div class="c start"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div>
+      <div class="rl">전처리<br><span class="muted" style="font-weight:400;font-size:12px">임베딩·개체·사건</span></div>
+      <div class="c"></div><div class="c start"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div><div class="c on"></div>
+      <div class="rl">Transformer 설정만</div>
+      <div class="c"></div><div class="c"></div><div class="c"></div><div class="c"></div><div class="c"></div><div class="c"></div><div class="c"></div><div class="c start"></div><div class="c on"></div>
+    </div>
+    </div>
+    <p class="cap"><span style="color:var(--red);font-weight:700">■</span> 바뀐 곳 · <span style="color:var(--blue);font-weight:700">■</span> 다시 돌릴 곳 — SID가 한 자리라도 바뀌면 시퀀스·1pos4neg·split 파일이 옛 SID를 들고 있으므로 꼭 새로 만들기. 전처리가 바뀌면 RQ-VAE 재학습부터.</p>
+  </div>
+
+  <!-- ===================== 4. 체크리스트 ===================== -->
+  <h2 id="todo">4. 정한 것 / 논의할 것</h2>
+
+  <div class="card">
+    <h3>이미 정한 것</h3>
+    <ul class="done-list" style="margin-top:8px">
+      <li>Train C2 = 기사마다 r1 최근접 (교수님 결정, 그대로 유지)</li>
+      <li>validation-only 기사는 발행 시각 순으로, 새 사건 없이 기존 train 사건에만 배정</li>
+      <li>1차 개체(72h 창 + IDF 가중 Jaccard ≥ 0.3) → 2차 코사인 <code>h(a)</code> vs <code>사건별 평균 h</code> (창 안 → 없으면 전체). <b>코사인은 두 실험 모두 항상 h</b> (11/18)</li>
+      <li><code>z(E)</code>와 사건 C2는 train 학습이 끝난 뒤 train 기사로 한 번 계산, SID 생성 중엔 고정</li>
+      <li><b>z(E) 공간 쌍 실험</b> — Q2 KMeans 초기화 입력과 validation-only c2용 <code>z(E)</code>(사건 C2 = Q2 최근접)를 같은 벡터로: <b>실험 R (잔차, 잔차)</b> = 평균 r1 / <b>실험 H (인코더, 인코더)</b> = 평균 h. 사건 매칭 코사인은 둘 다 h. 둘 다 돌려 비교 (11/18 팀미팅)</li>
+      <li><b>동점 규칙</b> — 점수가 같으면 <b>event_id 숫자가 작은 사건</b> (전처리와 동일). 여민 코드의 문자열 정렬은 숫자 정렬로 수정 (11/18 팀미팅)</li>
+      <li>validation <code>event_id</code>는 전처리에서 만들어 <b>RQ-VAE 평가(c2 일관성)의 정답 묶음</b>으로만 씀. RQ-VAE 학습·SID·Transformer엔 영향 없음 (개체 읽기 수정 후 SID 생성도 안 읽음). 컬럼은 유지 (데이터 로더 필수)</li>
+      <li>1pos4neg에서 정답과 (c1,c2,c3) 같은 오답 제외 (교수님 9/18)</li>
+      <li>시간 창: EB-NeRD 72h / MIND 24h (MIND는 기사 시각 = 노출 시각)</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h3>논의·확인할 것</h3>
+      <button class="btn" id="reset">체크 초기화</button>
+    </div>
+    <div class="progress"><div class="bar"><div id="barfill"></div></div><span id="count">0 / 0</span></div>
+    <div class="muted" style="font-size:13px">체크 상태는 이 브라우저에만 저장됩니다.</div>
+
+    <div class="group-title">🧑‍🏫 교수님·팀이 정할 것</div>
+    <label class="check"><input type="checkbox" data-id="d1"><div class="body"><b>사건 갱신 정책 A / B / C 최종 선택</b><span>세 가지 다 돌려서 c2 일관성·추천 성능 비교 후 결정 (추천: B)</span></div></label>
+    <label class="check"><input type="checkbox" data-id="d6"><div class="body"><b>z(E) 공간 실험 R / H 결과 비교 후 하나 고르기</b><span>c2 일관성(train·validation) · 코사인으로 붙는 비율 · 추천 성능을 같이 보고</span></div></label>
+    <label class="check"><input type="checkbox" data-id="d5"><div class="body"><b>코사인으로 붙는 비율 보고</b><span>정책별로 "개체로 붙음 / 창 안 코사인 / 전체 코사인" 비율을 함께 보고</span></div></label>
+
+    <div class="group-title">🔧 여민 — SID 생성·Transformer 수정</div>
+    <label class="check"><input type="checkbox" data-id="y1"><div class="body"><b>기사 개체를 article_entities.parquet에서 읽기</b><span>텍스트 매칭 제거, 사건 개체와 같은 규칙으로 소문자 통일</span></div></label>
+    <label class="check"><input type="checkbox" data-id="y2"><div class="body"><b>점수를 IDF 가중 Jaccard로 교체</b><span>전처리와 같은 IDF 식·같은 0.3 임계값</span></div></label>
+    <label class="check"><input type="checkbox" data-id="y3"><div class="body"><b>--update_policy A/B/C 옵션 추가</b></div></label>
+    <label class="check"><input type="checkbox" data-id="y4"><div class="body"><b>사건 id 숫자 정렬 = 동점 규칙 (결정)</b><span>675줄 <code>sorted(…, key=str)</code> → 숫자 순. 동점이면 숫자가 작은 사건이 뽑히게 (전처리와 동일)</span></div></label>
+    <label class="check"><input type="checkbox" data-id="y9"><div class="body"><b>z(E) 공간 옵션 추가 (residual / encoder)</b><span>③ <code>initialize_c2_codebook</code>의 사건 평균 + ④ <code>compute_event_c2_from_mean_h</code>의 사건 C2용 z(E)를 한 옵션으로 같이 바꾸기. 2차 코사인 매칭은 옵션과 상관없이 평균 h 그대로</span></div></label>
+    <label class="check"><input type="checkbox" data-id="y5"><div class="body"><b>파일명 .py.py 정리</b><span>완료 (bcd1168)</span></div></label>
+    <label class="check"><input type="checkbox" data-id="y6"><div class="body"><b>Transformer c3_vocab_size 512 → 256</b></div></label>
+    <label class="check"><input type="checkbox" data-id="y7"><div class="body"><b>c4_vocab_size 다시 계산 + 상한 검사</b></div></label>
+    <label class="check"><input type="checkbox" data-id="y8"><div class="body"><b>데이터·체크포인트 경로 맞추기</b><span>predict_sid.py 기본 체크포인트 경로 등</span></div></label>
+
+    <div class="group-title">🧹 민지 — 전처리 확인</div>
+    <label class="check"><input type="checkbox" data-id="m1"><div class="body"><b>main.py에서 build_article_entities 실행되게 연결</b><span>지금은 따로 돌려야 article_entities.parquet가 생김</span></div></label>
+    <label class="check"><input type="checkbox" data-id="m2"><div class="body"><b>event_entity_linking/config.py 하드코딩 값 정리</b><span>0.3 / 72 / 0.01이 메인 설정과 같은지 확인</span></div></label>
+    <label class="check"><input type="checkbox" data-id="m3"><div class="body"><b>validation event_id는 평가 전용으로 유지</b><span>컬럼 이름 바꾸지 않기 (RQ-VAE 데이터 로더가 필수로 요구, c2 일관성 평가의 정답)</span></div></label>
+
+    <div class="group-title">▶️ 다시 돌리기</div>
+    <label class="check"><input type="checkbox" data-id="r1"><div class="body"><b>정책 A/B/C 각각: ④ → ⑤ → ⑥ → ⑦ → ⑧ → ⑨</b></div></label>
+    <label class="check"><input type="checkbox" data-id="r2"><div class="body"><b>전처리 수정 반영 후: ② → ③ 재학습 → ④ … ⑨</b></div></label>
+    <label class="check"><input type="checkbox" data-id="r3"><div class="body"><b>z(E) 공간 실험: R은 ③ 재학습 → ④ … ⑨ / H는 ④ … ⑨</b><span>실험 H는 KMeans 입력이 지금과 같아서 지금 체크포인트로 ④부터 가능</span></div></label>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  var KEY = "sid-pipeline-checklist-v1";
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('.check input'));
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch(e) { state = {}; }
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) {} }
+  function render(){
+    var n = 0;
+    boxes.forEach(function(b){
+      b.checked = !!state[b.dataset.id];
+      b.closest('.check').classList.toggle('done', b.checked);
+      if (b.checked) n++;
+    });
+    document.getElementById('count').textContent = n + " / " + boxes.length;
+    document.getElementById('barfill').style.width = (boxes.length ? n / boxes.length * 100 : 0) + "%";
+  }
+  boxes.forEach(function(b){
+    b.addEventListener('change', function(){ state[b.dataset.id] = b.checked; save(); render(); });
+  });
+  document.getElementById('reset').addEventListener('click', function(){ state = {}; save(); render(); });
+  render();
+})();
+</script>
+</body>
+</html>
