@@ -241,8 +241,243 @@
   </ul>
 </div>
 
+<!-- attention -->
+<h2><span class="num">4</span>디코더 안에서 누가 누구를 보나 — attention과 mask</h2>
+<div class="fig">
+<svg viewBox="0 0 980 420" role="img" aria-label="인코더 self-attention, 디코더 causal self-attention, cross-attention의 mask 비교">
+  <defs><marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <text x="20" y="30" class="b t-hi">A. 인코더 self-attention</text>
+  <text x="20" y="52" class="m" style="font-size:12.5px">history 토큰끼리 · 양방향</text>
+  <text x="44" y="109" text-anchor="end" class="m" style="font-size:11px">c1</text>
+  <text x="65" y="86" text-anchor="middle" class="m" style="font-size:11px">c1</text>
+  <rect x="52" y="92" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="78" y="92" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="104" y="92" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="130" y="92" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="156" y="92" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="182" y="92" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="208" y="92" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="219" y="108" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <rect x="234" y="92" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="245" y="108" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <text x="44" y="135" text-anchor="end" class="m" style="font-size:11px">c2</text>
+  <text x="91" y="86" text-anchor="middle" class="m" style="font-size:11px">c2</text>
+  <rect x="52" y="118" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="78" y="118" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="104" y="118" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="130" y="118" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="156" y="118" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="182" y="118" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="208" y="118" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="219" y="134" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <rect x="234" y="118" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="245" y="134" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <text x="44" y="161" text-anchor="end" class="m" style="font-size:11px">c3</text>
+  <text x="117" y="86" text-anchor="middle" class="m" style="font-size:11px">c3</text>
+  <rect x="52" y="144" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="78" y="144" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="104" y="144" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="130" y="144" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="156" y="144" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="182" y="144" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="208" y="144" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="219" y="160" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <rect x="234" y="144" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="245" y="160" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <text x="44" y="187" text-anchor="end" class="m" style="font-size:11px">c4</text>
+  <text x="143" y="86" text-anchor="middle" class="m" style="font-size:11px">c4</text>
+  <rect x="52" y="170" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="78" y="170" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="104" y="170" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="130" y="170" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="156" y="170" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="182" y="170" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="208" y="170" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="219" y="186" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <rect x="234" y="170" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="245" y="186" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <text x="44" y="213" text-anchor="end" class="m" style="font-size:11px">c1</text>
+  <text x="169" y="86" text-anchor="middle" class="m" style="font-size:11px">c1</text>
+  <rect x="52" y="196" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="78" y="196" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="104" y="196" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="130" y="196" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="156" y="196" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="182" y="196" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="208" y="196" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="219" y="212" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <rect x="234" y="196" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="245" y="212" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <text x="44" y="239" text-anchor="end" class="m" style="font-size:11px">c2</text>
+  <text x="195" y="86" text-anchor="middle" class="m" style="font-size:11px">c2</text>
+  <rect x="52" y="222" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="78" y="222" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="104" y="222" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="130" y="222" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="156" y="222" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="182" y="222" width="23" height="23" rx="3" class="bx-hi"/>
+  <rect x="208" y="222" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="219" y="238" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <rect x="234" y="222" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="245" y="238" text-anchor="middle" class="m" style="font-size:11px">✕</text>
+  <text x="44" y="265" text-anchor="end" class="m" style="font-size:11px">P</text>
+  <text x="221" y="86" text-anchor="middle" class="m" style="font-size:11px">P</text>
+  <rect x="52" y="248" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="78" y="248" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="104" y="248" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="130" y="248" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="156" y="248" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="182" y="248" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="208" y="248" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="234" y="248" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="44" y="291" text-anchor="end" class="m" style="font-size:11px">P</text>
+  <text x="247" y="86" text-anchor="middle" class="m" style="font-size:11px">P</text>
+  <rect x="52" y="274" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="78" y="274" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="104" y="274" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="130" y="274" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="156" y="274" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="182" y="274" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="208" y="274" width="23" height="23" rx="3" class="bx-chip"/>
+  <rect x="234" y="274" width="23" height="23" rx="3" class="bx-chip"/>
+  <text x="20" y="320" class="m" style="font-size:12.5px">200토큰이 서로 전부 봄</text>
+  <text x="20" y="338" class="m" style="font-size:12.5px">P = 빈칸(PAD) → 아무도 안 봄</text>
+  <text x="20" y="356" class="m" style="font-size:12.5px">(그림은 8토큰으로 줄임)</text>
+
+  <text x="340" y="30" class="b t-sid">B. 디코더 self-attention</text>
+  <text x="340" y="52" class="m" style="font-size:12.5px">디코더 토큰 3개끼리 · causal mask</text>
+  <text x="340" y="72" class="m" style="font-size:11.5px">가로줄 = 보는 쪽 · 세로칸 = 보이는 쪽</text>
+  <text x="410" y="132" text-anchor="end" class="b" style="font-size:13px">BOS</text>
+  <text x="442" y="96" text-anchor="middle" class="b" style="font-size:13px">BOS</text>
+  <rect x="420" y="104" width="44" height="44" rx="5" class="bx-sid"/>
+  <text x="442" y="132" text-anchor="middle" class="t-sid b" style="font-size:13px">봄</text>
+  <rect x="468" y="104" width="44" height="44" rx="5" class="bx-chip"/>
+  <text x="490" y="132" text-anchor="middle" class="m" style="font-size:13px">✕</text>
+  <rect x="516" y="104" width="44" height="44" rx="5" class="bx-chip"/>
+  <text x="538" y="132" text-anchor="middle" class="m" style="font-size:13px">✕</text>
+  <text x="410" y="180" text-anchor="end" class="b" style="font-size:13px">3</text>
+  <text x="490" y="96" text-anchor="middle" class="b" style="font-size:13px">3</text>
+  <rect x="420" y="152" width="44" height="44" rx="5" class="bx-sid"/>
+  <text x="442" y="180" text-anchor="middle" class="t-sid b" style="font-size:13px">봄</text>
+  <rect x="468" y="152" width="44" height="44" rx="5" class="bx-sid"/>
+  <text x="490" y="180" text-anchor="middle" class="t-sid b" style="font-size:13px">봄</text>
+  <rect x="516" y="152" width="44" height="44" rx="5" class="bx-chip"/>
+  <text x="538" y="180" text-anchor="middle" class="m" style="font-size:13px">✕</text>
+  <text x="410" y="228" text-anchor="end" class="b" style="font-size:13px">41</text>
+  <text x="538" y="96" text-anchor="middle" class="b" style="font-size:13px">41</text>
+  <rect x="420" y="200" width="44" height="44" rx="5" class="bx-sid"/>
+  <text x="442" y="228" text-anchor="middle" class="t-sid b" style="font-size:13px">봄</text>
+  <rect x="468" y="200" width="44" height="44" rx="5" class="bx-sid"/>
+  <text x="490" y="228" text-anchor="middle" class="t-sid b" style="font-size:13px">봄</text>
+  <rect x="516" y="200" width="44" height="44" rx="5" class="bx-sid"/>
+  <text x="538" y="228" text-anchor="middle" class="t-sid b" style="font-size:13px">봄</text>
+  <text x="340" y="270" class="m" style="font-size:12.5px">뒤에 오는 토큰은 못 봄</text>
+  <text x="340" y="288" class="m" style="font-size:12.5px">c1을 예측하는 BOS 자리는 3, 41을 모름</text>
+  <text x="340" y="306" class="m" style="font-size:12.5px">c3를 예측하는 41 자리는 BOS·3·41 다 봄</text>
+
+  <text x="640" y="30" class="b t-ok">C. cross-attention</text>
+  <text x="640" y="52" class="m" style="font-size:12.5px">디코더 3개 → 인코더 200개 · PAD mask만</text>
+  <text x="712" y="90" class="m" style="font-size:11px">4칸 = 기사 1개 (c1 c2 c3 c4) · 끝은 빈칸</text>
+  <text x="702" y="131" text-anchor="end" class="b" style="font-size:13px">BOS</text>
+  <rect x="712" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.25"/>
+  <rect x="724" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="736" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="748" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.25"/>
+  <rect x="760" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.35"/>
+  <rect x="772" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="784" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="796" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:1.0"/>
+  <rect x="808" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="820" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.15"/>
+  <rect x="832" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="844" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.15"/>
+  <rect x="856" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="868" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.35"/>
+  <rect x="880" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="892" y="104" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.25"/>
+  <rect x="904" y="104" width="10" height="44" rx="2" class="bx-chip"/>
+  <rect x="916" y="104" width="10" height="44" rx="2" class="bx-chip"/>
+  <rect x="928" y="104" width="10" height="44" rx="2" class="bx-chip"/>
+  <rect x="940" y="104" width="10" height="44" rx="2" class="bx-chip"/>
+  <text x="702" y="179" text-anchor="end" class="b" style="font-size:13px">3</text>
+  <rect x="712" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.25"/>
+  <rect x="724" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:1.0"/>
+  <rect x="736" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="748" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="760" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="772" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="784" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="796" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:1.0"/>
+  <rect x="808" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.25"/>
+  <rect x="820" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.25"/>
+  <rect x="832" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:1.0"/>
+  <rect x="844" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.25"/>
+  <rect x="856" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="868" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="880" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:1.0"/>
+  <rect x="892" y="152" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.15"/>
+  <rect x="904" y="152" width="10" height="44" rx="2" class="bx-chip"/>
+  <rect x="916" y="152" width="10" height="44" rx="2" class="bx-chip"/>
+  <rect x="928" y="152" width="10" height="44" rx="2" class="bx-chip"/>
+  <rect x="940" y="152" width="10" height="44" rx="2" class="bx-chip"/>
+  <text x="702" y="227" text-anchor="end" class="b" style="font-size:13px">41</text>
+  <rect x="712" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:1.0"/>
+  <rect x="724" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.15"/>
+  <rect x="736" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.25"/>
+  <rect x="748" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="760" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.15"/>
+  <rect x="772" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.35"/>
+  <rect x="784" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.15"/>
+  <rect x="796" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.35"/>
+  <rect x="808" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="820" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.8"/>
+  <rect x="832" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:1.0"/>
+  <rect x="844" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="856" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:1.0"/>
+  <rect x="868" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="880" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:0.55"/>
+  <rect x="892" y="200" width="10" height="44" rx="2" style="fill:var(--ok);opacity:1.0"/>
+  <rect x="904" y="200" width="10" height="44" rx="2" class="bx-chip"/>
+  <rect x="916" y="200" width="10" height="44" rx="2" class="bx-chip"/>
+  <rect x="928" y="200" width="10" height="44" rx="2" class="bx-chip"/>
+  <rect x="940" y="200" width="10" height="44" rx="2" class="bx-chip"/>
+  <text x="927" y="262" text-anchor="middle" class="m" style="font-size:11px">PAD</text>
+  <line x1="711" y1="100" x2="711" y2="248" style="stroke:var(--card);stroke-width:2"/>
+  <line x1="759" y1="100" x2="759" y2="248" style="stroke:var(--card);stroke-width:2"/>
+  <line x1="807" y1="100" x2="807" y2="248" style="stroke:var(--card);stroke-width:2"/>
+  <line x1="855" y1="100" x2="855" y2="248" style="stroke:var(--card);stroke-width:2"/>
+  <text x="640" y="270" class="m" style="font-size:12.5px">각 토큰이 history 200개 전부를 봄</text>
+  <text x="640" y="288" class="m" style="font-size:12.5px">진할수록 많이 참고 (head마다 다름)</text>
+  <text x="640" y="306" class="m" style="font-size:12.5px">head마다 3 × 200 가중치 표</text>
+
+  <line x1="20" y1="372" x2="960" y2="372" class="dash"/>
+  <g style="font-size:13px">
+  <text x="20" y="402" class="b">디코더 한 층</text>
+  <rect x="120" y="384" width="150" height="28" rx="7" class="bx-sid"/><text x="195" y="403" text-anchor="middle">① self (causal)</text>
+  <line x1="270" y1="398" x2="296" y2="398" class="ln" marker-end="url(#a5)"/>
+  <rect x="300" y="384" width="150" height="28" rx="7" class="bx-ok"/><text x="375" y="403" text-anchor="middle">② cross</text>
+  <line x1="450" y1="398" x2="476" y2="398" class="ln" marker-end="url(#a5)"/>
+  <rect x="480" y="384" width="110" height="28" rx="7" class="bx-chip"/><text x="535" y="403" text-anchor="middle">③ FFN</text>
+  <text x="604" y="403" class="b">× 2층</text>
+  <line x1="652" y1="398" x2="678" y2="398" class="ln" marker-end="url(#a5)"/>
+  <text x="684" y="403">위치별 벡터 3개 → c1 · c2 · c3 head</text>
+  </g>
+</svg>
+</div>
+<div class="tbl" style="margin-top:12px"><table>
+  <tr><th>attention</th><th>Query (보는 쪽)</th><th>Key·Value (보이는 쪽)</th><th>mask</th><th>가중치 표 (head당)</th></tr>
+  <tr><td>인코더 self</td><td>history 200</td><td>history 200</td><td>PAD만</td><td class="n">200 × 200</td></tr>
+  <tr><td>디코더 self</td><td>BOS · c1 · c2</td><td>BOS · c1 · c2</td><td>causal + (PAD 없음)</td><td class="n">3 × 3</td></tr>
+  <tr><td>cross</td><td>BOS · c1 · c2</td><td>인코더 출력 200</td><td>PAD만 (causal 없음)</td><td class="n">3 × 200</td></tr>
+</table></div>
+<p class="cap">
+  3자리는 <b>한 번에 같이</b> 계산해요. 후보의 c1, c2를 이미 알고 있어서 차례로 생성하지 않고 넣어 버리고, 순서는 causal mask가 지켜요(teacher forcing).
+  history가 과거라 cross에는 causal mask가 필요 없어요. 위치 정보는 T5 상대 위치로 <b>self-attention에만</b> 들어가요.
+  8 head는 256차원을 32차원씩 나눠 각자 다른 가중치 표를 만들어요.
+</p>
+
 <!-- 설정 -->
-<h2><span class="num">4</span>우리 V1 실험 설정 — 한 batch가 지나갈 때의 모양</h2>
+<h2><span class="num">5</span>우리 V1 실험 설정 — 한 batch가 지나갈 때의 모양</h2>
 <div class="fig">
 <svg viewBox="0 0 980 300" role="img" aria-label="batch 128행이 history 토큰, 인코더, 후보 5개 디코더, 점수로 바뀌는 텐서 모양">
   <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
@@ -306,7 +541,7 @@
 </table></div>
 
 <!-- 4. 학습 -->
-<h2><span class="num">5</span>학습 — 점수 5개 중 정답이 1등이 되게</h2>
+<h2><span class="num">6</span>학습 — 점수 5개 중 정답이 1등이 되게</h2>
 <div class="tbl"><table>
   <tr><th>후보</th><th>SID</th><th class="n">log p(c1)</th><th class="n">log p(c2|c1)</th><th class="n">log p(c3|c1,c2)</th><th class="n">점수</th><th class="n">softmax 확률</th></tr>
   <tr><td>60</td><td>3·12·88</td><td class="n">−0.4</td><td class="n">−2.6</td><td class="n">−3.1</td><td class="n">−6.1</td><td class="n">1.2%</td></tr>
@@ -328,30 +563,56 @@
 </p>
 
 <!-- 5. 학습 vs 추론 -->
-<h2><span class="num">6</span>학습과 추론, 무엇이 다른가</h2>
-<div class="two">
-  <div class="panel tr">
-    <h3>학습 (train)</h3>
-    <ol>
-      <li>train 1pos4neg에서 한 번에 128행씩 꺼냄 (epoch마다 행 순서를 섞음)</li>
-      <li>행마다 점수 5개 → softmax → cross entropy</li>
-      <li>AdamW로 갱신 (lr 0.00005, weight decay 0) · epoch당 1,820번</li>
-      <li>epoch이 끝날 때마다 <b>validation 앞 절반</b>으로 Top-1 측정</li>
-      <li>Top-1이 가장 높은 epoch를 <b>best 모델</b>로 저장</li>
-      <li>5 epoch 연속 나아지지 않으면 멈춤 (최대 30 epoch)<br><span style="color:var(--muted)">V1: epoch 1이 best → epoch 6에서 멈춤</span></li>
-    </ol>
-  </div>
-  <div class="panel inf">
-    <h3>추론·평가 (test)</h3>
-    <ol>
-      <li><b>best 모델</b>(V1은 epoch 1)을 불러옴 (학습 안 함)</li>
-      <li><b>test 122,668행</b> 각각의 점수 5개 계산</li>
-      <li>점수가 높은 순으로 1~5위</li>
-      <li>후보마다 한 줄씩 저장: 점수, 확률, c1·c2·c3 log 확률, 순위</li>
-      <li><b>행마다</b> 지표를 계산해 평균 (같은 노출에서 나온 여러 행도 따로)</li>
-    </ol>
-  </div>
-</div>
+<h2><span class="num">7</span>학습과 추론 — 단계별로</h2>
+<h3 style="margin:6px 0 8px;font-size:16px">학습: 한 batch(128행)에서 일어나는 일</h3>
+<div class="tbl"><table>
+  <tr><th>#</th><th>단계</th><th>모양</th><th>설명</th></tr>
+  <tr><td>1</td><td>행 꺼내기</td><td>128행</td><td>epoch마다 train 232,874행을 섞어서 128행씩 꺼냄</td></tr>
+  <tr><td>2</td><td>텐서 만들기</td><td>history 128×50×4 · mask 128×50 · 후보 128×5×3 · 정답 표시 128×5</td><td>history는 최근 50개만, 짧으면 0으로 채우고 mask=0</td></tr>
+  <tr><td>3</td><td>인코더</td><td>128×200×256</td><td>행마다 한 번</td></tr>
+  <tr><td>4</td><td>디코더</td><td>640×3×256</td><td>후보 5개 각각 [BOS, c1, c2] · 인코더 결과를 5번 복사해 cross-attention</td></tr>
+  <tr><td>5</td><td>코드 확률</td><td>640×25 · 640×128 · 640×512</td><td>log_softmax 후 후보 코드 자리만 꺼냄</td></tr>
+  <tr><td>6</td><td>점수</td><td>128×5</td><td>log p(c1) + log p(c2|c1) + log p(c3|c1,c2)</td></tr>
+  <tr><td>7</td><td>손실</td><td>숫자 1개</td><td>행마다 −log softmax(점수 5개)[정답] → 128행 평균</td></tr>
+  <tr><td>8</td><td>역전파</td><td>—</td><td>손실을 줄이는 방향(gradient)을 모든 가중치에 계산 · 크기 1.0으로 제한 (코드 기본값)</td></tr>
+  <tr><td>9</td><td>갱신</td><td>—</td><td>AdamW, lr 0.00005, weight decay 0</td></tr>
+</table></div>
+<p class="cap">
+  1~9를 <b>1,820번</b>(232,874 ÷ 128) 반복하면 1 epoch이에요.
+  7번 손실에서 gradient는 정답 점수를 올리고 오답 점수를 내리는 쪽으로 흘러요. log_softmax를 거치므로 25 · 128 · 512개 출력 전체가 조금씩 같이 움직여요(정답 코드는 위로, 나머지는 아래로).
+  임베딩 표(c1~c4), 인코더, 디코더, 출력층이 모두 한꺼번에 학습돼요.
+</p>
+
+<h3 style="margin:18px 0 8px;font-size:16px">학습: epoch이 끝날 때마다</h3>
+<div class="tbl"><table>
+  <tr><th>#</th><th>단계</th><th>설명</th></tr>
+  <tr><td>1</td><td>평가 모드</td><td>gradient 계산 끔 · 가중치 안 바뀜 · 행 순서 안 섞음</td></tr>
+  <tr><td>2</td><td>validation 앞 절반 채점</td><td>122,549행에 위 2~6을 그대로 → 점수 128×5씩</td></tr>
+  <tr><td>3</td><td>Top-1</td><td>점수 1등(argmax)이 정답인 행의 비율</td></tr>
+  <tr><td>4</td><td>저장</td><td>이번 epoch 모델은 항상 저장 · Top-1이 지금까지 최고면 <b>best</b>로도 저장</td></tr>
+  <tr><td>5</td><td>멈춤 판단</td><td>best가 5 epoch 연속 안 바뀌면 끝 (최대 30)</td></tr>
+</table></div>
+<p class="cap">V1은 epoch 1의 validation Top-1이 가장 높았어요. 그래서 epoch 2~6이 나아지지 않아 6에서 멈추고, <b>epoch 1 모델이 best</b>예요. 한 번 훑은 뒤로는 더 학습해도 validation Top-1이 오르지 않았다는 뜻이에요.</p>
+
+<h3 style="margin:18px 0 8px;font-size:16px">추론·평가: test 한 번</h3>
+<div class="tbl"><table>
+  <tr><th>#</th><th>단계</th><th>설명</th></tr>
+  <tr><td>1</td><td>best 모델 불러오기</td><td>V1은 epoch 1 모델 · 평가 모드 · 학습 안 함</td></tr>
+  <tr><td>2</td><td>test 채점</td><td>122,668행을 섞지 않고 128행씩 → 학습 2~6과 똑같이 점수 128×5</td></tr>
+  <tr><td>3</td><td>순위</td><td>점수 큰 순서로 1~5위 · softmax로 후보 확률도 같이 계산(보기용)</td></tr>
+  <tr><td>4</td><td>저장</td><td>후보마다 한 줄 → 122,668 × 5 = 613,340줄 (점수 · 확률 · c1/c2/c3 log 확률 · 순위 · 1등 여부)</td></tr>
+  <tr><td>5</td><td>지표</td><td>행마다 정답 순위로 Top-1 · AUC · MRR · nDCG를 구하고 122,668행 평균</td></tr>
+</table></div>
+
+<div class="tbl" style="margin-top:12px"><table>
+  <tr><th></th><th>학습</th><th>추론</th></tr>
+  <tr><td>점수 계산</td><td colspan="2" style="text-align:center">똑같음: 인코더 → 후보 5개 디코더 → c1·c2·c3 log 확률 합</td></tr>
+  <tr><td>디코더 입력</td><td colspan="2" style="text-align:center">똑같음: 후보 자기 [BOS, c1, c2] (생성·beam search 없음)</td></tr>
+  <tr><td>손실·gradient</td><td>계산해서 가중치 갱신</td><td>안 함</td></tr>
+  <tr><td>행 순서</td><td>epoch마다 섞음</td><td>그대로</td></tr>
+  <tr><td>dropout</td><td colspan="2" style="text-align:center">V1은 0이라 차이 없음</td></tr>
+  <tr><td>결과</td><td>가중치 · epoch마다 Top-1</td><td>후보별 점수 파일 · 최종 지표</td></tr>
+</table></div>
 <div class="fig" style="margin-top:12px">
 <svg viewBox="0 0 900 136" role="img" aria-label="validation을 노출 시각으로 반 나눠 앞은 모델 고르기, 뒤는 test로 쓰는 그림">
   <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
@@ -367,7 +628,7 @@
 </div>
 
 <!-- 6. 지표 -->
-<h2><span class="num">7</span>지표 — 정답이 몇 등이냐로 정해져요</h2>
+<h2><span class="num">8</span>지표 — 정답이 몇 등이냐로 정해져요</h2>
 <div class="tbl"><table>
   <tr><th>정답 순위 r</th><th class="n">Top-1</th><th class="n">AUC = (5 − r) / 4</th><th class="n">MRR = 1 / r</th><th class="n">nDCG = 1 / log₂(r + 1)</th></tr>
   <tr class="pos"><td>1위 (위 예시)</td><td class="n">1</td><td class="n">1.00</td><td class="n">1.00</td><td class="n">1.00</td></tr>
