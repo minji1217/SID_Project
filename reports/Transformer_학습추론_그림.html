@@ -109,7 +109,7 @@
 <main>
 
 <h1>⑧⑨ Transformer — 학습과 추론</h1>
-<p class="sub">여민 저장소 main 기준 · 예시는 시퀀스·1pos4neg 그림과 같은 숫자를 씀 (노출 1: history [10, 20, 30], 정답 40)</p>
+<p class="sub">우리 V1 실험 설정 기준 (test Top-1 27.07%) · 모델 코드는 여민 저장소와 같음 · 예시 숫자는 시퀀스·1pos4neg 그림과 같음 (노출 1: history [10, 20, 30], 정답 40)</p>
 
 <div class="lead">이 모델은 다음 기사의 SID를 <b>처음부터 만들어 내지 않아요</b>. 이미 정해진 <b>후보 5개</b>에 대해 “이 사용자가 다음에 이걸 클릭할 확률”을 c1 → c2 → c3 순서로 매기고, <b>점수로 순위</b>를 정해요.</div>
 
@@ -121,7 +121,7 @@
   <!-- history -->
   <rect x="14" y="40" width="170" height="104" rx="12" class="box"/>
   <text x="99" y="66" text-anchor="middle" class="b">history</text>
-  <text x="99" y="88" text-anchor="middle" class="m" style="font-size:13px">최근 20개 기사</text>
+  <text x="99" y="88" text-anchor="middle" class="m" style="font-size:13px">최근 50개 기사</text>
   <text x="99" y="108" text-anchor="middle" style="font-size:14px">10 · 20 · 30</text>
   <text x="99" y="128" text-anchor="middle" class="m" style="font-size:12px">기사 id → SID</text>
   <line x1="184" y1="92" x2="222" y2="92" class="ln" marker-end="url(#a1)"/>
@@ -129,13 +129,13 @@
   <rect x="226" y="40" width="170" height="104" rx="12" class="bx-chip"/>
   <text x="311" y="66" text-anchor="middle" class="b">토큰 줄</text>
   <text x="311" y="90" text-anchor="middle" style="font-size:13px">기사마다</text>
-  <text x="311" y="110" text-anchor="middle" style="font-size:13px">c1 c2 c3 c4 SEP</text>
-  <text x="311" y="130" text-anchor="middle" class="m" style="font-size:12px">최대 100토큰</text>
+  <text x="311" y="110" text-anchor="middle" style="font-size:13px">c1 c2 c3 c4 (SEP 없음)</text>
+  <text x="311" y="130" text-anchor="middle" class="m" style="font-size:12px">최대 200토큰 × 256차원</text>
   <line x1="396" y1="92" x2="434" y2="92" class="ln" marker-end="url(#a1)"/>
   <!-- encoder -->
   <rect x="438" y="40" width="150" height="104" rx="12" class="bx-hi"/>
   <text x="513" y="78" text-anchor="middle" class="b t-hi">인코더</text>
-  <text x="513" y="100" text-anchor="middle" style="font-size:13px">history 읽기</text>
+  <text x="513" y="100" text-anchor="middle" style="font-size:13px">2층 · 8 head</text>
   <text x="513" y="120" text-anchor="middle" class="m" style="font-size:12px">행마다 1번</text>
   <!-- fan out -->
   <path d="M588,92 C620,92 620,30 652,30" class="ln" marker-end="url(#a1)"/>
@@ -181,17 +181,18 @@
 <h2><span class="num">2</span>history를 토큰으로 바꾸기</h2>
 <div class="fig" style="overflow:visible">
   <div class="tokrow"><div class="k">기사 10<small>SID 3·12·5·0</small></div>
-    <div class="chips"><span class="chip c1">3</span><span class="chip c2">12</span><span class="chip c3">5</span><span class="chip c4">0</span><span class="chip sep">SEP</span></div></div>
+    <div class="chips"><span class="chip c1">3</span><span class="chip c2">12</span><span class="chip c3">5</span><span class="chip c4">0</span></div></div>
   <div class="tokrow"><div class="k">기사 20<small>SID 7·88·301·0</small></div>
-    <div class="chips"><span class="chip c1">7</span><span class="chip c2">88</span><span class="chip c3">301</span><span class="chip c4">0</span><span class="chip sep">SEP</span></div></div>
+    <div class="chips"><span class="chip c1">7</span><span class="chip c2">88</span><span class="chip c3">301</span><span class="chip c4">0</span></div></div>
   <div class="tokrow"><div class="k">기사 30<small>SID 3·41·77·1</small></div>
-    <div class="chips"><span class="chip c1">3</span><span class="chip c2">41</span><span class="chip c3">77</span><span class="chip c4">1</span><span class="chip sep">SEP</span></div></div>
+    <div class="chips"><span class="chip c1">3</span><span class="chip c2">41</span><span class="chip c3">77</span><span class="chip c4">1</span></div></div>
   <div class="tokrow"><div class="k">인코더 입력</div>
-    <div class="chips"><span class="chip c1">3</span><span class="chip c2">12</span><span class="chip c3">5</span><span class="chip c4">0</span><span class="chip sep">SEP</span><span class="chip c1">7</span><span class="chip c2">88</span><span class="chip c3">301</span><span class="chip c4">0</span><span class="chip sep">SEP</span><span class="chip c1">3</span><span class="chip c2">41</span><span class="chip c3">77</span><span class="chip c4">1</span><span class="chip sep">SEP</span></div></div>
+    <div class="chips"><span class="chip c1">3</span><span class="chip c2">12</span><span class="chip c3">5</span><span class="chip c4">0</span><span class="chip c1">7</span><span class="chip c2">88</span><span class="chip c3">301</span><span class="chip c4">0</span><span class="chip c1">3</span><span class="chip c2">41</span><span class="chip c3">77</span><span class="chip c4">1</span></div></div>
   <div class="legend"><span><span class="chip c1">c1</span>카테고리</span><span><span class="chip c2">c2</span>사건 쪽 코드</span><span><span class="chip c3">c3</span>세부 코드</span><span><span class="chip c4">c4</span>충돌 순번</span></div>
 </div>
 <p class="cap">
-  <b>최근 20개</b>만 써서 최대 100토큰이에요.
+  <b>최근 50개</b>만 써서 최대 200토큰이에요. 기사 사이 구분 토큰(SEP)은 <b>쓰지 않았어요</b>(V1 설정).
+  토큰 하나는 256차원 벡터가 돼요.
   c1·c2·c3·c4는 <b>각자 다른 임베딩 표</b>를 써요(c2의 7과 c3의 7은 다른 토큰).
   history에는 <b>c4도 넣어서</b> SID 앞 3자리가 같은 기사도 구분해요.
   사용자마다 길이가 달라서 남는 칸은 0으로 채우고 mask로 무시해요. history가 빈 행은 버려요.
@@ -240,8 +241,72 @@
   </ul>
 </div>
 
+<!-- 설정 -->
+<h2><span class="num">4</span>우리 V1 실험 설정 — 한 batch가 지나갈 때의 모양</h2>
+<div class="fig">
+<svg viewBox="0 0 980 300" role="img" aria-label="batch 128행이 history 토큰, 인코더, 후보 5개 디코더, 점수로 바뀌는 텐서 모양">
+  <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <g style="font-size:13px">
+  <rect x="14" y="20" width="200" height="70" rx="10" class="box"/>
+  <text x="114" y="46" text-anchor="middle" class="b">history SID</text>
+  <text x="114" y="70" text-anchor="middle">128행 × 50기사 × 4자리</text>
+  <line x1="214" y1="55" x2="246" y2="55" class="ln" marker-end="url(#a4)"/>
+  <rect x="250" y="20" width="200" height="70" rx="10" class="bx-chip"/>
+  <text x="350" y="46" text-anchor="middle" class="b">토큰 임베딩</text>
+  <text x="350" y="70" text-anchor="middle">128 × 200토큰 × 256</text>
+  <line x1="450" y1="55" x2="482" y2="55" class="ln" marker-end="url(#a4)"/>
+  <rect x="486" y="20" width="220" height="70" rx="10" class="bx-hi"/>
+  <text x="596" y="46" text-anchor="middle" class="b t-hi">인코더 (2층 · 8 head)</text>
+  <text x="596" y="70" text-anchor="middle">128 × 200 × 256</text>
+  <line x1="706" y1="55" x2="738" y2="55" class="ln" marker-end="url(#a4)"/>
+  <rect x="742" y="20" width="224" height="70" rx="10" class="bx-hi"/>
+  <text x="854" y="46" text-anchor="middle" class="b t-hi">후보 5개에 복사</text>
+  <text x="854" y="70" text-anchor="middle">640 × 200 × 256</text>
+  <path d="M854,90 L854,120 L114,120 L114,150" class="ln" marker-end="url(#a4)"/>
+  <rect x="14" y="154" width="200" height="70" rx="10" class="bx-sid"/>
+  <text x="114" y="180" text-anchor="middle" class="b t-sid">디코더 입력</text>
+  <text x="114" y="204" text-anchor="middle">640 × [BOS, c1, c2] × 256</text>
+  <line x1="214" y1="189" x2="246" y2="189" class="ln" marker-end="url(#a4)"/>
+  <rect x="250" y="154" width="200" height="70" rx="10" class="bx-sid"/>
+  <text x="350" y="180" text-anchor="middle" class="b t-sid">디코더 (2층 · 8 head)</text>
+  <text x="350" y="204" text-anchor="middle">640 × 3 × 256</text>
+  <line x1="450" y1="189" x2="482" y2="189" class="ln" marker-end="url(#a4)"/>
+  <rect x="486" y="154" width="220" height="70" rx="10" class="box"/>
+  <text x="596" y="176" text-anchor="middle" class="b">예측 확률</text>
+  <text x="596" y="196" text-anchor="middle">c1 25개 · c2 128개 · c3 512개</text>
+  <text x="596" y="214" text-anchor="middle" class="m" style="font-size:12px">중 후보 코드 확률만 꺼냄</text>
+  <line x1="706" y1="189" x2="738" y2="189" class="ln" marker-end="url(#a4)"/>
+  <rect x="742" y="154" width="224" height="70" rx="10" class="bx-ok"/>
+  <text x="854" y="180" text-anchor="middle" class="b t-ok">점수</text>
+  <text x="854" y="204" text-anchor="middle">128행 × 후보 5개</text>
+  </g>
+  <text x="14" y="262" class="m" style="font-size:13px">640 = 128행 × 후보 5개 · 200 = 50기사 × 4토큰 · 256 = 토큰 하나의 벡터 크기 (d_model)</text>
+  <text x="14" y="284" class="m" style="font-size:13px">history가 50개보다 짧은 행은 빈칸을 0으로 채우고 mask로 가림</text>
+</svg>
+</div>
+<div class="tbl" style="margin-top:12px"><table>
+  <tr><th>항목</th><th>우리 V1 설정</th><th>여민 main 기본값</th></tr>
+  <tr><td>history 길이</td><td><b>최근 50개</b> (최대 200토큰)</td><td>20개 (최대 100토큰)</td></tr>
+  <tr><td>기사 사이 SEP</td><td><b>없음</b></td><td>있음</td></tr>
+  <tr><td>d_model · head · 층 · FFN</td><td><b>256 · 8 · 2 · 1024</b></td><td>384 · 6 · 4 · 1024</td></tr>
+  <tr><td>dropout</td><td><b>0</b></td><td>0.1</td></tr>
+  <tr><td>어휘 크기 c1 · c2 · c3 · c4</td><td>25 · 128 · 512 · 28</td><td>같음</td></tr>
+  <tr><td>optimizer · lr · weight decay</td><td>AdamW · <b>0.00005</b> · <b>0</b></td><td>AdamW · 0.0001 · 0.01</td></tr>
+  <tr><td>batch · 최대 epoch · patience</td><td>128 · 30 · 5</td><td>같음</td></tr>
+  <tr><td>모델 고르기</td><td>validation 앞 절반 Top-1 최고 epoch</td><td>같음</td></tr>
+  <tr><td>seed</td><td>42</td><td>42</td></tr>
+</table></div>
+<p class="cap">V1 설정은 6단계·84번 돌린 설정 탐색에서 validation 앞 절반 기준으로 고른 값이에요. 새 SID로 다시 돌릴 때도 <b>이 값을 그대로 넘겨야</b> V1과 공정하게 비교돼요. 여민 main 기본값으로 돌리면 모델이 달라져요.</p>
+
+<div class="tbl" style="margin-top:12px"><table>
+  <tr><th>데이터</th><th class="n">행 수</th><th>쓰임</th></tr>
+  <tr><td>train 1pos4neg</td><td class="n">232,874</td><td>가중치 학습 · epoch당 1,820 batch</td></tr>
+  <tr><td>validation 앞 절반</td><td class="n">122,549</td><td>epoch마다 Top-1 → best epoch 고르기</td></tr>
+  <tr><td>test (validation 뒤 절반)</td><td class="n">122,668</td><td>best 모델로 한 번만 채점</td></tr>
+</table></div>
+
 <!-- 4. 학습 -->
-<h2><span class="num">4</span>학습 — 점수 5개 중 정답이 1등이 되게</h2>
+<h2><span class="num">5</span>학습 — 점수 5개 중 정답이 1등이 되게</h2>
 <div class="tbl"><table>
   <tr><th>후보</th><th>SID</th><th class="n">log p(c1)</th><th class="n">log p(c2|c1)</th><th class="n">log p(c3|c1,c2)</th><th class="n">점수</th><th class="n">softmax 확률</th></tr>
   <tr><td>60</td><td>3·12·88</td><td class="n">−0.4</td><td class="n">−2.6</td><td class="n">−3.1</td><td class="n">−6.1</td><td class="n">1.2%</td></tr>
@@ -263,24 +328,24 @@
 </p>
 
 <!-- 5. 학습 vs 추론 -->
-<h2><span class="num">5</span>학습과 추론, 무엇이 다른가</h2>
+<h2><span class="num">6</span>학습과 추론, 무엇이 다른가</h2>
 <div class="two">
   <div class="panel tr">
     <h3>학습 (train)</h3>
     <ol>
       <li>train 1pos4neg에서 한 번에 128행씩 꺼냄 (epoch마다 행 순서를 섞음)</li>
       <li>행마다 점수 5개 → softmax → cross entropy</li>
-      <li>AdamW로 갱신 (lr 0.0001, weight decay 0.01, gradient 최대 1.0)</li>
+      <li>AdamW로 갱신 (lr 0.00005, weight decay 0) · epoch당 1,820번</li>
       <li>epoch이 끝날 때마다 <b>validation 앞 절반</b>으로 Top-1 측정</li>
       <li>Top-1이 가장 높은 epoch를 <b>best 모델</b>로 저장</li>
-      <li>5 epoch 연속 나아지지 않으면 멈춤 (최대 30 epoch)</li>
+      <li>5 epoch 연속 나아지지 않으면 멈춤 (최대 30 epoch)<br><span style="color:var(--muted)">V1: epoch 1이 best → epoch 6에서 멈춤</span></li>
     </ol>
   </div>
   <div class="panel inf">
     <h3>추론·평가 (test)</h3>
     <ol>
-      <li><b>best 모델</b>을 불러옴 (학습 안 함)</li>
-      <li><b>validation 뒤 절반(test)</b> 각 행의 점수 5개 계산</li>
+      <li><b>best 모델</b>(V1은 epoch 1)을 불러옴 (학습 안 함)</li>
+      <li><b>test 122,668행</b> 각각의 점수 5개 계산</li>
       <li>점수가 높은 순으로 1~5위</li>
       <li>후보마다 한 줄씩 저장: 점수, 확률, c1·c2·c3 log 확률, 순위</li>
       <li><b>행마다</b> 지표를 계산해 평균 (같은 노출에서 나온 여러 행도 따로)</li>
@@ -290,11 +355,11 @@
 <div class="fig" style="margin-top:12px">
 <svg viewBox="0 0 900 136" role="img" aria-label="validation을 노출 시각으로 반 나눠 앞은 모델 고르기, 뒤는 test로 쓰는 그림">
   <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
-  <rect x="20" y="14" width="190" height="40" rx="8" class="bx-chip"/><text x="115" y="39" text-anchor="middle" class="b">train 1pos4neg</text>
+  <rect x="20" y="14" width="190" height="40" rx="8" class="bx-chip"/><text x="115" y="39" text-anchor="middle" class="b">train 232,874행</text>
   <text x="115" y="76" text-anchor="middle" class="m" style="font-size:12.5px">가중치 학습</text>
-  <rect x="240" y="14" width="320" height="40" rx="8" class="bx-hi"/><text x="400" y="39" text-anchor="middle" class="b t-hi">validation 앞 절반</text>
+  <rect x="240" y="14" width="320" height="40" rx="8" class="bx-hi"/><text x="400" y="39" text-anchor="middle" class="b t-hi">validation 앞 절반 122,549행</text>
   <text x="400" y="76" text-anchor="middle" class="m" style="font-size:12.5px">best epoch 고르기 · early stopping</text>
-  <rect x="560" y="14" width="320" height="40" rx="8" class="bx-ok"/><text x="720" y="39" text-anchor="middle" class="b t-ok">validation 뒤 절반 = test</text>
+  <rect x="560" y="14" width="320" height="40" rx="8" class="bx-ok"/><text x="720" y="39" text-anchor="middle" class="b t-ok">test 122,668행</text>
   <text x="720" y="76" text-anchor="middle" class="m" style="font-size:12.5px">최종 성능 보고 (한 번만)</text>
   <line x1="240" y1="102" x2="878" y2="102" class="ln" marker-end="url(#a3)"/>
   <text x="878" y="126" text-anchor="end" class="m" style="font-size:12px">노출 시각 →</text>
@@ -302,7 +367,7 @@
 </div>
 
 <!-- 6. 지표 -->
-<h2><span class="num">6</span>지표 — 정답이 몇 등이냐로 정해져요</h2>
+<h2><span class="num">7</span>지표 — 정답이 몇 등이냐로 정해져요</h2>
 <div class="tbl"><table>
   <tr><th>정답 순위 r</th><th class="n">Top-1</th><th class="n">AUC = (5 − r) / 4</th><th class="n">MRR = 1 / r</th><th class="n">nDCG = 1 / log₂(r + 1)</th></tr>
   <tr class="pos"><td>1위 (위 예시)</td><td class="n">1</td><td class="n">1.00</td><td class="n">1.00</td><td class="n">1.00</td></tr>
@@ -310,16 +375,22 @@
   <tr><td>3위</td><td class="n">0</td><td class="n">0.50</td><td class="n">0.33</td><td class="n">0.50</td></tr>
   <tr><td>5위</td><td class="n">0</td><td class="n">0.00</td><td class="n">0.20</td><td class="n">0.39</td></tr>
 </table></div>
+<div class="tbl" style="margin-top:12px"><table>
+  <tr><th>V1 결과 (test 122,668행 평균)</th><th class="n">Top-1</th><th class="n">AUC</th><th class="n">MRR</th><th class="n">nDCG@5</th></tr>
+  <tr class="pos"><td><b>V1 Transformer (seed 42)</b></td><td class="n"><b>27.07%</b></td><td class="n"><b>0.579</b></td><td class="n"><b>0.518</b></td><td class="n"><b>0.637</b></td></tr>
+  <tr><td>아무렇게나 고를 때</td><td class="n">20.00%</td><td class="n">0.500</td><td class="n">0.457</td><td class="n">0.590</td></tr>
+</table></div>
 <p class="cap">
   후보 5개에 정답 1개라서 네 지표 모두 <b>정답 순위 하나</b>로 정해져요. nDCG@5와 @10은 후보가 5개뿐이라 같은 값이에요.
-  아무렇게나 골라도 Top-1은 <b>20%</b>, AUC는 <b>0.5</b>예요. ver1 test Top-1 27.07%는 이 20%와 비교해서 봐요.
+  V1은 무작위보다 Top-1이 약 7%p 높아요. 학습을 다시 하지 않고 점수만 L1 + 0.5·L2 + 0.1·L3로 바꿔 계산하면 29.46%였어요(가중치는 validation 앞 절반에서 42가지 중 고름).
 </p>
 
 <div class="note">
   <strong>우리 쪽에서 챙길 것</strong>
   <ul>
     <li><b>동점 처리:</b> Top-1은 동점이면 앞자리 후보를 골라요. 정답이 늘 첫 자리면 동점이 전부 정답이 되니까 <b>후보 순서를 섞은 1pos4neg</b>를 써야 해요.</li>
-    <li><b>c4 어휘 크기:</b> 새 SID 파일의 c4 최댓값 + 1과 맞춰야 해요(지금 설정 28). c1 25 · c2 128 · c3 512도 SID와 같아야 해요.</li>
+    <li><b>c4 어휘 크기:</b> 새 SID 파일의 c4 최댓값 + 1과 맞춰야 해요(V1은 28). c1 25 · c2 128 · c3 512도 SID와 같아야 해요.</li>
+    <li><b>설정:</b> 여민 main 기본값이 V1과 달라요(history 20, SEP, d384 …). 새 SID 실험은 <b>V1 설정을 그대로 넘겨서</b> 돌려요.</li>
     <li><b>입력 경로:</b> 설정이 예전 공유 폴더를 가리켜요. 새 SID로 돌릴 때는 우리 출력 폴더로 바꿔요.</li>
     <li><b>SID가 바뀌면</b> 시퀀스 → 1pos4neg → 섞기 → split → 학습을 모두 새로 해야 해요.</li>
   </ul>
