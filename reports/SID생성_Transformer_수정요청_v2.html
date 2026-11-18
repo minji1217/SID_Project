@@ -126,7 +126,7 @@
 <table>
   <thead><tr><th class="num">#</th><th>할 일</th><th>파일</th><th>구분</th></tr></thead>
   <tbody>
-    <tr><td class="num">1</td><td>기사 개체를 <code>article_entities.parquet</code>에서 읽기</td><td>timeupdate</td><td><span class="badge must">필수 · 1순위</span></td></tr>
+    <tr><td class="num">1</td><td>개체를 <code>article_entities.parquet</code>에서 읽기 (train 사건 · validation 기사 모두)</td><td>timeupdate</td><td><span class="badge must">필수 · 1순위</span></td></tr>
     <tr><td class="num">2</td><td>유사도 식을 IDF 가중 <strong>Jaccard</strong>로 바꾸기</td><td>timeupdate</td><td><span class="badge must">필수 · 1순위</span></td></tr>
     <tr><td class="num">3</td><td>사건 갱신 규칙을 A/B/C 옵션으로 만들고 세 가지 다 돌리기</td><td>timeupdate</td><td><span class="badge must">필수 · 2순위</span></td></tr>
     <tr><td class="num">4</td><td>사건 번호를 숫자로 정렬 (동점이면 번호 작은 사건)</td><td>timeupdate</td><td><span class="badge must">필수 · 11/18 결정</span></td></tr>
@@ -152,9 +152,15 @@
 
 <!-- 1 -->
 <div class="task">
-  <div class="task-head"><span class="n">1</span><h3>기사 개체를 파일에서 읽기</h3><span class="badge must">필수 · 1순위</span></div>
+  <div class="task-head"><span class="n">1</span><h3>개체를 파일에서 읽기 (train 사건 · validation 기사 모두)</h3><span class="badge must">필수 · 1순위 · 11/18 결정</span></div>
   <div class="task-body">
-    <div class="row"><div class="label">지금</div><div>739번 줄 <code>current_article_entities()</code>가 사건 개체 이름을 <strong>기사 본문에서 글자로</strong> 찾아요.</div></div>
+    <div class="row"><div class="label">지금</div><div>
+      <ul>
+        <li><strong>validation 기사:</strong> 739번 줄 <code>current_article_entities()</code>가 사건 개체 이름을 <strong>기사 본문에서 글자로</strong> 찾아요.</li>
+        <li><strong>train 사건:</strong> 684번 줄 <code>load_event_entity_lookup(train_events)</code>가 <code>event_master.parquet</code>의 <code>event_entities</code>를 읽어요.</li>
+      </ul>
+    </div></div>
+    <div class="row"><div class="label">결정</div><div>11/18 여민과 정함 — <strong>개체는 train 사건이든 validation 기사든 전부 <code>article_entities.parquet</code> 하나에서 읽어요.</strong> SID 생성은 <code>event_master</code>·<code>event_master_with_validation</code>을 읽지 않아요. 개체 키 형식이 한 곳에서 나오니 어긋날 일이 없고, validation <code>event_id</code>는 c2 일관성 평가에만 남아요.</div></div>
     <div class="row"><div class="label">문제</div><div>
       <ol>
         <li><strong>매칭이 거의 안 돼요.</strong> 개체 이름이 <code>PER::vladimir putin</code> 형식이라 본문에서 거의 안 잡혀요. 기사 개체가 비고, 엔티티 매칭이 안 되고, 대부분 코사인으로 넘어가요.</li>
@@ -171,7 +177,8 @@
         <li>전처리 결과 <code>article_entities.parquet</code> (article_id, canonical_entity_key)와 <code>entity_idf.parquet</code>를 읽어요.</li>
         <li>너무 흔한 개체(<code>is_high_df</code>)는 빼요.</li>
         <li><strong>대소문자 맞추기:</strong> Train 사건 개체는 <code>parse_entities()</code>가 소문자(casefold)로 바꾸니까, 기사 개체와 IDF 키도 <strong>같은 방식으로</strong> 바꿔야 겹치는 개체가 잡혀요. (전처리 파일들은 원래 형식이 같으니, 세 곳에 같은 변환을 쓰거나 셋 다 변환하지 않으면 돼요. 한 곳만 바꾸면 매칭이 0이 돼요.)</li>
-        <li><code>current_article_entities()</code>, <code>event_master_with_validation.parquet</code>(<code>expanded_event_master_path</code>), Validation <code>event_id</code>로 개체를 찾는 부분은 지워요. <strong><code>event_id</code> 컬럼 검사(필수 컬럼)는 그대로 둬요.</strong></li>
+        <li><strong>Train 사건 개체도 같은 파일로:</strong> <code>train_master</code>의 <code>event_id</code>로 train 기사를 묶어 개체를 <strong>합집합</strong>하고, 흔한 개체를 빼요. 684번 줄 <code>event_master</code> 읽기를 대신해요. (전처리의 <code>event_entities</code>도 같은 방식 — 사건 train 기사 개체 합집합, 흔한 개체 제외 — 으로 만들어서 결과가 같아야 해요.)</li>
+        <li><code>current_article_entities()</code>, <code>event_master_with_validation.parquet</code>(<code>expanded_event_master_path</code>), <code>event_master.parquet</code>(<code>train_event_master_path</code>), Validation <code>event_id</code>로 개체를 찾는 부분은 지워요. <strong><code>event_id</code> 컬럼 검사(필수 컬럼)는 그대로 둬요.</strong> train 사건을 묶는 데는 <code>train_master</code>의 <code>event_id</code>를 계속 써요.</li>
       </ol>
 <pre><code># 매칭 함수 시작 부분에서 한 번만
 norm = lambda k: unicodedata.normalize("NFKC", str(k)).strip().casefold()   # parse_entities와 같은 규칙
@@ -185,6 +192,12 @@ for aid, key in zip(ent_df["article_id"], ent_df["canonical_entity_key"]):
     if key is not None:
         article_entity_lookup.setdefault(int(aid), set()).add(norm(key))
 
+# Train 사건 개체 (684번 줄 event_master 읽기 대체): 사건별 train 기사 개체 합집합 − 흔한 개체
+train_event_entities = {}
+for aid, eid in zip(train_master["article_id"], train_master["event_id"]):
+    train_event_entities.setdefault(event_key(eid), set()).update(article_entity_lookup.get(int(aid), set()))
+entity_sets = [train_event_entities.get(k, set()) - high_df for k in keys]
+
 # 반복문 안 (739번 줄 대체)
 article_entities = article_entity_lookup.get(int(article_id), set()) - high_df</code></pre>
     </div></div>
@@ -193,6 +206,7 @@ article_entities = article_entity_lookup.get(int(article_id), set()) - high_df</
         <li><code>match_article_entity_count</code>가 0이 아닌 기사가 <strong>약 71%</strong>예요(2,741개 중 약 1,957개). 나머지 784개는 원본 NER이 비었거나 흔한 개체만 있는 기사라 0이 정상이고, 2차 코사인으로 가요.</li>
         <li><code>match_method</code>에 <code>tfidf_72h</code>가 실제로 나오면 성공이에요.</li>
         <li>Validation <code>event_id</code>를 바꿔 넣어도 결과가 같아야 해요. 안 쓰고 있다는 확인이에요.</li>
+        <li><strong>train 사건 개체 비교:</strong> 위에서 만든 <code>entity_sets</code>가 <code>event_master.parquet</code>의 <code>event_entities</code>(같은 <code>norm</code> 적용)와 <strong>사건마다 같아야</strong> 해요. 다르면 몇 개 사건이 어떻게 다른지 알려 주세요. 이 비교는 한 번만 하고, 끝나면 <code>event_master</code> 읽기는 지워도 돼요.</li>
       </ul>
     </div></div>
   </div>

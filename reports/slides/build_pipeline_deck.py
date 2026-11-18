@@ -201,7 +201,7 @@ kbox(s, "U source", R, 790, 190, 76, [("validation-only", {"weight": 700, "size"
                                       ("event_id", {"weight": 700, "size": 19})], "purple", style="caption")
 uses = [("RQ-VAE 평가 — c2 일관성", "실제 용도", "green", "success-text"),
         ("RQ-VAE 로더 — 컬럼만", "형식상 필요", "gray", "stone"),
-        ("④ 지금 코드 — 고치면 안 씀", "수정 후 제거", "red", "error")]
+        ("④ SID 부여 — 안 읽게 바꿈", "결정 · 제거", "red", "error")]
 for i, (lab, tg, kind, col) in enumerate(uses):
     y = 752 + i * 64
     kbox(s, f"U row {i+1}", R + 260, y, 444, 54, [(lab, {"weight": 700, "size": 19})], kind, style="caption",
@@ -303,35 +303,41 @@ tb = table(s, "Event summary table", 120 + cwid + 64 + 22, cy0 + 58, [70, 86, 64
            cell_colors={(0, j): "k-amber-fill" for j in range(5)})
 text(s, "Card 2 note", 120 + cwid + 64 + 22, cy0 + 168, cwid - 40, 54,
      ["**z(E)·C2** train 기사 h 평균 → Q2 최근접 · 고정",
-      "**개체** 전처리 event_master · **시각** train 최댓값 · 갱신"], "footer", "slate", one_line=True)
+      "**개체** article_entities 합집합 · **시각** train 최댓값 · 갱신"], "footer", "slate", one_line=True)
 # 흐름도 (HTML과 같은 마름모)
 sub(s, "Flow heading", 120, 524, 800, "C. 새 기사 하나가 처리되는 순서", size=22)
 cx = 430
-kbox(s, "F start", cx - 180, 568, 360, 46, [("validation-only 기사 a", {"weight": 700})], "blue", radius=23,
+# HTML과 같은 모양: 마름모 2개 → 결과 상자 하나(아래, 넓게)로 세 갈래가 모두 모인다
+kbox(s, "F start", cx - 180, 566, 360, 42, [("validation-only 기사 a", {"weight": 700})], "blue", radius=21,
      style="caption")
-arrow(s, "F a1", [(cx, 616), (cx, 632)], width_pt=2)
-polygon(s, "F d1", [(cx, 634), (cx + 250, 686), (cx, 738), (cx - 250, 686)], "canvas", line="k-gray-line",
-        label="72h 안 · IDF Jaccard ≥ 0.3 있나?", size=18, weight=700)
-kbox(s, "F yes1", cx + 300, 656, 260, 60, [("점수 최고 사건 E", {"weight": 700, "size": 20}),
+arrow(s, "F a1", [(cx, 610), (cx, 624)], width_pt=2)
+polygon(s, "F d1", [(cx, 626), (cx + 220, 680), (cx, 734), (cx - 220, 680)], "canvas", line="k-gray-line")
+text(s, "F d1 text", cx - 150, 652, 300, 56, ["최근 72h 안 사건 중", ("IDF Jaccard ≥ 0.3 있나?", {"weight": 700})],
+     "footer", "ink", align="c", anchor="m", lh=1.2)
+kbox(s, "F yes1", cx + 290, 650, 270, 60, [("점수 최고 사건 E", {"weight": 700, "size": 20}),
                                            ("동점 → id 작은 사건", {"size": 18})], "green", style="caption")
-arrow(s, "F y1", [(cx + 252, 686), (cx + 294, 686)], width_pt=2)
-text(s, "F y1 label", cx + 252, 654, 40, 24, "예", "footer", "success-text", weight=600)
-arrow(s, "F n1", [(cx, 740), (cx, 756)], width_pt=2)
-text(s, "F n1 label", cx + 10, 736, 70, 22, "아니오", "footer", "slate")
-polygon(s, "F d2", [(cx, 758), (cx + 220, 802), (cx, 846), (cx - 220, 802)], "canvas", line="k-gray-line",
-        label="72h 안에 사건이 있나?", size=18, weight=700)
-kbox(s, "F yes2", cx + 300, 776, 260, 52, [("창 안 h 코사인 최고", {"weight": 700, "size": 20})], "amber", style="caption")
-arrow(s, "F y2", [(cx + 222, 802), (cx + 294, 802)], width_pt=2)
-text(s, "F y2 label", cx + 252, 770, 40, 24, "예", "footer", "success-text", weight=600)
-arrow(s, "F n2", [(cx, 848), (cx, 862)], width_pt=2)
-kbox(s, "F all", cx - 150, 864, 300, 44, [("전체 사건 h 코사인 최고", {"weight": 700, "size": 19})], "amber",
+arrow(s, "F y1", [(cx + 222, 680), (cx + 284, 680)], width_pt=2)
+text(s, "F y1 label", cx + 232, 648, 40, 24, "예", "footer", "success-text", weight=600)
+arrow(s, "F n1", [(cx, 736), (cx, 750)], width_pt=2)
+text(s, "F n1 label", cx + 12, 730, 70, 22, "아니오", "footer", "slate")
+polygon(s, "F d2", [(cx, 752), (cx + 190, 798), (cx, 844), (cx - 190, 798)], "canvas", line="k-gray-line")
+text(s, "F d2 text", cx - 120, 774, 240, 50, ["최근 72h 안에", ("사건이 있나?", {"weight": 700})],
+     "footer", "ink", align="c", anchor="m", lh=1.2)
+kbox(s, "F yes2", cx + 290, 772, 270, 52, [("창 안 h 코사인 최고", {"weight": 700, "size": 20})], "amber", style="caption")
+arrow(s, "F y2", [(cx + 192, 798), (cx + 284, 798)], width_pt=2)
+text(s, "F y2 label", cx + 232, 766, 40, 24, "예", "footer", "success-text", weight=600)
+arrow(s, "F n2", [(cx, 846), (cx, 858)], width_pt=2)
+text(s, "F n2 label", cx - 84, 834, 72, 22, "아니오", "footer", "slate", align="r")
+kbox(s, "F all", cx - 150, 860, 300, 40, [("전체 사건 h 코사인 최고", {"weight": 700, "size": 19})], "amber",
      style="caption")
-kbox(s, "F result", 690, 864, 290, 88, [("c2 = 사건 E의 C2", {"weight": 700, "size": 20}),
-                                        ("그다음 E의 개체·시각 갱신", {"size": 18})], "white", line_w=2, style="caption")
+rx0, rx1 = cx - 250, cx + 610
+kbox(s, "F result", rx0, 912, rx1 - rx0, 44,
+     [("**c2 = 사건 E의 C2 물려받기**  ·  그다음 E의 개체·마지막 시각 갱신", {"size": 19})], "white", line_w=2,
+     style="caption")
 s.shapes[-1].line.color.rgb = rgb("k-blue-line")
-arrow(s, "F r-all", [(cx + 154, 886), (684, 886)], width_pt=2)
-arrow(s, "F r-y2", [(cx + 430, 830), (cx + 430, 858)], width_pt=2)
-arrow(s, "F r-y1", [(cx + 564, 686), (cx + 590, 686), (cx + 590, 858)], width_pt=2)
+arrow(s, "F r-all", [(cx, 902), (cx, 906)], width_pt=2)
+arrow(s, "F r-y2", [(cx + 425, 826), (cx + 425, 906)], width_pt=2)
+arrow(s, "F r-y1", [(cx + 562, 680), (cx + 590, 680), (cx + 590, 906)], width_pt=2)
 # 오른쪽: 갱신 정책
 R = 1080
 sub(s, "P heading", R, 524, 744, "사건 시각을 갱신하면 뭐가 달라지나", size=22)
@@ -509,13 +515,14 @@ done = ["Train C2 = 기사마다 r1 최근접 (교수님 결정)",
         "1차 개체(72h · J ≥ 0.3) → 2차 코사인 — **코사인은 항상 h**",
         "동점이면 **event_id 숫자가 작은 사건** (전처리와 같음)",
         "validation event_id는 **c2 일관성 채점 전용** (컬럼 유지)",
+        "개체는 train·validation 모두 **article_entities**에서 (흔한 개체 제외)",
         "1pos4neg: 정답과 (c1,c2,c3) 같은 오답 제외 (교수님 9/18)",
         "시간 창: EB-NeRD 72h / MIND 24h"]
 for i, t_ in enumerate(done):
-    y = 346 + i * 80
+    y = 346 + i * 70
     text(s, f"Done {i+1} check", L, y, 30, 40, "✓", "body-strong", "success-text", anchor="m")
     text(s, f"Done {i+1}", L + 40, y, 900, 40, t_, "body", "charcoal", anchor="m", one_line=True)
-    hline(s, f"Done rule {i+1}", L, y + 58, 940, color="hairline-soft")
+    hline(s, f"Done rule {i+1}", L, y + 52, 940, color="hairline-soft")
 R = 1150
 sub(s, "Todo heading", R, 296, 680, "다음 미팅에서 정할 것", size=24)
 for i, t_ in enumerate(["사건 C2·Q2 KMeans 초기화 공간 — **실험 R / H**", "갱신 정책 **A / B / C** (추천 B)",
@@ -524,8 +531,8 @@ for i, t_ in enumerate(["사건 C2·Q2 KMeans 초기화 공간 — **실험 R / 
     rect(s, f"Todo {i+1} box", R, y + 10, 22, 22, fill="canvas", line="k-amber-line", radius=4, line_w=2)
     text(s, f"Todo {i+1}", R + 36, y, 640, 40, t_, "caption", "charcoal", anchor="m", one_line=True)
 sub(s, "Work heading", R, 568, 680, "할 일", size=24)
-for i, (who, items) in enumerate([("여민", "개체를 파일에서 읽기 · IDF Jaccard · 숫자 정렬 · 정책·z(E) 옵션 · c1/c3/c4 크기"),
-                                  ("민지", "main.py에 개체 생성 연결 · 하드코딩 값 정리 · c2 일관성 측정 (AWS)")]):
+for i, (who, items) in enumerate([("여민", "개체를 article_entities에서 읽기 (흔한 개체 제외) · IDF는 entity_idf · 숫자 정렬 · 정책·z(E) 옵션 · c1/c3/c4 크기"),
+                                  ("민지", "하드코딩 값 정리 · c2 일관성 측정 (AWS) · 개체 합집합 = event_master 확인")]):
     y = 618 + i * 130
     tag(s, f"Work {who}", R, y, who, OWNER[who])
     text(s, f"Work {who} items", R, y + 40, 660, 80, items, "caption", "charcoal")
