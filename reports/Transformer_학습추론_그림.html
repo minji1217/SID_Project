@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transformer 학습·추론</title>
+<style>
+  :root {
+    --bg: #ffffff; --card: #ffffff; --text: #1c2230; --muted: #6b7280; --line: #e3e6eb; --chip: #f1f3f6;
+    --ok: #2f7d3a; --ok-bg: #eaf6ec; --ok-line: #9ccfa5;
+    --no: #c0392b; --no-bg: #fbecea; --no-line: #e6a29a;
+    --hi: #3b5bdb; --hi-bg: #edf1ff; --hi-line: #9fb0f0;
+    --sid: #6741d9; --sid-bg: #f1edff; --sid-line: #c3b5f5;
+    --warm: #b7791f; --warm-bg: #fff4dd; --warm-line: #e9c78a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171c; --card: #1a1e25; --text: #e6e9ef; --muted: #9aa3b2; --line: #2d333d; --chip: #252a33;
+      --ok: #6fd28a; --ok-bg: #16301f; --ok-line: #2f6a41;
+      --no: #ff8f80; --no-bg: #3a1f1c; --no-line: #7a3a32;
+      --hi: #8ea6ff; --hi-bg: #1c2544; --hi-line: #3a4f99;
+      --sid: #b69cff; --sid-bg: #2a2142; --sid-line: #5a4596;
+      --warm: #f0c060; --warm-bg: #3a2e14; --warm-line: #7a6026;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171c; --card: #1a1e25; --text: #e6e9ef; --muted: #9aa3b2; --line: #2d333d; --chip: #252a33;
+    --ok: #6fd28a; --ok-bg: #16301f; --ok-line: #2f6a41;
+    --no: #ff8f80; --no-bg: #3a1f1c; --no-line: #7a3a32;
+    --hi: #8ea6ff; --hi-bg: #1c2544; --hi-line: #3a4f99;
+    --sid: #b69cff; --sid-bg: #2a2142; --sid-line: #5a4596;
+    --warm: #f0c060; --warm-bg: #3a2e14; --warm-line: #7a6026;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif; font-size: 15px; line-height: 1.65; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 23px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+  h2 { font-size: 18px; margin: 36px 0 10px; display: flex; align-items: center; gap: 8px; }
+  .num { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--text); font-size: 12px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+  p { margin: 8px 0; }
+  .lead { border: 1.5px solid var(--hi-line); background: var(--hi-bg); border-radius: 12px; padding: 12px 16px; font-size: 15.5px; }
+  .lead b { color: var(--hi); }
+  .fig { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--card); overflow-x: auto; }
+  .fig svg { display: block; width: 100%; min-width: 640px; height: auto; }
+  svg text { font-family: inherit; fill: var(--text); }
+  svg .m { fill: var(--muted); }
+  svg .b { font-weight: 700; }
+  svg .box { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+  svg .bx-hi { fill: var(--hi-bg); stroke: var(--hi-line); stroke-width: 1.5; }
+  svg .bx-sid { fill: var(--sid-bg); stroke: var(--sid-line); stroke-width: 1.5; }
+  svg .bx-ok { fill: var(--ok-bg); stroke: var(--ok-line); stroke-width: 1.5; }
+  svg .bx-warm { fill: var(--warm-bg); stroke: var(--warm-line); stroke-width: 1.5; }
+  svg .bx-chip { fill: var(--chip); stroke: var(--line); stroke-width: 1; }
+  svg .ln { stroke: var(--muted); stroke-width: 1.8; fill: none; }
+  svg .dash { stroke: var(--line); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  svg .t-hi { fill: var(--hi); } svg .t-sid { fill: var(--sid); } svg .t-ok { fill: var(--ok); } svg .t-warm { fill: var(--warm); }
+  svg .ah { fill: var(--muted); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip { min-width: 34px; text-align: center; padding: 4px 8px; border-radius: 7px; background: var(--chip); border: 1px solid var(--line); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .chip.c1 { background: var(--hi-bg); border-color: var(--hi-line); color: var(--hi); }
+  .chip.c2 { background: var(--sid-bg); border-color: var(--sid-line); color: var(--sid); }
+  .chip.c3 { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+  .chip.c4 { background: var(--warm-bg); border-color: var(--warm-line); color: var(--warm); }
+  .chip.sep { background: transparent; border-style: dashed; color: var(--muted); font-weight: 500; }
+  .tokrow { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+  .tokrow:last-child { border-bottom: none; }
+  .tokrow .k { font-weight: 700; } .tokrow .k small { display: block; color: var(--muted); font-weight: 400; font-size: 12.5px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--chip); font-weight: 700; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.pos td { background: var(--ok-bg); }
+  .tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+
+  .bars { display: grid; gap: 8px; }
+  .bar { display: grid; grid-template-columns: 120px 1fr 70px; gap: 10px; align-items: center; font-size: 14px; }
+  .bar .track { height: 18px; background: var(--chip); border-radius: 5px; overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--line); }
+  .bar.pos .fill { background: var(--ok); }
+  .bar .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .bar.pos .lab { color: var(--ok); font-weight: 700; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .panel { border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .panel h3 { margin: 0 0 6px; font-size: 15.5px; }
+  .panel.tr { border-color: var(--hi-line); } .panel.tr h3 { color: var(--hi); }
+  .panel.inf { border-color: var(--ok-line); } .panel.inf h3 { color: var(--ok); }
+  .panel ol, .panel ul { margin: 4px 0 0; padding-left: 20px; }
+  .cap { color: var(--muted); font-size: 13.5px; margin: 8px 0 0; }
+  .cap b { color: var(--text); }
+  .note { margin-top: 14px; border-left: 4px solid var(--warm-line); background: var(--chip); border-radius: 0 8px 8px 0; padding: 10px 14px; font-size: 14px; }
+  .note ul { margin: 4px 0 0; padding-left: 20px; }
+  code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+
+  @media (max-width: 720px) {
+    .two { grid-template-columns: 1fr; }
+    .tokrow { grid-template-columns: 1fr; gap: 4px; }
+    .bar { grid-template-columns: 90px 1fr 56px; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>⑧⑨ Transformer — 학습과 추론</h1>
+<p class="sub">여민 저장소 main 기준 · 예시는 시퀀스·1pos4neg 그림과 같은 숫자를 씀 (노출 1: history [10, 20, 30], 정답 40)</p>
+
+<div class="lead">이 모델은 다음 기사의 SID를 <b>처음부터 만들어 내지 않아요</b>. 이미 정해진 <b>후보 5개</b>에 대해 “이 사용자가 다음에 이걸 클릭할 확률”을 c1 → c2 → c3 순서로 매기고, <b>점수로 순위</b>를 정해요.</div>
+
+<!-- 1. 전체 흐름 -->
+<h2><span class="num">1</span>전체 흐름 — 1pos4neg 한 행이 지나가는 길</h2>
+<div class="fig">
+<svg viewBox="0 0 980 330" role="img" aria-label="history 토큰화, 인코더, 후보 5개 디코더, 점수, 학습과 추론으로 이어지는 흐름">
+  <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <!-- history -->
+  <rect x="14" y="40" width="170" height="104" rx="12" class="box"/>
+  <text x="99" y="66" text-anchor="middle" class="b">history</text>
+  <text x="99" y="88" text-anchor="middle" class="m" style="font-size:13px">최근 20개 기사</text>
+  <text x="99" y="108" text-anchor="middle" style="font-size:14px">10 · 20 · 30</text>
+  <text x="99" y="128" text-anchor="middle" class="m" style="font-size:12px">기사 id → SID</text>
+  <line x1="184" y1="92" x2="222" y2="92" class="ln" marker-end="url(#a1)"/>
+  <!-- tokens -->
+  <rect x="226" y="40" width="170" height="104" rx="12" class="bx-chip"/>
+  <text x="311" y="66" text-anchor="middle" class="b">토큰 줄</text>
+  <text x="311" y="90" text-anchor="middle" style="font-size:13px">기사마다</text>
+  <text x="311" y="110" text-anchor="middle" style="font-size:13px">c1 c2 c3 c4 SEP</text>
+  <text x="311" y="130" text-anchor="middle" class="m" style="font-size:12px">최대 100토큰</text>
+  <line x1="396" y1="92" x2="434" y2="92" class="ln" marker-end="url(#a1)"/>
+  <!-- encoder -->
+  <rect x="438" y="40" width="150" height="104" rx="12" class="bx-hi"/>
+  <text x="513" y="78" text-anchor="middle" class="b t-hi">인코더</text>
+  <text x="513" y="100" text-anchor="middle" style="font-size:13px">history 읽기</text>
+  <text x="513" y="120" text-anchor="middle" class="m" style="font-size:12px">행마다 1번</text>
+  <!-- fan out -->
+  <path d="M588,92 C620,92 620,30 652,30" class="ln" marker-end="url(#a1)"/>
+  <path d="M588,92 C620,92 620,61 652,61" class="ln" marker-end="url(#a1)"/>
+  <line x1="588" y1="92" x2="652" y2="92" class="ln" marker-end="url(#a1)"/>
+  <path d="M588,92 C620,92 620,123 652,123" class="ln" marker-end="url(#a1)"/>
+  <path d="M588,92 C620,92 620,154 652,154" class="ln" marker-end="url(#a1)"/>
+  <text x="620" y="188" text-anchor="middle" class="m" style="font-size:12px">같은 결과를</text>
+  <text x="620" y="204" text-anchor="middle" class="m" style="font-size:12px">5번 나눠 씀</text>
+  <!-- decoders -->
+  <g style="font-size:13px">
+    <rect x="656" y="16" width="150" height="28" rx="7" class="bx-sid"/><text x="731" y="35" text-anchor="middle">디코더 · 후보 60</text>
+    <rect x="656" y="47" width="150" height="28" rx="7" class="bx-sid"/><text x="731" y="66" text-anchor="middle">디코더 · 후보 90</text>
+    <rect x="656" y="78" width="150" height="28" rx="7" class="bx-ok"/><text x="731" y="97" text-anchor="middle" class="b t-ok">디코더 · 후보 40</text>
+    <rect x="656" y="109" width="150" height="28" rx="7" class="bx-sid"/><text x="731" y="128" text-anchor="middle">디코더 · 후보 80</text>
+    <rect x="656" y="140" width="150" height="28" rx="7" class="bx-sid"/><text x="731" y="159" text-anchor="middle">디코더 · 후보 50</text>
+  </g>
+  <line x1="806" y1="92" x2="838" y2="92" class="ln" marker-end="url(#a1)"/>
+  <!-- scores -->
+  <rect x="842" y="40" width="126" height="104" rx="12" class="box"/>
+  <text x="905" y="70" text-anchor="middle" class="b">점수 5개</text>
+  <text x="905" y="94" text-anchor="middle" style="font-size:13px">log p(c1)</text>
+  <text x="905" y="112" text-anchor="middle" style="font-size:13px">+ log p(c2|c1)</text>
+  <text x="905" y="130" text-anchor="middle" style="font-size:13px">+ log p(c3|c1,c2)</text>
+  <!-- branch -->
+  <path d="M905,144 L905,190 L700,190 L700,226" class="ln" marker-end="url(#a1)"/>
+  <path d="M905,144 L905,226" class="ln" marker-end="url(#a1)"/>
+  <rect x="560" y="230" width="280" height="84" rx="12" class="bx-hi"/>
+  <text x="700" y="256" text-anchor="middle" class="b t-hi">학습</text>
+  <text x="700" y="278" text-anchor="middle" style="font-size:13px">softmax(점수 5개) → cross entropy</text>
+  <text x="700" y="298" text-anchor="middle" class="m" style="font-size:12.5px">정답 점수를 올리고 오답 점수를 내림</text>
+  <rect x="852" y="230" width="116" height="84" rx="12" class="bx-ok"/>
+  <text x="910" y="256" text-anchor="middle" class="b t-ok">추론</text>
+  <text x="910" y="278" text-anchor="middle" style="font-size:13px">점수 순위</text>
+  <text x="910" y="298" text-anchor="middle" style="font-size:13px">→ 지표</text>
+  <text x="14" y="240" class="m" style="font-size:13px">후보 5개 = 정답 1 + 오답 4</text>
+  <text x="14" y="260" class="m" style="font-size:13px">순서는 섞여 있음: 60 · 90 · 40 · 80 · 50</text>
+  <text x="14" y="280" class="m" style="font-size:13px">c4는 점수에 안 씀</text>
+</svg>
+</div>
+
+<!-- 2. 토큰화 -->
+<h2><span class="num">2</span>history를 토큰으로 바꾸기</h2>
+<div class="fig" style="overflow:visible">
+  <div class="tokrow"><div class="k">기사 10<small>SID 3·12·5·0</small></div>
+    <div class="chips"><span class="chip c1">3</span><span class="chip c2">12</span><span class="chip c3">5</span><span class="chip c4">0</span><span class="chip sep">SEP</span></div></div>
+  <div class="tokrow"><div class="k">기사 20<small>SID 7·88·301·0</small></div>
+    <div class="chips"><span class="chip c1">7</span><span class="chip c2">88</span><span class="chip c3">301</span><span class="chip c4">0</span><span class="chip sep">SEP</span></div></div>
+  <div class="tokrow"><div class="k">기사 30<small>SID 3·41·77·1</small></div>
+    <div class="chips"><span class="chip c1">3</span><span class="chip c2">41</span><span class="chip c3">77</span><span class="chip c4">1</span><span class="chip sep">SEP</span></div></div>
+  <div class="tokrow"><div class="k">인코더 입력</div>
+    <div class="chips"><span class="chip c1">3</span><span class="chip c2">12</span><span class="chip c3">5</span><span class="chip c4">0</span><span class="chip sep">SEP</span><span class="chip c1">7</span><span class="chip c2">88</span><span class="chip c3">301</span><span class="chip c4">0</span><span class="chip sep">SEP</span><span class="chip c1">3</span><span class="chip c2">41</span><span class="chip c3">77</span><span class="chip c4">1</span><span class="chip sep">SEP</span></div></div>
+  <div class="legend"><span><span class="chip c1">c1</span>카테고리</span><span><span class="chip c2">c2</span>사건 쪽 코드</span><span><span class="chip c3">c3</span>세부 코드</span><span><span class="chip c4">c4</span>충돌 순번</span></div>
+</div>
+<p class="cap">
+  <b>최근 20개</b>만 써서 최대 100토큰이에요.
+  c1·c2·c3·c4는 <b>각자 다른 임베딩 표</b>를 써요(c2의 7과 c3의 7은 다른 토큰).
+  history에는 <b>c4도 넣어서</b> SID 앞 3자리가 같은 기사도 구분해요.
+  사용자마다 길이가 달라서 남는 칸은 0으로 채우고 mask로 무시해요. history가 빈 행은 버려요.
+</p>
+
+<!-- 3. 디코더 -->
+<h2><span class="num">3</span>후보 하나 채점하기 — 정답 40 (3·41·120)</h2>
+<div class="fig">
+<svg viewBox="0 0 900 270" role="img" aria-label="디코더 입력 BOS, c1, c2로 c1, c2, c3 확률을 차례로 구해 더하는 그림">
+  <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <text x="20" y="40" class="b">디코더 입력</text>
+  <rect x="150" y="18" width="120" height="36" rx="8" class="bx-chip"/><text x="210" y="42" text-anchor="middle" class="b">BOS</text>
+  <rect x="330" y="18" width="120" height="36" rx="8" class="bx-hi"/><text x="390" y="42" text-anchor="middle" class="b t-hi">c1 = 3</text>
+  <rect x="510" y="18" width="120" height="36" rx="8" class="bx-sid"/><text x="570" y="42" text-anchor="middle" class="b t-sid">c2 = 41</text>
+  <line x1="210" y1="54" x2="210" y2="86" class="ln" marker-end="url(#a2)"/>
+  <line x1="390" y1="54" x2="390" y2="86" class="ln" marker-end="url(#a2)"/>
+  <line x1="570" y1="54" x2="570" y2="86" class="ln" marker-end="url(#a2)"/>
+  <rect x="150" y="90" width="480" height="44" rx="10" class="bx-sid"/>
+  <text x="390" y="117" text-anchor="middle" class="b">디코더 (history 결과를 보며 계산)</text>
+  <rect x="680" y="90" width="200" height="44" rx="10" class="bx-hi"/>
+  <text x="780" y="117" text-anchor="middle" style="font-size:13.5px">인코더 결과 (history)</text>
+  <line x1="680" y1="112" x2="634" y2="112" class="ln" marker-end="url(#a2)"/>
+  <line x1="210" y1="134" x2="210" y2="166" class="ln" marker-end="url(#a2)"/>
+  <line x1="390" y1="134" x2="390" y2="166" class="ln" marker-end="url(#a2)"/>
+  <line x1="570" y1="134" x2="570" y2="166" class="ln" marker-end="url(#a2)"/>
+  <text x="20" y="196" class="b">예측</text>
+  <rect x="130" y="170" width="160" height="44" rx="8" class="box"/><text x="210" y="190" text-anchor="middle" style="font-size:13px">p(c1 = 3 | history)</text><text x="210" y="207" text-anchor="middle" class="b t-hi" style="font-size:13px">log = −0.4</text>
+  <rect x="310" y="170" width="160" height="44" rx="8" class="box"/><text x="390" y="190" text-anchor="middle" style="font-size:13px">p(c2 = 41 | …, 3)</text><text x="390" y="207" text-anchor="middle" class="b t-sid" style="font-size:13px">log = −0.9</text>
+  <rect x="490" y="170" width="160" height="44" rx="8" class="box"/><text x="570" y="190" text-anchor="middle" style="font-size:13px">p(c3 = 120 | …, 3, 41)</text><text x="570" y="207" text-anchor="middle" class="b t-ok" style="font-size:13px">log = −0.8</text>
+  <path d="M210,214 L210,240 L680,240" class="ln"/><path d="M390,214 L390,240" class="ln"/><path d="M570,214 L570,240" class="ln"/>
+  <line x1="680" y1="240" x2="700" y2="240" class="ln" marker-end="url(#a2)"/>
+  <rect x="704" y="220" width="176" height="40" rx="10" class="bx-ok"/>
+  <text x="792" y="245" text-anchor="middle" class="b t-ok">후보 40 점수 = −2.1</text>
+</svg>
+</div>
+<p class="cap">
+  위치 0은 BOS를 보고 c1을, 위치 1은 c1을 보고 c2를, 위치 2는 c2를 보고 c3를 예측해요.
+  각 위치에서 그 후보가 <b>실제로 가진 코드의 확률만</b> 꺼내 log를 더해요.
+  후보가 정해져 있어서 추론 때도 후보의 c1, c2를 그대로 넣어요(생성·beam search 없음).
+</p>
+<div class="note">
+  <strong>앞자리가 같으면 점수 일부를 공유해요</strong>
+  <ul>
+    <li>후보 90은 3·41·<b>77</b>이라 c1, c2 확률이 40과 같고(−0.4, −0.9) c3만 달라요(−1.6). 그래서 점수가 −2.9예요.</li>
+    <li>(c1, c2, c3)가 완전히 같으면 점수도 완전히 같아져서 구분이 안 돼요. 1pos4neg에서 정답과 SID가 같은 오답을 빼는 이유예요.</li>
+  </ul>
+</div>
+
+<!-- 4. 학습 -->
+<h2><span class="num">4</span>학습 — 점수 5개 중 정답이 1등이 되게</h2>
+<div class="tbl"><table>
+  <tr><th>후보</th><th>SID</th><th class="n">log p(c1)</th><th class="n">log p(c2|c1)</th><th class="n">log p(c3|c1,c2)</th><th class="n">점수</th><th class="n">softmax 확률</th></tr>
+  <tr><td>60</td><td>3·12·88</td><td class="n">−0.4</td><td class="n">−2.6</td><td class="n">−3.1</td><td class="n">−6.1</td><td class="n">1.2%</td></tr>
+  <tr><td>90</td><td>3·41·77</td><td class="n">−0.4</td><td class="n">−0.9</td><td class="n">−1.6</td><td class="n">−2.9</td><td class="n">29.6%</td></tr>
+  <tr class="pos"><td><b>40 (정답)</b></td><td>3·41·120</td><td class="n">−0.4</td><td class="n">−0.9</td><td class="n">−0.8</td><td class="n"><b>−2.1</b></td><td class="n"><b>65.9%</b></td></tr>
+  <tr><td>80</td><td>5·90·14</td><td class="n">−2.3</td><td class="n">−2.2</td><td class="n">−2.9</td><td class="n">−7.4</td><td class="n">0.3%</td></tr>
+  <tr><td>50</td><td>2·7·33</td><td class="n">−1.9</td><td class="n">−1.5</td><td class="n">−1.8</td><td class="n">−5.2</td><td class="n">3.0%</td></tr>
+</table></div>
+<div class="bars" style="margin-top:12px">
+  <div class="bar"><span class="lab">60</span><div class="track"><div class="fill" style="width:1.2%"></div></div><span class="v">1.2%</span></div>
+  <div class="bar"><span class="lab">90</span><div class="track"><div class="fill" style="width:29.6%"></div></div><span class="v">29.6%</span></div>
+  <div class="bar pos"><span class="lab">40 정답</span><div class="track"><div class="fill" style="width:65.9%"></div></div><span class="v">65.9%</span></div>
+  <div class="bar"><span class="lab">80</span><div class="track"><div class="fill" style="width:0.3%"></div></div><span class="v">0.3%</span></div>
+  <div class="bar"><span class="lab">50</span><div class="track"><div class="fill" style="width:3%"></div></div><span class="v">3.0%</span></div>
+</div>
+<p class="cap">
+  손실 = −log(정답 확률) = −log 0.659 ≈ <b>0.42</b>. 이 값을 줄이도록 학습하면 정답 점수는 오르고 오답 점수는 내려가요.
+  비교는 항상 <b>이 5개 안에서만</b> 해요. c2 128개, c3 512개 전체를 놓고 다음 기사를 맞히는 학습이 아니에요. (숫자는 설명용 예시)
+</p>
+
+<!-- 5. 학습 vs 추론 -->
+<h2><span class="num">5</span>학습과 추론, 무엇이 다른가</h2>
+<div class="two">
+  <div class="panel tr">
+    <h3>학습 (train)</h3>
+    <ol>
+      <li>train 1pos4neg에서 한 번에 128행씩 꺼냄 (epoch마다 행 순서를 섞음)</li>
+      <li>행마다 점수 5개 → softmax → cross entropy</li>
+      <li>AdamW로 갱신 (lr 0.0001, weight decay 0.01, gradient 최대 1.0)</li>
+      <li>epoch이 끝날 때마다 <b>validation 앞 절반</b>으로 Top-1 측정</li>
+      <li>Top-1이 가장 높은 epoch를 <b>best 모델</b>로 저장</li>
+      <li>5 epoch 연속 나아지지 않으면 멈춤 (최대 30 epoch)</li>
+    </ol>
+  </div>
+  <div class="panel inf">
+    <h3>추론·평가 (test)</h3>
+    <ol>
+      <li><b>best 모델</b>을 불러옴 (학습 안 함)</li>
+      <li><b>validation 뒤 절반(test)</b> 각 행의 점수 5개 계산</li>
+      <li>점수가 높은 순으로 1~5위</li>
+      <li>후보마다 한 줄씩 저장: 점수, 확률, c1·c2·c3 log 확률, 순위</li>
+      <li><b>행마다</b> 지표를 계산해 평균 (같은 노출에서 나온 여러 행도 따로)</li>
+    </ol>
+  </div>
+</div>
+<div class="fig" style="margin-top:12px">
+<svg viewBox="0 0 900 136" role="img" aria-label="validation을 노출 시각으로 반 나눠 앞은 모델 고르기, 뒤는 test로 쓰는 그림">
+  <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+  <rect x="20" y="14" width="190" height="40" rx="8" class="bx-chip"/><text x="115" y="39" text-anchor="middle" class="b">train 1pos4neg</text>
+  <text x="115" y="76" text-anchor="middle" class="m" style="font-size:12.5px">가중치 학습</text>
+  <rect x="240" y="14" width="320" height="40" rx="8" class="bx-hi"/><text x="400" y="39" text-anchor="middle" class="b t-hi">validation 앞 절반</text>
+  <text x="400" y="76" text-anchor="middle" class="m" style="font-size:12.5px">best epoch 고르기 · early stopping</text>
+  <rect x="560" y="14" width="320" height="40" rx="8" class="bx-ok"/><text x="720" y="39" text-anchor="middle" class="b t-ok">validation 뒤 절반 = test</text>
+  <text x="720" y="76" text-anchor="middle" class="m" style="font-size:12.5px">최종 성능 보고 (한 번만)</text>
+  <line x1="240" y1="102" x2="878" y2="102" class="ln" marker-end="url(#a3)"/>
+  <text x="878" y="126" text-anchor="end" class="m" style="font-size:12px">노출 시각 →</text>
+</svg>
+</div>
+
+<!-- 6. 지표 -->
+<h2><span class="num">6</span>지표 — 정답이 몇 등이냐로 정해져요</h2>
+<div class="tbl"><table>
+  <tr><th>정답 순위 r</th><th class="n">Top-1</th><th class="n">AUC = (5 − r) / 4</th><th class="n">MRR = 1 / r</th><th class="n">nDCG = 1 / log₂(r + 1)</th></tr>
+  <tr class="pos"><td>1위 (위 예시)</td><td class="n">1</td><td class="n">1.00</td><td class="n">1.00</td><td class="n">1.00</td></tr>
+  <tr><td>2위</td><td class="n">0</td><td class="n">0.75</td><td class="n">0.50</td><td class="n">0.63</td></tr>
+  <tr><td>3위</td><td class="n">0</td><td class="n">0.50</td><td class="n">0.33</td><td class="n">0.50</td></tr>
+  <tr><td>5위</td><td class="n">0</td><td class="n">0.00</td><td class="n">0.20</td><td class="n">0.39</td></tr>
+</table></div>
+<p class="cap">
+  후보 5개에 정답 1개라서 네 지표 모두 <b>정답 순위 하나</b>로 정해져요. nDCG@5와 @10은 후보가 5개뿐이라 같은 값이에요.
+  아무렇게나 골라도 Top-1은 <b>20%</b>, AUC는 <b>0.5</b>예요. ver1 test Top-1 27.07%는 이 20%와 비교해서 봐요.
+</p>
+
+<div class="note">
+  <strong>우리 쪽에서 챙길 것</strong>
+  <ul>
+    <li><b>동점 처리:</b> Top-1은 동점이면 앞자리 후보를 골라요. 정답이 늘 첫 자리면 동점이 전부 정답이 되니까 <b>후보 순서를 섞은 1pos4neg</b>를 써야 해요.</li>
+    <li><b>c4 어휘 크기:</b> 새 SID 파일의 c4 최댓값 + 1과 맞춰야 해요(지금 설정 28). c1 25 · c2 128 · c3 512도 SID와 같아야 해요.</li>
+    <li><b>입력 경로:</b> 설정이 예전 공유 폴더를 가리켜요. 새 SID로 돌릴 때는 우리 출력 폴더로 바꿔요.</li>
+    <li><b>SID가 바뀌면</b> 시퀀스 → 1pos4neg → 섞기 → split → 학습을 모두 새로 해야 해요.</li>
+  </ul>
+</div>
+
+</main>
+</body>
+</html>
