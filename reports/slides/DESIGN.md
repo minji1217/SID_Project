@@ -58,6 +58,7 @@ rounded: { xs: 4, sm: 6, md: 8, lg: 12, xl: 16, xxl: 20, hero: 32, full: 9999 }
 
 > 생성 스크립트: `reports/slides/build_pipeline_deck.py`(공통 헬퍼 포함). 폰트: Pretendard 1.3.9 static OTF (npm `pretendard`, OFL).
 > pptx 폰트 이름은 OTF의 legacy family 이름을 쓴다: 400 `Pretendard`, 500 `Pretendard Medium`, 600 `Pretendard SemiBold`, **700 `Pretendard` + 굵게(b=1)**, 800 `Pretendard ExtraBold`, 900 `Pretendard Black`.
+> **사용자 선호: 실제 글자는 토큰보다 한 단계 두껍게** (400→500, 500→600, 600→700, 700→800, 800→900). `rakko.py`의 `WEIGHT_UP`.
 > (`Pretendard Bold`라는 이름은 Windows·LibreOffice에서 찾지 못해 다른 글꼴로 바뀐다.) 보는 컴퓨터에 Pretendard 9개 굵기가 설치돼 있어야 한다.
 
 ## Overview

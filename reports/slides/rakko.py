@@ -50,6 +50,8 @@ T = {  # typography: size, weight, line height, letter spacing(em)
     "body-strong": (24, 700, 1.5, 0), "table": (22, 400, 1.45, 0), "caption": (20, 400, 1.5, 0),
     "footer": (18, 400, 1.4, 0), "badge": (18, 600, 1.3, 0),
 }
+# 사용자 선호: 모든 글자를 한 단계 두껍게 (2026-11-18). 토큰 굵기 → 실제 굵기
+WEIGHT_UP = {400: 500, 500: 600, 600: 700, 700: 800, 800: 900, 900: 900}
 W, H = 1920, 1080
 EMU_PX = 12192000 // W  # 6350
 MARGIN = 96
@@ -68,6 +70,7 @@ _font_cache: dict = {}
 
 
 def text_width(text: str, size: float, weight: int = 400) -> float:
+    weight = WEIGHT_UP.get(weight, weight)
     key = (size, weight)
     if key not in _font_cache:
         _font_cache[key] = ImageFont.truetype(str(FONT_DIR / f"Pretendard-{FONT_FILE[weight]}.otf"), int(round(size * 4)))
@@ -82,13 +85,18 @@ _MARK = re.compile(r"(\*\*.+?\*\*|\[\[.+?\]\])")
 
 
 def _set_font(run, weight: int):
+    weight = WEIGHT_UP.get(weight, weight)
     rPr = run._r.get_or_add_rPr()
     rPr.set("b", "1" if weight == 700 else "0")
-    for tag in ("a:latin", "a:ea", "a:cs"):
+    rPr.set("altLang", "en-US")
+    # 기준 덱처럼 pitchFamily·charset 를 같이 적는다 (Windows PowerPoint 글꼴 찾기). ea 는 한글(129 → -127)
+    for tag, cs_ in (("a:latin", "0"), ("a:ea", "-127"), ("a:cs", "0")):
         el = rPr.find(qn(tag))
         if el is None:
             el = etree.SubElement(rPr, qn(tag))
         el.set("typeface", FACE[weight])
+        el.set("pitchFamily", "34")
+        el.set("charset", cs_)
 
 
 def add_runs(p, text: str, size: float, weight: int, color: str, ls_em: float = 0):
@@ -430,13 +438,24 @@ class Deck:
         _postprocess(path)
 
 
+def _theme_fonts(xml: str) -> str:
+    """테마 major/minor 글꼴을 Pretendard 로 (latin·ea·한글 script)."""
+    xml = re.sub(r'(<a:(?:majorFont|minorFont)>\s*)<a:latin typeface="[^"]*"[^>]*/>\s*<a:ea typeface="[^"]*"[^>]*/>',
+                 r'\1<a:latin typeface="Pretendard" pitchFamily="34" charset="0"/><a:ea typeface="Pretendard" pitchFamily="34" charset="-127"/>',
+                 xml)
+    xml = re.sub(r'<a:font script="Hang" typeface="[^"]*"/>', '<a:font script="Hang" typeface="Pretendard"/>', xml)
+    return xml
+
+
 def _postprocess(path: Path):
-    """viewProps: snap 끄기, 안내선 비우기."""
+    """viewProps: snap 끄기, 안내선 비우기. 테마 글꼴 Pretendard."""
     tmp = path.with_suffix(".tmp")
     with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
         names = zin.namelist()
         for item in zin.infolist():
             data = zin.read(item.filename)
+            if re.match(r"ppt/theme/theme\d+\.xml$", item.filename):
+                data = _theme_fonts(data.decode("utf-8")).encode("utf-8")
             if item.filename == "ppt/viewProps.xml":
                 xml = data.decode("utf-8")
                 xml = re.sub(r'snapToGrid="\d"', 'snapToGrid="0"', xml)
@@ -478,3 +497,69 @@ def check(path: Path) -> list[str]:
 
 def _count_table_cells(x: str) -> int:
     return x.count("<a:tc>") + x.count("<a:tc ")
+
+
+# ── HTML 도식 스타일 칩 (회색 입력 · 파랑 모델 · 초록 결과 · 노랑 처리 · 보라 민지 · 빨강 주의) ──
+KIND = {  # fill, line, text
+    "gray": ("F1F3F6", "D5DAE1", "2E3440"), "white": ("FFFFFF", "D5DAE1", "2E3440"),
+    "blue": ("EAF1FF", "6C93F2", "1F3F99"), "green": ("E6F6EE", "56B886", "1E7A46"),
+    "amber": ("FFF4DE", "D9A23B", "8A5A00"), "purple": ("F1EBFF", "9B82E6", "5B3FC4"),
+    "red": ("FDECEC", "E07A7A", "B83A3A"), "dark": ("14181F", "14181F", "FFFFFF"),
+}
+for _k, (_f, _l, _t) in KIND.items():
+    C.setdefault(f"k-{_k}-fill", _f); C.setdefault(f"k-{_k}-line", _l); C.setdefault(f"k-{_k}-text", _t)
+
+
+def chip(slide, name, x, y, label, kind="gray", h=44, size=20, weight=600, padx=16, w=None, radius=8,
+         line=True, dash=None, align="c"):
+    """글자 폭에 맞춘 칩. 반환: (shape, width)."""
+    if w is None:
+        w = max(text_width(_plain(label), size, weight) + 2 * padx + 8, h)
+    s = box(slide, name, x, y, w, h, [(label, {"size": size, "weight": weight, "color": f"k-{kind}-text"})],
+            fill=f"k-{kind}-fill", line=f"k-{kind}-line" if line else None, radius=radius, align=align,
+            pad=(padx // 2, 0, padx // 2, 0), wrap=False, dash=dash)
+    return s, w
+
+
+def chain(slide, name, x, y, items, h=44, gap=40, size=20, color="stone"):
+    """[(label, kind)] 칩을 → 로 잇는다. 반환: 끝 x."""
+    for i, (lab, kind) in enumerate(items):
+        _, w = chip(slide, f"{name} {i+1}", x, y, lab, kind, h=h, size=size)
+        if i < len(items) - 1:
+            arrow(slide, f"{name} arrow {i+1}", [(x + w + 8, y + h / 2), (x + w + gap - 8, y + h / 2)],
+                  color=color, width_pt=2)
+        x += w + gap
+    return x - gap
+
+
+def curve(slide, name, p0, p1, color="stone", width_pt=2.0, head=True, bend=0.5, n=24):
+    """가로로 흐르는 S자 곡선 화살표 (3차 베지에 근사)."""
+    (x0, y0), (x3, y3) = p0, p1
+    x1, x2 = x0 + (x3 - x0) * bend, x3 - (x3 - x0) * bend
+    pts = []
+    for i in range(n + 1):
+        t = i / n
+        bx = (1 - t) ** 3 * x0 + 3 * (1 - t) ** 2 * t * x1 + 3 * (1 - t) * t ** 2 * x2 + t ** 3 * x3
+        by = (1 - t) ** 3 * y0 + 3 * (1 - t) ** 2 * t * y0 + 3 * (1 - t) * t ** 2 * y3 + t ** 3 * y3
+        pts.append((bx, by))
+    return arrow(slide, name, pts, color=color, width_pt=width_pt, head=head)
+
+
+def polygon(slide, name, pts, fill, line=None, line_w=1.5, label=None, size=20, weight=700, color="ink"):
+    fb = slide.shapes.build_freeform(E(pts[0][0]), E(pts[0][1]), scale=1.0)
+    fb.add_line_segments([(E(px), E(py)) for px, py in pts[1:]], close=True)
+    s = fb.convert_to_shape()
+    s.name = name
+    s.fill.solid(); s.fill.fore_color.rgb = rgb(fill)
+    if line:
+        s.line.color.rgb = rgb(line); s.line.width = E(line_w)
+    else:
+        s.line.fill.background()
+    _drop_style(s)
+    tf = s.text_frame
+    _no_autofit(tf, 4, 0, 4, 0, anchor="m")
+    if label:
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        add_runs(p, label, size, weight, color)
+    return s
