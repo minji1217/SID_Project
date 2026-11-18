@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시퀀스 · 1pos4neg 예시</title>
+<style>
+  :root {
+    --bg: #ffffff; --card: #ffffff; --text: #1c2230; --muted: #6b7280; --line: #e3e6eb; --chip: #f1f3f6;
+    --ok: #2f7d3a; --ok-bg: #eaf6ec; --ok-line: #9ccfa5;
+    --no: #c0392b; --no-bg: #fbecea; --no-line: #e6a29a;
+    --hi: #3b5bdb; --hi-bg: #edf1ff; --hi-line: #9fb0f0;
+    --sid: #6741d9; --sid-bg: #f1edff; --sid-line: #c3b5f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171c; --card: #1a1e25; --text: #e6e9ef; --muted: #9aa3b2; --line: #2d333d; --chip: #252a33;
+      --ok: #6fd28a; --ok-bg: #16301f; --ok-line: #2f6a41;
+      --no: #ff8f80; --no-bg: #3a1f1c; --no-line: #7a3a32;
+      --hi: #8ea6ff; --hi-bg: #1c2544; --hi-line: #3a4f99;
+      --sid: #b69cff; --sid-bg: #2a2142; --sid-line: #5a4596;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171c; --card: #1a1e25; --text: #e6e9ef; --muted: #9aa3b2; --line: #2d333d; --chip: #252a33;
+    --ok: #6fd28a; --ok-bg: #16301f; --ok-line: #2f6a41;
+    --no: #ff8f80; --no-bg: #3a1f1c; --no-line: #7a3a32;
+    --hi: #8ea6ff; --hi-bg: #1c2544; --hi-line: #3a4f99;
+    --sid: #b69cff; --sid-bg: #2a2142; --sid-line: #5a4596;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif; font-size: 15px; line-height: 1.6; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+  h2 { font-size: 17px; margin: 30px 0 12px; display: flex; align-items: center; gap: 8px; }
+  .num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--text); font-size: 12px; font-weight: 700; align-items: center; justify-content: center; }
+
+  .row { display: grid; grid-template-columns: 170px 1fr; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: none; }
+  .lab b { display: block; font-size: 15px; }
+  .lab small { color: var(--muted); font-size: 12.5px; }
+  .line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1.5px dashed var(--line); border-radius: 10px; padding: 6px 8px; }
+  .glab { color: var(--muted); font-size: 12.5px; margin-right: 2px; }
+  .chip { min-width: 44px; text-align: center; padding: 5px 9px; border-radius: 8px; background: var(--chip); border: 1px solid var(--line); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chip.ok { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+  .chip.hi { background: var(--hi-bg); border-color: var(--hi-line); color: var(--hi); }
+  .chip.sid { background: var(--sid-bg); border-color: var(--sid-line); color: var(--sid); }
+  .arrow { color: var(--muted); font-size: 20px; line-height: 1; }
+  .answer { padding: 5px 12px; border-radius: 8px; background: var(--ok-bg); border: 1px solid var(--ok-line); color: var(--ok); font-weight: 700; }
+
+  .cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .card { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 6px; text-align: center; background: var(--card); }
+  .card .id { font-size: 22px; font-weight: 800; }
+  .card .s { font-size: 14px; color: var(--muted); margin: 2px 0; font-variant-numeric: tabular-nums; }
+  .card .t { font-size: 12.5px; font-weight: 700; }
+  .card.ok { border-color: var(--ok-line); background: var(--ok-bg); }
+  .card.ok .id, .card.ok .t, .card.ok .s { color: var(--ok); }
+  .card.no { border-color: var(--no-line); background: var(--no-bg); }
+  .card.no .id { color: var(--no); text-decoration: line-through; }
+  .card.no .s, .card.no .t { color: var(--no); }
+  .card .mark { color: var(--sid); font-weight: 700; }
+  .cap { color: var(--muted); font-size: 13.5px; margin: 10px 0 0; }
+  .cap b { color: var(--text); }
+  .result { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .note { margin-top: 18px; border-left: 4px solid var(--hi-line); background: var(--chip); border-radius: 0 8px 8px 0; padding: 10px 14px; font-size: 14px; }
+  .note ul { margin: 4px 0 0; padding-left: 20px; }
+
+  @media (max-width: 720px) {
+    .row { grid-template-columns: 1fr; gap: 6px; }
+    .cards { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>시퀀스 생성 → 1pos4neg 예시</h1>
+<p class="sub">사용자 한 명 · 노출 두 번을 따라가며, 시퀀스 한 행이 1pos4neg 한 행이 되는 과정</p>
+
+<h2><span class="num">5</span>시퀀스 생성</h2>
+
+<div class="row">
+  <div class="lab"><b>시작</b><small>history.parquet (클릭 시각 순)</small></div>
+  <div class="line"><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span></div>
+</div>
+
+<div class="row">
+  <div class="lab"><b>노출 1</b><small>후보 = inview 전부 (6개)</small></div>
+  <div class="line">
+    <div class="group"><span class="glab">입력</span><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span></div>
+    <div class="group"><span class="glab">후보</span><span class="chip ok">40</span><span class="chip">50</span><span class="chip">60</span><span class="chip">70</span><span class="chip">80</span><span class="chip">90</span></div>
+    <span class="arrow">→</span><span class="answer">정답 40</span>
+  </div>
+</div>
+
+<div class="row">
+  <div class="lab"><b>노출 2</b><small>노출 1의 정답 40이 history 끝에 추가</small></div>
+  <div class="line">
+    <div class="group"><span class="glab">입력</span><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span><span class="chip hi">40</span></div>
+    <div class="group"><span class="glab">후보</span><span class="chip">55</span><span class="chip ok">65</span><span class="chip">75</span><span class="chip">85</span><span class="chip">95</span></div>
+    <span class="arrow">→</span><span class="answer">정답 65</span>
+  </div>
+</div>
+
+<div class="row">
+  <div class="lab"><b>마지막</b><small>기사 id → SID (c1·c2·c3·c4)</small></div>
+  <div class="line"><span class="chip">40</span><span class="arrow">→</span><span class="chip sid">3 · 41 · 120 · 0</span></div>
+</div>
+
+<h2><span class="num">6</span>1pos4neg 후보 만들기 <span style="font-weight:400;color:var(--muted);font-size:14px">(노출 1의 행)</span></h2>
+
+<div class="cards">
+  <div class="card ok"><div class="id">40</div><div class="s">3·41·120</div><div class="t">정답</div></div>
+  <div class="card no"><div class="id">70</div><div class="s">3·41·120</div><div class="t">정답과 같음 → 제외</div></div>
+  <div class="card"><div class="id">50</div><div class="s">2·7·33</div><div class="t">오답</div></div>
+  <div class="card"><div class="id">60</div><div class="s">3·12·88</div><div class="t">오답</div></div>
+  <div class="card"><div class="id">80</div><div class="s">5·90·14</div><div class="t">오답</div></div>
+  <div class="card"><div class="id">90</div><div class="s">3·41·<span class="mark">77</span></div><div class="t">오답 <span style="font-weight:400">(c3만 다름 → 남김)</span></div></div>
+</div>
+<p class="cap">노출 1의 후보 6개 → <b>정답 1 + 오답 4</b>. <b>정답과 (c1, c2, c3)가 똑같은 오답(70)은 뺌</b>: 점수에 c4를 안 써서 구분이 안 되기 때문. 남은 오답이 4개 미만이면 그 행은 버림.</p>
+
+<div class="result">
+  <div class="group"><span class="glab">history</span><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span></div>
+  <div class="group"><span class="glab">후보</span><span class="chip ok">40</span><span class="chip">50</span><span class="chip">60</span><span class="chip">80</span><span class="chip">90</span></div>
+  <div class="group"><span class="glab">정답 표시</span><span class="chip ok">1</span><span class="chip">0</span><span class="chip">0</span><span class="chip">0</span><span class="chip">0</span></div>
+</div>
+<p class="cap">결과 행. history는 <b>노출 1 시점의 [10, 20, 30] 그대로</b>예요. 40은 이 행의 정답이라 입력에 들어가지 않아요.</p>
+
+<div class="note">
+  <strong>같이 보면 좋은 점</strong>
+  <ul>
+    <li><strong>90 (3·41·77)</strong>: 정답과 c1·c2가 같고 c3만 달라요. 같은 사건의 다른 기사 같은 <strong>어려운 오답</strong>이라 남겨요. 앞 3자리가 <strong>모두</strong> 같을 때만 빼요.</li>
+    <li><strong>노출 2</strong>도 같은 방식으로 한 행이 돼요. 정답과 SID가 같은 오답이 없다면 history [10, 20, 30, 40] · 후보 [65, 55, 75, 85, 95]예요.</li>
+    <li>오답끼리 (c1, c2, c3)가 같으면 하나만 남겨요. 후보가 많으면 오답 4개는 seed 42 해시로 골라요. 정답이 2개 이상인 노출은 정답마다 행을 따로 만들어요.</li>
+    <li>이 뒤에 후보 5개의 <strong>순서를 섞어요</strong>. 정답이 항상 첫 자리면 동점일 때 정답으로 처리돼 성능이 부풀려지기 때문이에요.</li>
+  </ul>
+</div>
+
+</main>
+</body>
+</html>
