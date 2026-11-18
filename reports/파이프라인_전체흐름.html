@@ -623,15 +623,15 @@
 
   <!-- 6 -->
   <div class="card" id="s6">
-    <div class="stage-head"><div class="num">6</div><h3>1pos4neg 후보 만들기</h3><span class="tag t-mj">민지</span><span class="tag t-ok">유지</span></div>
+    <div class="stage-head"><div class="num">6</div><h3>1pos4neg 후보 만들기 <span style="font-weight:400;font-size:.8em;color:var(--muted, #6b7280)">— 노출 1의 후보 6개, 같은 순서</span></h3><span class="tag t-mj">민지</span><span class="tag t-ok">유지</span></div>
     <div class="files"><code>src/build_1pos4neg_sequences.py</code> (브랜치 <code>claude/festive-bell-a5sfbx</code>)</div>
     <div class="cands">
       <div class="cand pos"><b>40</b>3·41·120<br><span style="color:var(--green);font-weight:700">정답</span></div>
-      <div class="cand out"><b>70</b>3·41·120<br><span style="color:var(--red);font-weight:700">정답과 같음 → 제외</span></div>
       <div class="cand"><b>50</b>2·7·33<br>오답</div>
       <div class="cand"><b>60</b>3·12·88<br>오답</div>
+      <div class="cand out"><b>70</b>3·41·120<br><span style="color:var(--red);font-weight:700">정답과 같음 → 제외</span></div>
       <div class="cand"><b>80</b>5·90·14<br>오답</div>
-      <div class="cand"><b>90</b>3·41·77<br>오답</div>
+      <div class="cand"><b>90</b>3·41·77<br>오답 (c3만 다름)</div>
     </div>
     <p class="cap">노출 1의 후보 6개 → 정답 1 + 오답 4. <b>정답과 (c1,c2,c3)가 똑같은 오답(70)은 뺌</b> — 점수에 c4를 안 써서 구분이 안 되기 때문.</p>
     <div class="seq-row"><div class="lbl">결과 행<small>history는 노출 1 시점 그대로</small></div>
