@@ -248,7 +248,7 @@
     <div class="lane"><div class="lbl">articles<small>기사</small></div>
       <div class="chips"><span class="chip">기사 id</span><span class="chip">제목·부제·본문</span><span class="chip">카테고리</span><span class="chip">발행 시각</span><span class="chip">NER 개체</span></div></div>
     <div class="lane"><div class="lbl">behaviors<small>노출 기록</small></div>
-      <div class="chips"><span class="chip">사용자</span><span class="chip">노출 시각</span><span class="chip">노출된 후보(inview)</span><span class="chip g">클릭한 기사</span></div></div>
+      <div class="chips"><span class="chip">사용자</span><span class="chip">노출 시각</span><span class="chip bl">현재 기사(보던 기사)</span><span class="chip">노출된 후보(inview)</span><span class="chip g">클릭한 기사</span></div></div>
     <div class="lane"><div class="lbl">history<small>이전 클릭</small></div>
       <div class="chips"><span class="chip">사용자별 과거 클릭 순서</span></div></div>
     <div class="fig">
@@ -603,20 +603,22 @@
     <div class="stage-head"><div class="num">5</div><h3>시퀀스 생성</h3><span class="tag t-mj">민지</span><span class="tag t-ok">유지</span></div>
     <div class="files"><code>src/build_sequences.py</code> — train / validation 따로</div>
     <div class="seq-row"><div class="lbl">시작<small>history.parquet</small></div>
-      <div class="chips"><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span></div></div>
-    <div class="seq-row"><div class="lbl">노출 1</div>
+      <div class="chips"><span class="chip">10</span><span class="chip">20</span></div></div>
+    <div class="seq-row"><div class="lbl">노출 1<small>30을 읽던 중</small></div>
       <div class="chips">
-        <span class="grp"><span class="gl">입력</span><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span></span>
+        <span class="grp"><span class="gl">현재</span><span class="chip bl">30</span></span>
+        <span class="grp"><span class="gl">입력</span><span class="chip">10</span><span class="chip">20</span><span class="chip bl">30</span></span>
         <span class="grp"><span class="gl">후보</span><span class="chip g">40</span><span class="chip">50</span><span class="chip">60</span><span class="chip">70</span><span class="chip">80</span></span>
         <span class="arrow">→</span><span class="chip g">정답 40</span></div></div>
-    <div class="seq-row"><div class="lbl">노출 2<small>40이 history에 추가</small></div>
+    <div class="seq-row"><div class="lbl">노출 2<small>현재 40 = 마지막 → 안 붙임</small></div>
       <div class="chips">
+        <span class="grp"><span class="gl">현재</span><span class="chip r">40</span></span>
         <span class="grp"><span class="gl">입력</span><span class="chip">10</span><span class="chip">20</span><span class="chip">30</span><span class="chip bl">40</span></span>
         <span class="grp"><span class="gl">후보</span><span class="chip">55</span><span class="chip g">65</span><span class="chip">75</span><span class="chip">85</span><span class="chip">95</span></span>
         <span class="arrow">→</span><span class="chip g">정답 65</span></div></div>
     <div class="seq-row"><div class="lbl">마지막<small>id → SID</small></div>
       <div class="chips"><span class="chip">40</span><span class="arrow">→</span><span class="chip v">3 · 41 · 120 · 0</span></div></div>
-    <p class="cap">기사 id를 SID로 바꿔 저장. 노출 때 읽던 기사도 history 끝에 붙임.</p>
+    <p class="cap">노출마다 <b>① 현재 기사(behaviors의 <code>article_id</code>) 붙이기</b> — 첫 화면이면 없음, history 마지막과 같으면 생략 → <b>② 문제 저장</b> → <b>③ 클릭한 기사 붙이기</b> (정답은 문제를 저장한 뒤에 붙여서 미리 새지 않음). 마지막에 기사 id를 SID로 바꿔 저장.</p>
   </div>
 
   <!-- 6 -->

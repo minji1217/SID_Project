@@ -397,42 +397,52 @@ def group(name, x, y, label, vals):
     return x + w
 
 
-rows = [("시작", "history.parquet", None), ("노출 1", "", (["10", "20", "30"], [("40", "green"), "50", "60", "70", "80"], "정답 40")),
-        ("노출 2", "40이 history에 추가", (["10", "20", "30", ("40", "blue")], ["55", ("65", "green"), "75", "85", "95"], "정답 65")),
+# 노출마다: ① 현재 기사(behaviors.article_id)를 history 끝에 (마지막과 같으면 생략) → ② 문제 저장 → ③ 클릭 기사 붙이기
+rows = [("시작", "history.parquet", None),
+        ("노출 1", "30을 읽던 중", ("30", True, ["10", "20", ("30", "blue")],
+                                  [("40", "green"), "50", "60", "70", "80"], "정답 40")),
+        ("노출 2", "40 = 마지막 → 안 붙임", ("40", False, ["10", "20", "30", ("40", "blue")],
+                                         ["55", ("65", "green"), "75", "85", "95"], "정답 65")),
         ("마지막", "id → SID", None)]
 for i, (lab, note, data) in enumerate(rows):
     y = 338 + i * 82
     text(s, f"Seq {i+1} label", L, y - 6, 220, 30, lab, "body-strong", "ink", size=22)
     if note:
-        text(s, f"Seq {i+1} note", L, y + 24, 220, 24, note, "footer", "slate")
+        text(s, f"Seq {i+1} note", L, y + 24, 230, 24, note, "footer", "slate")
     if i == 0:
         xx = L + 240
-        for v in ["10", "20", "30"]:
+        for v in ["10", "20"]:
             xx = tok(f"Start {v}", xx, y, v)
     elif i == 3:
         xx = tok("Last 40", L + 240, y, "40")
         arrow(s, "Last arrow", [(xx + 4, y + 21), (xx + 40, y + 21)], width_pt=2)
         chip(s, "Last SID", xx + 46, y, "3 · 41 · 120 · 0", "purple", h=42, size=20)
     else:
-        inp, cand, ans = data
+        cur, appended, inp, cand, ans = data
         norm = lambda vs: [(v, "gray") if isinstance(v, str) else v for v in vs]
-        xe = group(f"Seq {i+1} input", L + 240, y, "입력", norm(inp))
+        xe = group(f"Seq {i+1} current", L + 240, y, "현재", [(cur, "blue" if appended else "white")])
+        if not appended:
+            hline(s, f"Seq {i+1} current skip", L + 240 + 56 + 6, y + 20, 46, color="error", width_px=2)
+        xe = group(f"Seq {i+1} input", xe + 20, y, "입력", norm(inp))
         xe = group(f"Seq {i+1} cand", xe + 20, y, "후보", norm(cand))
         arrow(s, f"Seq {i+1} arrow", [(xe + 10, y + 21), (xe + 46, y + 21)], width_pt=2)
         chip(s, f"Seq {i+1} answer", xe + 52, y, ans, "green", h=42, size=20)
     if i < 3:
         hline(s, f"Seq rule {i+1}", L, y + 64, 1660, color="hairline-soft")
-sub(s, "Neg heading", L, 676, 900, "⑥ 1pos4neg 후보 만들기", size=22)
+text(s, "Seq steps", L, 646, 1660, 30,
+     "노출마다 **① 현재 기사 붙이기**(첫 화면이면 없음, 마지막과 같으면 생략) → **② 문제 저장** → **③ 클릭 기사 붙이기** (정답은 문제 저장 뒤에)",
+     "footer", "slate", one_line=True)
+sub(s, "Neg heading", L, 696, 900, "⑥ 1pos4neg 후보 만들기", size=22)
 cands = [("40", "3·41·120", "정답", "green"), ("70", "3·41·120", "정답과 같음 → 제외", "red"),
          ("50", "2·7·33", "오답", "white"), ("60", "3·12·88", "오답", "white"), ("80", "5·90·14", "오답", "white"),
          ("90", "3·41·77", "오답", "white")]
 for i, (aid, sid, st, kind) in enumerate(cands):
     x = L + i * (266 + 13)
-    kbox(s, f"Cand {aid}", x, 722, 266, 116, [(aid, {"weight": 800, "size": 26}), (sid, {"size": 20}),
+    kbox(s, f"Cand {aid}", x, 740, 266, 116, [(aid, {"weight": 800, "size": 26}), (sid, {"size": 20}),
                                               (st, {"weight": 700, "size": 19})], kind, line_w=1.5, style="caption")
     if kind == "red":
-        hline(s, "Strike 70", x + 112, 752, 42, color="error", width_px=2)
-text(s, "Neg note", L, 856, 1660, 32,
+        hline(s, "Strike 70", x + 112, 770, 42, color="error", width_px=2)
+text(s, "Neg note", L, 872, 1660, 32,
      "정답 1 + 오답 4. **정답과 (c1, c2, c3)가 똑같은 오답은 뺌** — 점수에 c4를 안 써서 구분이 안 되기 때문 (교수님 9/18)",
      "caption", "slate", one_line=True)
 
