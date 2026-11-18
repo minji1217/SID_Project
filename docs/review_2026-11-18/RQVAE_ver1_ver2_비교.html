@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RQ-VAE ver1 vs ver2</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f6f7f9; --line: #e2e5ea; --text: #1c2230; --muted: #5f6877;
+    --accent: #2f6fde; --accent-bg: #edf3ff; --good: #17803d; --good-bg: #eaf7ef;
+    --bad: #b4410f; --bad-bg: #fff2ea; --code-bg: #f1f3f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171c; --panel: #1c2027; --line: #2d333d; --text: #e6e9ef; --muted: #9aa3b2;
+      --accent: #7aa7ff; --accent-bg: #1c2a44; --good: #5fd08a; --good-bg: #15301f;
+      --bad: #ff9b6b; --bad-bg: #3a2216; --code-bg: #232833;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171c; --panel: #1c2027; --line: #2d333d; --text: #e6e9ef; --muted: #9aa3b2;
+    --accent: #7aa7ff; --accent-bg: #1c2a44; --good: #5fd08a; --good-bg: #15301f;
+    --bad: #ff9b6b; --bad-bg: #3a2216; --code-bg: #232833;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.65; }
+  main { max-width: 960px; margin: 0 auto; padding: 36px 16px 80px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  h2 { font-size: 20px; margin: 44px 0 12px; padding-bottom: 8px; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 16.5px; margin: 24px 0 8px; }
+  p { margin: 8px 0; }
+  code { font-family: Consolas, "SFMono-Regular", Menlo, monospace; font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .box { background: var(--accent-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+  .box ul { margin: 6px 0 0; padding-left: 20px; }
+  .note { border-left: 4px solid var(--accent); background: var(--panel); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+  .warn { border-left-color: var(--bad); }
+  .scroll { overflow-x: auto; margin: 10px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); font-weight: 600; white-space: nowrap; }
+  td.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); background: var(--good-bg); }
+  .bad { color: var(--bad); background: var(--bad-bg); }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 0 7px; border-radius: 999px; white-space: nowrap; }
+  .muted { color: var(--muted); }
+  @media (max-width: 600px) { th, td { padding: 5px 6px; } body { font-size: 14.5px; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>RQ-VAE ver1 vs ver2</h1>
+<p class="sub">ver1 = 기존 UNI (<code>WD-001-UNI-lu0.05-m0.5</code>, checkpoint <code>dcb276f8…</code>) · ver2 = 고정 클러스터 전처리로 재학습 (AWS, 2026-11-17) · 같은 설정, 데이터만 다름</p>
+
+<div class="box">
+  <strong>결론 (ver2 seed 3개: 42 · 123 · 2026)</strong>
+  <p>ver2는 ver1과 <strong>같은 수준이고, 복원은 일관되게 조금 좋다</strong>. 나빠진 신호는 없다.</p>
+  <p>두 모델 모두 처음 보는 validation 기사 2,741개(V) 기준:</p>
+  <ul>
+    <li><strong>복원 오차(rec)</strong>: ver1 0.1525 → ver2 <strong>0.1509 ± 0.0003</strong>
+      <ul><li>세 seed 모두 ver1보다 낮다 (평균 −1.0%).</li></ul></li>
+    <li><strong>SID 충돌률</strong>: ver1 12.2% → ver2 <strong>13.1 ± 1.0%</strong>
+      <ul><li>ver1 값이 ver2 세 seed 범위(12.0~14.0%) 안에 있다. <strong>차이 없음</strong>(seed 흔들림 수준).</li></ul></li>
+    <li><strong>코드 사용</strong>: Q2 127~128개, Q3 484~486개로 고르게 쓴다.</li>
+  </ul>
+  <p>둘 다 학습한 기사(T_old)에서는 복원이 −2.8% 좋아졌고, 충돌률은 +2.2%p 높았다(세 seed 모두 같은 방향).</p>
+  <p>SID 생성에는 미리 정한 대로 <strong>seed 42</strong> 모델을 쓴다. seed 42는 세 seed 중 가운데쯤이라 대표값으로 무리가 없다.</p>
+</div>
+
+<h2>1. 무엇을 비교했나</h2>
+<p>ver1과 ver2는 학습에 쓴 기사가 다르다. 그래서 학습 로그의 best 값(0.152458 vs 0.150854)은 <strong>평가한 기사가 달라</strong> 그대로 비교할 수 없다. 두 checkpoint를 <strong>같은 기사 집합</strong>으로 다시 평가했다. 평가 방식은 학습 코드의 <code>evaluate()</code>와 같다.</p>
+<p>평가 방식 검증: ver2 학습 중 기록값 0.150854와 이 스크립트로 다시 계산한 값 0.150848의 차이는 6×10⁻⁶ (GPU 계산 오차 수준).</p>
+<div class="scroll"><table>
+<thead><tr><th>집합</th><th>기사 수</th><th>ver1이 학습했나</th><th>ver2가 학습했나</th><th>공정 비교?</th><th>무엇을 보나</th></tr></thead>
+<tbody>
+<tr><td><strong>V</strong> validation-only</td><td class="n">2,741</td><td>아니요 (ver1 validation 3,122개에 포함)</td><td>아니요</td><td><span class="tag good">공정 · 핵심</span></td><td>처음 보는 기사에 대한 일반화</td></tr>
+<tr><td><strong>T_old</strong> 기존 Train</td><td class="n">9,738</td><td>예</td><td>예</td><td><span class="tag good">공정</span></td><td>학습한 기사를 얼마나 잘 표현하나</td></tr>
+<tr><td><strong>T_new</strong> 늘어난 Train</td><td class="n">681</td><td>아니요 (381개는 validation, 300개는 처음 봄)</td><td>예</td><td><span class="tag bad">공정 아님</span></td><td>새 기사를 학습에 넣은 효과 (참고)</td></tr>
+</tbody>
+</table></div>
+
+<h2>2. 지표 뜻</h2>
+<div class="scroll"><table>
+<thead><tr><th>지표</th><th>뜻</th><th>좋은 방향</th></tr></thead>
+<tbody>
+<tr><td><strong>rec</strong> (reconstruction loss)</td><td>기사 E5 벡터 → 인코더 → SID 코드 합 → 디코더로 복원했을 때 원래 벡터와의 차이. <strong>모델 선택 기준</strong>(best_rec)</td><td>낮을수록</td></tr>
+<tr><td>codebook / commitment loss</td><td>인코더 출력과 고른 코드 벡터 사이의 거리. 두 값은 같은 거리를 다른 쪽으로 미는 손실이라 숫자가 같다</td><td>낮을수록</td></tr>
+<tr><td>uniqueness loss</td><td>다른 기사가 같은 SID를 가지면 주는 벌점. 256개 묶음 안에서만 계산해서 전체 충돌률과 꼭 같이 움직이지 않는다</td><td>낮을수록</td></tr>
+<tr><td>total loss</td><td>rec + 0.25×codebook + 0.1×commitment + 0.05×uniqueness</td><td>참고용</td></tr>
+<tr><td><strong>collision rate</strong></td><td>(c1, c2, c3)가 다른 기사와 겹치는 기사의 비율. SID가 기사를 얼마나 잘 구분하나</td><td>낮을수록</td></tr>
+<tr><td>고유 SID</td><td>서로 다른 (c1, c2, c3) 개수</td><td>높을수록</td></tr>
+<tr><td>Q2 / Q3 사용</td><td>128개 / 512개 코드 중 실제로 쓰인 코드 수</td><td>높을수록 고르게 씀</td></tr>
+</tbody>
+</table></div>
+<p class="muted">이 비교의 SID는 기사마다 가장 가까운 코드로 정했다(학습 때와 같은 방식). 실제 Validation-only SID는 timeupdate에서 Train 사건에 배정하므로 V의 충돌률은 최종 값이 아니다. 모델 자체의 코드 분포를 비교하는 숫자다.</p>
+
+<h2>3. V 비교: 두 모델 모두 처음 보는 기사 2,741개 (핵심)</h2>
+<div class="scroll"><table>
+<thead><tr><th>지표</th><th>ver1</th><th>ver2</th><th>ver2 − ver1</th><th>해석</th></tr></thead>
+<tbody>
+<tr><td><strong>rec</strong></td><td class="n">0.152497</td><td class="n">0.150848</td><td class="n good">−0.001649 (−1.1%)</td><td>ver2가 새 기사를 조금 더 잘 복원</td></tr>
+<tr><td>total loss</td><td class="n">0.333900</td><td class="n">0.342998</td><td class="n bad">+0.009097</td><td>codebook/commitment가 커진 영향. 모델 선택 기준은 아님</td></tr>
+<tr><td>codebook = commitment</td><td class="n">0.491265</td><td class="n">0.525982</td><td class="n bad">+0.034717</td><td>인코더 출력이 코드 벡터에서 조금 더 떨어져 있음</td></tr>
+<tr><td>uniqueness</td><td class="n">0.189206</td><td class="n">0.161114</td><td class="n good">−0.028091</td><td>묶음 안 벌점은 줄었음 (전체 충돌과는 별개)</td></tr>
+<tr><td><strong>collision rate</strong></td><td class="n">12.22%</td><td class="n">13.39%</td><td class="n bad">+1.17%p</td><td>SID가 겹치는 기사가 조금 늘었음</td></tr>
+<tr><td>고유 SID</td><td class="n">2,543</td><td class="n">2,522</td><td class="n bad">−21</td><td>같은 이야기 (겹침 조금 늘어남)</td></tr>
+<tr><td>Q2 사용</td><td class="n">128 / 128</td><td class="n">128 / 128</td><td class="n">0</td><td>둘 다 전부 사용</td></tr>
+<tr><td>Q3 사용</td><td class="n">496 / 512</td><td class="n">485 / 512</td><td class="n">−11</td><td>둘 다 거의 다 사용 (붕괴 없음)</td></tr>
+</tbody>
+</table></div>
+<p><strong>읽는 법</strong>: 복원은 ver2가 조금 낫고, SID 구분력(충돌)은 ver1이 조금 낫다. 둘 다 1% 안팎의 차이다. 코드북이 망가지거나 한쪽으로 쏠린 흔적은 두 모델 모두 없다.</p>
+
+<h2>3-1. seed 3개로 확인 (ver2 seed 42 · 123 · 2026)</h2>
+<p>ver2를 seed만 바꿔 두 번 더 학습했다. 설정은 seed 외 모두 같다(ver1 checkpoint와 자동 비교로 확인). 아래 표는 같은 기사 집합으로 평가한 값이다.</p>
+<ul>
+  <li>±는 세 seed의 표준편차다.</li>
+  <li>ver1은 seed 1개라 ver1 자체의 흔들림은 알 수 없다. 그래서 "ver1 값이 ver2 세 seed 범위 밖에 있고, 세 seed가 모두 같은 방향인가"로 판단했다.</li>
+</ul>
+<h3>V (두 모델 모두 처음 보는 기사 2,741개)</h3>
+<div class="scroll"><table>
+<thead><tr><th>지표</th><th>ver1</th><th>ver2 s42</th><th>ver2 s123</th><th>ver2 s2026</th><th>ver2 평균 ± sd</th><th>판단</th></tr></thead>
+<tbody>
+<tr><td><strong>rec</strong></td><td class="n">0.152497</td><td class="n">0.150848</td><td class="n">0.150660</td><td class="n">0.151260</td><td class="n">0.150923 ± 0.000307</td><td><span class="tag good">ver2가 좋음</span> 세 seed 모두 낮음 (−1.0%)</td></tr>
+<tr><td><strong>collision</strong></td><td class="n">12.22%</td><td class="n">13.39%</td><td class="n">14.01%</td><td class="n">11.97%</td><td class="n">13.12 ± 1.05%</td><td><span class="tag">차이 없음</span> ver1이 범위 안</td></tr>
+<tr><td>고유 SID</td><td class="n">2,543</td><td class="n">2,522</td><td class="n">2,513</td><td class="n">2,550</td><td class="n">2,528 ± 19</td><td><span class="tag">차이 없음</span> ver1이 범위 안</td></tr>
+<tr><td>codebook = commitment</td><td class="n">0.4913</td><td class="n">0.5260</td><td class="n">0.6614</td><td class="n">0.5555</td><td class="n">0.5809 ± 0.0712</td><td><span class="tag bad">ver2가 큼</span> 세 seed 모두 큼. 오래 학습한 seed 123이 가장 큼</td></tr>
+<tr><td>total loss</td><td class="n">0.3339</td><td class="n">0.3430</td><td class="n">0.3903</td><td class="n">0.3554</td><td class="n">0.3629 ± 0.0245</td><td>codebook이 커진 영향 (참고용)</td></tr>
+<tr><td>uniqueness</td><td class="n">0.1892</td><td class="n">0.1611</td><td class="n">0.1634</td><td class="n">0.1952</td><td class="n">0.1732 ± 0.0190</td><td>차이 없음</td></tr>
+<tr><td>Q2 / Q3 사용</td><td class="n">128 / 496</td><td class="n">128 / 485</td><td class="n">127 / 486</td><td class="n">128 / 484</td><td class="n">Q3 485 ± 1</td><td>Q3를 조금 덜 씀 (−11). 그래도 512개 중 95%</td></tr>
+</tbody>
+</table></div>
+<h3>T_old (두 모델 모두 학습한 기사 9,738개)</h3>
+<div class="scroll"><table>
+<thead><tr><th>지표</th><th>ver1</th><th>ver2 s42</th><th>ver2 s123</th><th>ver2 s2026</th><th>ver2 평균 ± sd</th><th>판단</th></tr></thead>
+<tbody>
+<tr><td><strong>rec</strong></td><td class="n">0.136541</td><td class="n">0.134209</td><td class="n">0.130087</td><td class="n">0.133884</td><td class="n">0.132727 ± 0.002292</td><td><span class="tag good">ver2가 좋음</span> 세 seed 모두 낮음 (−2.8%)</td></tr>
+<tr><td><strong>collision</strong></td><td class="n">20.92%</td><td class="n">23.88%</td><td class="n">23.06%</td><td class="n">22.38%</td><td class="n">23.11 ± 0.75%</td><td><span class="tag bad">ver2가 높음</span> 세 seed 모두 높음 (+2.2%p)</td></tr>
+<tr><td>고유 SID</td><td class="n">8,537</td><td class="n">8,349</td><td class="n">8,402</td><td class="n">8,434</td><td class="n">8,395 ± 43</td><td>ver2가 적음 (−142)</td></tr>
+</tbody>
+</table></div>
+<h3>T_new (늘어난 Train 681개, 참고)</h3>
+<p>ver2 rec는 0.1313 ± 0.0021로 세 seed 모두 Train 수준이다. ver1(처음 보는 기사)은 0.1521이다. 충돌률은 8.7 ± 1.2%로 ver1(8.5%)과 비슷하다.</p>
+<h3>세 seed 학습 기록</h3>
+<div class="scroll"><table>
+<thead><tr><th>seed</th><th>best_rec (validation 2,741)</th><th>best_rec epoch</th><th>종료 epoch</th><th>best_total</th></tr></thead>
+<tbody>
+<tr><td>42 <span class="tag good">SID 생성용</span></td><td class="n">0.150854</td><td class="n">190</td><td class="n">390</td><td class="n">0.202423 @ 20</td></tr>
+<tr><td>123</td><td class="n">0.150669</td><td class="n">280</td><td class="n">480</td><td class="n">0.201333 @ 20</td></tr>
+<tr><td>2026</td><td class="n">0.151259</td><td class="n">200</td><td class="n">400</td><td class="n">0.202217 @ 20</td></tr>
+</tbody>
+</table></div>
+<p><strong>정리</strong></p>
+<ul>
+  <li>처음 보는 기사에서 <strong>복원은 확실히 조금 좋아졌다.</strong></li>
+  <li><strong>SID 구분력(충돌)은 ver1과 같다.</strong></li>
+  <li>학습한 기사에서는 복원이 좋아진 대신 충돌이 조금 늘었다. 학습 기사가 681개 늘어나 같은 코드 조합에 더 많은 기사가 들어간 영향으로 보인다.</li>
+  <li>codebook 거리가 커진 것은 일관되지만, 복원과 코드 사용이 정상이라 품질 문제로 보이지 않는다.</li>
+</ul>
+
+<h2>4. ver1 실험 결과 (기존 UNI)</h2>
+<h3>설정과 데이터</h3>
+<div class="scroll"><table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>구조</td><td>Input 768 · Hidden [512] · Latent 128 · Q1 25(카테고리) · Q2 128 · Q3 512 · STE · normalize X · simVQ X · L2</td></tr>
+<tr><td>손실 가중치</td><td>λrec 1.0 · λcb 0.25 · λcom 0.1 · λuniq 0.05 · margin 0.5</td></tr>
+<tr><td>학습</td><td>batch 256 · lr 2e-4 · weight decay 0 · seed 42 · Q2 초기화 = Train 사건 평균 K-means</td></tr>
+<tr><td>조기 종료</td><td>최소 200 epoch, 10 epoch마다 평가, 평가 20번 연속 개선 없으면 종료 · checkpoint = best_rec</td></tr>
+<tr><td>학습 기사</td><td class="n">9,738</td></tr>
+<tr><td>Q2 초기화용 Train 사건</td><td class="n">9,145</td></tr>
+<tr><td>validation 기사 (best 선택용)</td><td class="n">3,122</td></tr>
+<tr><td>학습 환경</td><td>Colab GPU</td></tr>
+</tbody>
+</table></div>
+<h3>학습 결과 (checkpoint 안에 저장된 값)</h3>
+<div class="scroll"><table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>best_rec (validation 3,122개)</td><td class="n"><strong>0.152462 @ epoch 180</strong></td></tr>
+<tr><td>그 시점 validation total loss</td><td class="n">0.335943</td></tr>
+<tr><td>best_total</td><td class="n">0.202082 @ epoch 20</td></tr>
+<tr><td>종료 epoch</td><td class="muted">기록 없음 (Colab 로그 미보관)</td></tr>
+</tbody>
+</table></div>
+<h3>같은 기사 집합 재평가 (이번 비교)</h3>
+<div class="scroll"><table>
+<thead><tr><th>집합</th><th>rec</th><th>total</th><th>codebook</th><th>uniqueness</th><th>collision</th><th>고유 SID</th><th>Q2 / Q3</th></tr></thead>
+<tbody>
+<tr><td>V (2,741)</td><td class="n">0.152497</td><td class="n">0.333900</td><td class="n">0.491265</td><td class="n">0.189206</td><td class="n">12.22%</td><td class="n">2,543</td><td class="n">128 / 496</td></tr>
+<tr><td>T_old (9,738)</td><td class="n">0.136541</td><td class="n">0.316872</td><td class="n">0.484554</td><td class="n">0.214750</td><td class="n">20.92%</td><td class="n">8,537</td><td class="n">128 / 512</td></tr>
+<tr><td>T_new (681)</td><td class="n">0.152057</td><td class="n">0.337066</td><td class="n">0.496595</td><td class="n">0.224002</td><td class="n">8.52%</td><td class="n">648</td><td class="n">110 / 323</td></tr>
+</tbody>
+</table></div>
+<p class="muted">예전에 보고한 ver1 지표(전체 12,860개 collision 24.39%, validation 14.38% 등)는 validation SID를 예전 사건 방식으로 만든 값이라 이 표와 정의가 다르다.</p>
+
+<h2>5. ver2 실험 결과 (이번 재학습)</h2>
+<h3>설정과 데이터</h3>
+<div class="scroll"><table>
+<thead><tr><th>항목</th><th>값</th><th>ver1 대비</th></tr></thead>
+<tbody>
+<tr><td>구조 · 손실 가중치 · 학습 · 조기 종료</td><td>ver1과 같음</td><td>ver1 checkpoint의 설정 38개 항목과 자동 비교해서 경로 외 모두 일치 확인</td></tr>
+<tr><td>학습 코드</td><td><code>uniqueness-loss-experiment</code> @ <code>127ae7e</code></td><td>ver1을 만든 코드</td></tr>
+<tr><td>학습 기사</td><td class="n">10,419</td><td>+681 (Train 기간 노출 기사 inview 추가)</td></tr>
+<tr><td>Q2 초기화용 Train 사건</td><td class="n">9,794</td><td>+649</td></tr>
+<tr><td>validation 기사 (best 선택용)</td><td class="n">2,741</td><td>−381 (Train으로 옮겨짐)</td></tr>
+<tr><td>한 epoch 묶음 수</td><td class="n">41</td><td>10,419 ÷ 256 (ver1은 39)</td></tr>
+<tr><td>학습 환경 · 시간</td><td>AWS GPU 1장 · epoch당 약 1초 · 전체 약 7분</td><td></td></tr>
+</tbody>
+</table></div>
+<h3>학습 결과</h3>
+<div class="scroll"><table>
+<thead><tr><th>항목</th><th>값</th><th>설명</th></tr></thead>
+<tbody>
+<tr><td>best_rec (validation 2,741개)</td><td class="n"><strong>0.150854 @ epoch 190</strong></td><td>이 시점 모델(<code>checkpoint_best_rec.pt</code>)로 SID를 만든다. ver1(180)과 비슷한 시점이다</td></tr>
+<tr><td>그 시점 validation total loss</td><td class="n">0.343000</td><td></td></tr>
+<tr><td>best_total</td><td class="n">0.202423 @ epoch 20</td><td>ver1도 epoch 20. 초반에 total이 가장 낮고 이후 rec는 내려가고 codebook 거리는 커지는 같은 패턴이다</td></tr>
+<tr><td>종료</td><td class="n">epoch 390 (조기 종료)</td><td>190 이후 평가 20번(200 epoch) 동안 개선이 없어서 멈췄다</td></tr>
+<tr><td>validation 평가 횟수</td><td class="n">39</td><td>10 epoch마다</td></tr>
+</tbody>
+</table></div>
+<h3>같은 기사 집합 재평가 (이번 비교)</h3>
+<div class="scroll"><table>
+<thead><tr><th>집합</th><th>rec</th><th>total</th><th>codebook</th><th>uniqueness</th><th>collision</th><th>고유 SID</th><th>Q2 / Q3</th></tr></thead>
+<tbody>
+<tr><td>V (2,741)</td><td class="n">0.150848</td><td class="n">0.342998</td><td class="n">0.525982</td><td class="n">0.161114</td><td class="n">13.39%</td><td class="n">2,522</td><td class="n">128 / 485</td></tr>
+<tr><td>T_old (9,738)</td><td class="n">0.134209</td><td class="n">0.325376</td><td class="n">0.518706</td><td class="n">0.192395</td><td class="n">23.88%</td><td class="n">8,349</td><td class="n">128 / 511</td></tr>
+<tr><td>T_new (681)</td><td class="n">0.132746</td><td class="n">0.321867</td><td class="n">0.511334</td><td class="n">0.203081</td><td class="n">10.13%</td><td class="n">639</td><td class="n">115 / 342</td></tr>
+</tbody>
+</table></div>
+
+<h3>ver2 결과 해석</h3>
+<ol>
+  <li><strong>복원은 모든 집합에서 ver1보다 조금 좋다.</strong>
+    <ul>
+      <li>처음 보는 기사(V): −1.1%</li>
+      <li>둘 다 학습한 기사(T_old): 0.1365 → 0.1342, −1.7%</li>
+    </ul>
+    학습 기사가 681개 늘어난 효과로 볼 수 있다.</li>
+  <li><strong>새로 넣은 기사 681개는 제대로 학습됐다.</strong>
+    <ul>
+      <li>ver1에게 이 기사들은 처음 보는 기사라 복원 오차가 V와 같은 수준(0.152)이다.</li>
+      <li>ver2는 Train 수준(0.133)으로 낮다(−12.7%).</li>
+    </ul>
+    이번 전처리 수정의 목적대로다. (공정 비교는 아니고 효과 확인용이다.)</li>
+  <li><strong>SID 충돌은 조금 늘었다.</strong>
+    <ul>
+      <li>V +1.2%p, T_old +3.0%p (20.9% → 23.9%)</li>
+      <li>T_old 고유 SID는 8,537 → 8,349로 188개 줄었다.</li>
+    </ul>
+    복원과 구분력이 약간 맞바뀐 모양이다. 묶음 안 uniqueness 벌점은 오히려 줄었는데, 이 벌점은 256개 묶음 안에서만 계산해서 전체 충돌과 꼭 같이 움직이지 않는다.</li>
+  <li><strong>codebook / commitment 거리가 0.49 → 0.53으로 커졌다.</strong> 그래서 total loss가 조금 높다. 모델 선택은 rec 기준이므로 total은 참고만 한다.</li>
+  <li><strong>코드북 상태는 정상이다.</strong> Q2 128개 전부, Q3 485~511개를 쓴다. 특정 코드로 쏠리는 붕괴는 없다.</li>
+</ol>
+
+<div class="note warn">
+  <strong>주의</strong>
+  <ul>
+    <li>ver2는 seed 3개(42 · 123 · 2026)로 확인했다(3-1절). ver1은 seed 42 하나뿐이라 ver1 자체의 흔들림은 모른다. 이 절의 숫자는 seed 42 기준이다.</li>
+    <li>V의 충돌률은 기사 단위 nearest 코드 기준이다. 실제 Validation-only SID(timeupdate, Train 사건 배정)로 만들면 값이 달라진다.</li>
+    <li>ver1은 Colab, ver2는 AWS GPU에서 학습했다. 환경 차이로 소수점 수준 차이가 생길 수 있다.</li>
+  </ul>
+</div>
+
+<h2>6. 파일</h2>
+<ul>
+  <li><strong>ver2 결과</strong>: AWS <code>~/minji/SID_Project/data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s42/</code>
+    <ul>
+      <li><code>checkpoint_best_rec.pt</code>, <code>train.log</code></li>
+      <li><code>metrics_train.csv</code>, <code>metrics_validation.csv</code>, <code>early_stopping.csv</code>, <code>summary.json</code></li>
+      <li><code>provenance.txt</code>, <code>check_against_a.txt</code></li>
+    </ul>
+  </li>
+  <li><strong>비교 결과</strong>: AWS <code>~/minji/SID_Project/data/output/rqvae/compare_ver1_ver2/compare_ver1_ver2.csv</code>, <code>.json</code></li>
+  <li><strong>스크립트</strong>: <code>experiments/rqvae_uni_fixedcluster_v1/</code> (<code>run_aws.sh</code>, <code>compare_ver1_ver2.py</code>) · 브랜치 <code>claude/preprocess-fixed-cluster</code></li>
+</ul>
+
+</main>
+</body>
+</html>

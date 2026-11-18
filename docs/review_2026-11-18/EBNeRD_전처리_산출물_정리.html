@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EB-NeRD 전처리 산출물</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f6f7f9; --line: #e2e5ea; --text: #1c2230; --muted: #5f6877;
+    --accent: #2f6fde; --accent-bg: #edf3ff; --up: #17803d; --up-bg: #eaf7ef;
+    --down: #b4410f; --down-bg: #fff2ea; --same: #6b7280; --code-bg: #f1f3f6;
+    --new: #7c3aed; --new-bg: #f3edff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171c; --panel: #1c2027; --line: #2d333d; --text: #e6e9ef; --muted: #9aa3b2;
+      --accent: #7aa7ff; --accent-bg: #1c2a44; --up: #5fd08a; --up-bg: #15301f;
+      --down: #ff9b6b; --down-bg: #3a2216; --same: #9aa3b2; --code-bg: #232833;
+      --new: #b79bff; --new-bg: #2a2140;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171c; --panel: #1c2027; --line: #2d333d; --text: #e6e9ef; --muted: #9aa3b2;
+    --accent: #7aa7ff; --accent-bg: #1c2a44; --up: #5fd08a; --up-bg: #15301f;
+    --down: #ff9b6b; --down-bg: #3a2216; --same: #9aa3b2; --code-bg: #232833;
+    --new: #b79bff; --new-bg: #2a2140;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.65; }
+  main { max-width: 1000px; margin: 0 auto; padding: 36px 16px 80px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  h2 { font-size: 20px; margin: 44px 0 12px; padding-bottom: 8px; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 16.5px; margin: 26px 0 8px; }
+  p { margin: 8px 0; }
+  code { font-family: Consolas, "SFMono-Regular", Menlo, monospace; font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .box { background: var(--accent-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+  .box ul { margin: 6px 0 0; padding-left: 20px; }
+  .note { border-left: 4px solid var(--accent); background: var(--panel); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+  .warn { border-left-color: var(--down); }
+  .scroll { overflow-x: auto; margin: 10px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); font-weight: 600; white-space: nowrap; }
+  td.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 0 7px; border-radius: 999px; white-space: nowrap; }
+  .up { color: var(--up); background: var(--up-bg); }
+  .down { color: var(--down); background: var(--down-bg); }
+  .same { color: var(--same); background: var(--panel); }
+  .new { color: var(--new); background: var(--new-bg); }
+  .muted { color: var(--muted); }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+  .step { border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px; background: var(--panel); font-size: 13px; }
+  .step.hl { border-color: var(--accent); background: var(--accent-bg); }
+  .arrow { color: var(--muted); }
+  @media (max-width: 600px) { th, td { padding: 5px 6px; } body { font-size: 14.5px; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>EB-NeRD 전처리 산출물 정리</h1>
+<p class="sub">브랜치 <code>claude/preprocess-fixed-cluster</code> · <code>python -m src.main preprocess</code> · 2026-11-17 실행 (9분 18초, CPU)</p>
+
+<div class="box">
+  <strong>한 줄 요약</strong>
+  <p>Train 기간에 <strong>노출만 된 기사(inview)</strong>를 Train 기사에 넣었다. 그래서 Train 기사가 <strong>9,738 → 10,419</strong>, Validation-only가 <strong>3,122 → 2,741</strong>, Train 사건이 <strong>9,145 → 9,794</strong>가 됐다.</p>
+  <p>RQ-VAE 입력은 <code>exports/rqvae_inputs/</code> 한 폴더로 바뀌었다.</p>
+  <ul>
+    <li><strong>기존</strong>: origin/main 코드를 같은 원본으로 다시 돌린 결과다. git에 남아 있는 예전 normalize_v2 산출물(Train 사건 9,145, IDF 개체 28,808)과 정확히 같다.</li>
+    <li><strong>원본</strong>: <code>data/raw/</code> 5개 파일이다(<code>articles</code>, <code>train/{behaviors,history}</code>, <code>validation/{behaviors,history}</code>).</li>
+    <li><strong>설정</strong>: 개체 정규화 normalize_only v2, 사건 기준 72시간 · IDF 가중 Jaccard 0.3 · 흔한 개체 1% 제외. 기존과 같다.</li>
+  </ul>
+</div>
+
+<h2>1. 실행 순서와 산출물</h2>
+<div class="flow">
+  <span class="step">① 원본 검사</span><span class="arrow">→</span>
+  <span class="step">② 유효 기사</span><span class="arrow">→</span>
+  <span class="step hl">③ Train 기사 수집 (+inview)</span><span class="arrow">→</span>
+  <span class="step">④⑤ 카테고리</span><span class="arrow">→</span>
+  <span class="step hl">⑤-1 개체 정규화 (preprocess에 추가)</span><span class="arrow">→</span>
+  <span class="step">⑥ E5 임베딩</span><span class="arrow">→</span>
+  <span class="step">⑦ Train 사건</span><span class="arrow">→</span>
+  <span class="step">⑧ Train master</span><span class="arrow">→</span>
+  <span class="step">⑩ Validation (평가 라벨)</span><span class="arrow">→</span>
+  <span class="step hl">⑫ RQ-VAE 입력 한 폴더</span>
+</div>
+<p class="muted">모든 산출물은 <code>data/output/model_inputs/</code>에 있다. RQ-VAE에 넘기는 복사본은 <code>data/output/exports/rqvae_inputs/</code>에 있다.</p>
+
+<h2>2. 산출물 전체 표 <span class="muted" style="font-size:14px;font-weight:400">(model_inputs/)</span></h2>
+<div class="scroll"><table>
+<thead><tr><th>단계</th><th>파일</th><th>한 행 =</th><th>무엇인가 · 누가 쓰나</th><th>기존</th><th>수정 후</th><th>변화</th></tr></thead>
+<tbody>
+<tr><td>②</td><td><code>articles_base.parquet</code></td><td>기사 1개</td><td>원본 기사 중 쓸 수 있는 기사만 남긴 것. 원본 컬럼 + <code>model_text</code>(E5 입력 문장)</td><td class="n">20,719</td><td class="n">20,719</td><td><span class="tag same">같음</span></td></tr>
+<tr><td>③</td><td><code>train_used_article_ids.parquet</code></td><td>기사 1개</td><td><strong>Train 기사 목록</strong>. 카테고리 매핑, 개체 정규화, IDF, 사건, RQ-VAE 학습의 기준 집합</td><td class="n">9,738</td><td class="n">10,419</td><td><span class="tag up">+681</span> inview 추가</td></tr>
+<tr><td>④</td><td><code>category_mapping.parquet</code></td><td>카테고리 1개</td><td><code>category_str</code> → <code>model_category_id</code>(=c1). Train 기사로만 만든다. 0은 <code>&lt;UNK&gt;</code></td><td class="n">25</td><td class="n">25</td><td><span class="tag same">내용까지 같음</span></td></tr>
+<tr><td>⑤</td><td><code>articles_with_category.parquet</code></td><td>기사 1개</td><td>유효 기사 전체 + <code>model_category_id</code></td><td class="n">20,719</td><td class="n">20,719</td><td><span class="tag same">같음</span></td></tr>
+<tr><td>⑤-1</td><td><code>article_entities.parquet</code></td><td>기사 속 개체 언급 1개</td><td>개체를 정규화한 결과. 사건 계산이 읽는 키는 <code>canonical_entity_key</code>(예: <code>PER::mette frederiksen</code>)</td><td class="n">146,813</td><td class="n">146,813</td><td><span class="tag same">행 수 같음</span> 키 102개 달라짐</td></tr>
+<tr><td>⑤-1</td><td><code>entity_normalization_map.parquet</code></td><td>정규화 규칙 1개</td><td>소유격 -s 제거(v1), 하이픈/공백 통일(v2) 규칙. Train 기사로만 학습한다</td><td class="n">637</td><td class="n">697</td><td><span class="tag up">+61 −1</span></td></tr>
+<tr><td>⑥</td><td><code>article_embedding_input.parquet</code></td><td>기사 1개</td><td><code>embedding_row</code>(0~20,718) ↔ <code>article_id</code> ↔ <code>model_text</code>. 유효 기사 전체를 article_id 순으로 정렬</td><td class="n">20,719</td><td class="n">20,719</td><td><span class="tag same">같음</span></td></tr>
+<tr><td>⑥</td><td><code>article_embeddings.npy</code></td><td>기사 1개</td><td>multilingual-e5-base 768차원, L2 정규화(길이 1). <code>embedding_row</code>로 찾는다</td><td class="n">20,719×768</td><td class="n">20,719×768</td><td><span class="tag same">같음</span> (cos ≥ 0.9999997)</td></tr>
+<tr><td>⑦</td><td><code>entity_idf.parquet</code></td><td>개체 1개</td><td>Train 기사 기준 IDF와 흔한 개체 표시(<code>is_high_df</code>)</td><td class="n">28,808</td><td class="n">30,943</td><td><span class="tag up">+2,135</span></td></tr>
+<tr><td>⑦</td><td><code>entity_idf_meta.json</code></td><td>—</td><td>IDF 계산에 쓴 Train 기사 수 N(=10,419), 처음 보는 개체 IDF(=10.2515) 등. SID 생성에서 같은 IDF를 쓰기 위한 파일</td><td class="n">—</td><td class="n">1개</td><td><span class="tag new">새 파일</span></td></tr>
+<tr><td>⑦</td><td><code>article_events.parquet</code></td><td>Train 기사 1개</td><td>Train 기사 → <code>event_id</code></td><td class="n">9,738</td><td class="n">10,419</td><td><span class="tag up">+681</span></td></tr>
+<tr><td>⑦</td><td><code>event_master.parquet</code></td><td>Train 사건 1개</td><td>사건 상태: 개체 집합, 시작 시각, 마지막 기사 시각, 기사 수. <strong>Train 전용</strong></td><td class="n">9,145</td><td class="n">9,794</td><td><span class="tag up">+649</span></td></tr>
+<tr><td>⑧</td><td><code>article_master.parquet</code></td><td>Train 기사 1개</td><td><strong>RQ-VAE 학습 입력</strong>. 기사 ID, 임베딩 행, c1, 사건, 발행시각, 문장</td><td class="n">9,738</td><td class="n">10,419</td><td><span class="tag up">+681</span></td></tr>
+<tr><td>⑩</td><td><code>validation_used_article_ids.parquet</code></td><td>기사 1개</td><td>validation 폴더에서 쓰는 기사 전체 (history + 현재 + 클릭 + inview)</td><td class="n">10,624</td><td class="n">10,624</td><td><span class="tag same">같음</span></td></tr>
+<tr><td>⑩</td><td><code>validation_only_article_ids.parquet</code></td><td>기사 1개</td><td>위 목록 − Train 기사 = 학습 후 SID를 새로 받아야 하는 기사</td><td class="n">3,122</td><td class="n">2,741</td><td><span class="tag down">−381</span></td></tr>
+<tr><td>⑩</td><td><code>validation_article_events.parquet</code></td><td>Validation-only 기사 1개</td><td>전처리 사건 배정 결과 (<strong>평가 전용 라벨</strong>)</td><td class="n">3,122</td><td class="n">2,741</td><td><span class="tag down">−381</span></td></tr>
+<tr><td>⑩</td><td><code>event_master_with_validation.parquet</code></td><td>사건 1개</td><td>Train 사건 + validation에서 새로 생긴 사건의 최종 상태 (<strong>평가·분석용</strong>)</td><td class="n">12,146</td><td class="n">12,423</td><td><span class="tag up">+277</span></td></tr>
+<tr><td>⑩</td><td><code>validation_article_master.parquet</code></td><td>Validation-only 기사 1개</td><td>학습 후 SID 생성 입력. 컬럼은 <code>article_master</code>와 같다. <code>event_id</code>는 평가 전용</td><td class="n">3,122</td><td class="n">2,741</td><td><span class="tag down">−381</span></td></tr>
+</tbody>
+</table></div>
+<p class="muted">파일 이름과 컬럼 구성은 기존과 같다. 새로 생긴 파일은 <code>entity_idf_meta.json</code> 하나다. 바뀐 것은 행 수와 값뿐이다.</p>
+
+<h2>3. 기사 수는 왜 이렇게 바뀌었나</h2>
+
+<h3>3-1. Train 기사 = Train 폴더에서 등장한 기사 전부</h3>
+<div class="scroll"><table>
+<thead><tr><th>출처 (train/)</th><th>컬럼</th><th>의미</th><th>기사 수</th><th>기존</th><th>수정 후</th></tr></thead>
+<tbody>
+<tr><td><code>history.parquet</code></td><td><code>article_id_fixed</code></td><td>사용자들이 Train 기간 직전 3주(4/27~5/18)에 클릭한 기사</td><td class="n">8,786</td><td>✅</td><td>✅</td></tr>
+<tr><td><code>behaviors.parquet</code></td><td><code>article_id</code></td><td>노출 순간 이미 읽고 있던 기사 페이지 (null이면 첫 화면, 69.8%)</td><td class="n">1,723</td><td>✅</td><td>✅</td></tr>
+<tr><td><code>behaviors.parquet</code></td><td><code>article_ids_clicked</code></td><td>이번 노출에서 클릭한 기사 (= 정답)</td><td class="n">1,892</td><td>✅</td><td>✅</td></tr>
+<tr><td><code>behaviors.parquet</code></td><td><code>article_ids_inview</code></td><td>이번 노출에서 화면에 보인 후보 전부</td><td class="n">3,995</td><td>❌</td><td>✅</td></tr>
+<tr><td colspan="3"><strong>합집합 ∩ 유효 기사</strong></td><td></td><td class="n"><strong>9,738</strong></td><td class="n"><strong>10,419</strong></td></tr>
+</tbody>
+</table></div>
+<p>behaviors는 조건(impression_id·user·시각이 있고, 클릭이 1개 이상)을 통과한 232,887행을 모두 쓴다. Validation 기사도 <strong>같은 규칙</strong>으로 모은다. 그래서 이번 수정으로 두 쪽 규칙이 완전히 같아졌다.</p>
+
+<h3>3-2. 늘어난 681개의 정체</h3>
+<pre><code>681 = Train 기간에 "노출만 되고 아무도 읽거나 클릭하지 않은" 기사
+    ├ 381개: validation 폴더에도 나옴 → 예전에는 validation-only로 잘못 분류됨
+    │        (381개 모두 Train 기간이 끝나기(5/25 07:00) 전 발행. 2014년~5/24)
+    └ 300개: validation에도 안 나옴 → 예전에는 SID가 아예 없었음
+             → 이 기사가 후보에 낀 Train impression 595개(0.26%)가 학습 데이터에서 버려졌었음</code></pre>
+<p>이제 Train 노출 기사 3,995개가 <strong>모두</strong> Train 기사다. 그래서 후보 중 SID가 없는 기사 때문에 impression이 버려지는 일이 0건이 된다.</p>
+
+<h3>3-3. Validation 쪽</h3>
+<div class="scroll"><table>
+<thead><tr><th>항목</th><th>기존</th><th>수정 후</th><th>의미</th></tr></thead>
+<tbody>
+<tr><td>validation에서 쓰는 기사</td><td class="n">10,624</td><td class="n">10,624</td><td>history 8,709 + 현재 1,814 + 클릭 2,062 + inview 4,701 (겹침 포함). 수집 규칙이 그대로라 같다</td></tr>
+<tr><td>└ Train과 겹치는 기사</td><td class="n">7,502</td><td class="n">7,883</td><td>381개가 이쪽으로 옮겨왔다</td></tr>
+<tr><td>└ Validation-only</td><td class="n">3,122</td><td class="n">2,741</td><td>학습 후 SID를 새로 받아야 하는 기사</td></tr>
+</tbody>
+</table></div>
+
+<h2>4. 개체 · 정규화 · IDF</h2>
+<div class="scroll"><table>
+<thead><tr><th>항목</th><th>기존</th><th>수정 후</th><th>의미 · 변화 이유</th></tr></thead>
+<tbody>
+<tr><td>개체 언급 (mention)</td><td class="n">146,813</td><td class="n">146,813</td><td>유효 기사 전체의 <code>ner_clusters</code> 원소 수. 기사 집합이 같아서 그대로다</td></tr>
+<tr><td>정규화 규칙</td><td class="n">637</td><td class="n">697</td><td>Train 기사로 학습하는데 기사가 늘어 61개가 새로 생기고 1개가 빠졌다. 예: <code>new yorks → new york</code>, <code>al - jazeera → al jazeera</code></td></tr>
+<tr><td>정규화로 바뀐 언급 / 기사</td><td class="n">2,826 / 2,311</td><td class="n">2,920 / 2,370</td><td>규칙이 늘어서 조금 늘었다. 같은 언급의 최종 키가 기존과 달라진 것은 102개다</td></tr>
+<tr><td>IDF 개체 (Train 기사에 나온 고유 개체)</td><td class="n">28,808</td><td class="n">30,943</td><td>새 Train 기사 681개가 새 개체를 가져왔다</td></tr>
+<tr><td>흔한 개체 (Train 기사의 1% 이상)</td><td class="n">48</td><td class="n">48</td><td><code>ekstra bladet</code>(2,289개 기사), <code>danmark</code>, <code>københavn</code>, <code>usa</code>, <code>twitter</code> … 사건 비교에서 뺀다</td></tr>
+<tr><td>N (IDF 계산 Train 기사 수)</td><td class="n">9,738</td><td class="n">10,419</td><td>idf = log((N+1)/(df+1)) + 1, 처음 보는 개체 = log(N+1)+1 = 10.2515</td></tr>
+<tr><td>Train 기사 중 개체 0개 (원본 NER 없음)</td><td class="n">2,028</td><td class="n">2,184</td><td rowspan="2">개체가 0개면 Jaccard가 항상 0이라 기사 1개짜리 사건이 된다</td></tr>
+<tr><td>Train 기사 중 흔한 개체를 빼면 0개</td><td class="n">79</td><td class="n">82</td></tr>
+</tbody>
+</table></div>
+
+<h2>5. Train 사건 (c2의 재료)</h2>
+<p><strong>만드는 법</strong></p>
+<ol>
+  <li>Train 기사마다 개체 집합을 만들고, 흔한 개체를 뺀다.</li>
+  <li>발행시각 순으로 정렬하고, <strong>72시간 안의 기사 쌍</strong>만 비교한다.</li>
+  <li>IDF 가중 Jaccard ≥ 0.3이면 두 기사를 연결한다.</li>
+  <li>연결된 묶음(union-find)이 사건 하나가 된다.</li>
+</ol>
+<p><strong>번호 매기는 법</strong>: (사건 시작 시각, 첫 기사 ID) 순으로 0부터 붙인다.</p>
+<div class="scroll"><table>
+<thead><tr><th>항목</th><th>기존</th><th>수정 후</th><th>의미</th></tr></thead>
+<tbody>
+<tr><td>72시간 안 비교한 기사 쌍</td><td class="n">1,618,325</td><td class="n">1,668,259</td><td>기사가 늘어 비교 쌍도 늘었다</td></tr>
+<tr><td>연결된 쌍 (Jaccard ≥ 0.3)</td><td class="n">843</td><td class="n">883</td><td></td></tr>
+<tr><td><strong>Train 사건</strong></td><td class="n">9,145</td><td class="n">9,794</td><td>대부분 새 기사가 혼자 사건이 된 것이다</td></tr>
+<tr><td>└ 기사 1개 사건</td><td class="n">8,839</td><td class="n">9,470</td><td>Train 사건의 96.7%</td></tr>
+<tr><td>└ 기사 2개 이상 사건</td><td class="n">306</td><td class="n">324</td><td></td></tr>
+<tr><td>└ 가장 큰 사건</td><td class="n">39</td><td class="n">39</td><td>FH 위원장 Lizette Risgaard 사건(4/27~5/4). 번호는 6243 → 6882</td></tr>
+</tbody>
+</table></div>
+<div class="scroll"><table>
+<thead><tr><th>새 사건 9,794개를 기존 사건과 비교하면</th><th>개수</th></tr></thead>
+<tbody>
+<tr><td>쪼개진 기존 사건</td><td class="n">0</td></tr>
+<tr><td>기존 기사로만 이뤄진 사건 (아래 합쳐진 3개 포함)</td><td class="n">9,117</td></tr>
+<tr><td>기존 기사와 새 기사가 섞인 사건 (합쳐진 1개 포함)</td><td class="n">21</td></tr>
+<tr><td>새 기사로만 이뤄진 사건</td><td class="n">656 <span class="muted">(새 기사 681개 중 653개는 혼자 사건)</span></td></tr>
+<tr><td>└ 그중 기존 사건 2~4개가 하나로 합쳐진 사건</td><td class="n">4 <span class="muted">(1번은 새 기사가 다리 역할, 3번은 IDF·정규화 변화로 유사도가 0.3을 넘음)</span></td></tr>
+</tbody>
+</table></div>
+<div class="note warn"><strong>사건 번호가 새로 매겨졌다.</strong> 시작 시각 순서라 중간에 사건이 끼면 뒤 번호가 밀린다. 예전 결과와 비교할 때는 <strong>번호가 아니라 소속 기사로</strong> 맞춰야 한다.</div>
+
+<h2>6. Validation 사건 배정 = 평가 전용 라벨</h2>
+<p>Validation-only 기사를 발행시각 순으로 하나씩 처리한다.</p>
+<ol>
+  <li>후보 사건은 <strong>0 ≤ (기사 발행시각 − 사건 마지막 기사 시각) ≤ 72시간</strong>인 사건이다.</li>
+  <li>후보 중 Jaccard ≥ 0.3인 최고점 사건에 붙인다. 이때 사건의 개체 집합과 마지막 시각을 갱신한다.</li>
+  <li>붙을 사건이 없으면 새 사건(9,794번부터)을 만든다.</li>
+</ol>
+<p>IDF, 흔한 개체, 정규화는 Train 것을 그대로 쓴다. 결과는 <code>validation_article_master.event_id</code>에 들어간다. 이 값은 <strong>평가 라벨일 뿐 SID 생성 입력이 아니다</strong>. SID 생성에서는 새 사건 없이 Train 사건에만 배정한다(1차 Jaccard, 2차 코사인).</p>
+<div class="scroll"><table>
+<thead><tr><th>항목</th><th>기존</th><th>수정 후</th><th>의미</th></tr></thead>
+<tbody>
+<tr><td>Train 사건에 붙음</td><td class="n">32</td><td class="n">26</td><td>예전에 붙던 일부 기사가 이제 아예 Train 기사가 됐다</td></tr>
+<tr><td>validation에서 생긴 사건에 붙음</td><td class="n">89</td><td class="n">86</td><td></td></tr>
+<tr><td>새 사건을 만듦</td><td class="n">3,001</td><td class="n">2,629</td><td>validation-only가 381개 줄어서 같이 줄었다</td></tr>
+<tr><td>개체 0개 기사 (원본 NER 없음 + 흔한 개체만)</td><td class="n">868</td><td class="n">784 <span class="muted">(753 + 31)</span></td><td>무조건 새 사건이 된다. SID 생성에서는 2차 코사인으로 Train 사건에 배정된다</td></tr>
+</tbody>
+</table></div>
+
+<h2>7. RQ-VAE 입력 폴더 <code>exports/rqvae_inputs/</code></h2>
+<p>기존에는 <code>rqvae_train_inputs/</code>와 <code>rqvae_validation_inputs/</code> 두 폴더였다. <span class="tag down">삭제</span> RQ-VAE의 <code>dataset_folder</code>는 폴더 하나를 읽으므로 <strong>한 폴더로 합쳤다</strong>.</p>
+<div class="scroll"><table>
+<thead><tr><th>파일</th><th>행</th><th>컬럼</th><th>RQ-VAE에서 어디에 쓰나</th></tr></thead>
+<tbody>
+<tr><td><code>article_master.parquet</code></td><td class="n">10,419</td><td><code>article_id, embedding_row, model_category_id, event_id, published_time, model_text</code></td><td><strong>학습</strong>(유일한 학습 데이터). <code>event_id</code>는 Q2 코드북 K-means 초기화에 쓴다(사건별 h 평균). 학습 후에는 사건 평균 z(E)와 사건 C2 계산에 쓴다</td></tr>
+<tr><td><code>validation_article_master.parquet</code></td><td class="n">2,741</td><td>위와 같음 (<code>event_id</code>는 평가 전용)</td><td>학습 중 best checkpoint를 고를 때 validation 복원 손실에 쓴다. 학습 후 Validation-only SID 생성 대상이다</td></tr>
+<tr><td><code>article_embeddings.npy</code></td><td class="n">20,719×768</td><td>—</td><td>모델 입력 x. <code>embedding_row</code>로 찾는다</td></tr>
+<tr><td><code>event_master.parquet</code></td><td class="n">9,794</td><td><code>event_id, event_origin_split(=train), event_start_time, event_last_added_time, event_article_count, train_article_count, event_entities, event_entity_count, first_article_id</code></td><td>SID 생성: Train 사건의 시작 상태 (개체 집합, 마지막 시각)</td></tr>
+<tr><td><code>entity_idf.parquet</code></td><td class="n">30,943</td><td><code>entity, document_frequency, document_frequency_ratio, idf, is_high_df</code></td><td>SID 생성: 1차 Jaccard의 IDF와 흔한 개체 제외</td></tr>
+<tr><td><code>entity_idf_meta.json</code></td><td class="n">—</td><td><code>train_article_count=10419, unseen_entity_idf=10.2515, …</code></td><td>SID 생성: Train에 없던 개체의 IDF</td></tr>
+<tr><td><code>article_entities.parquet</code></td><td class="n">99,556</td><td><code>article_id, canonical_entity_key</code> (고유 쌍)</td><td>SID 생성: 기사별 개체 집합. Train 10,419 + Validation-only 2,741 기사 중 개체가 있는 10,223개</td></tr>
+<tr><td><code>manifest.json</code></td><td class="n">—</td><td>파일 목록, 검사 결과, 주의사항</td><td>확인용</td></tr>
+</tbody>
+</table></div>
+<p><strong>export 직전에 자동으로 확인하는 것</strong> (이번 실행에서 모두 통과)</p>
+<ul>
+  <li>npy 행 수 == 임베딩 입력 기사 수</li>
+  <li>Train과 Validation-only 기사가 겹치지 않음</li>
+  <li><code>event_master</code>는 Train 사건만 가짐</li>
+  <li>개체 키가 모두 <code>TYPE::이름</code> 형식이고 <code>WD::</code>가 섞이지 않음</li>
+  <li>Train 기사의 개체 키 집합 == <code>entity_idf.entity</code></li>
+  <li>모든 IDF가 N=10,419로 다시 계산한 값과 같음</li>
+</ul>
+<p class="muted">세 파일(<code>article_entities</code>, <code>event_master.event_entities</code>, <code>entity_idf</code>)의 개체 키 형식이 같다. 그래서 SID 생성 코드는 대소문자를 바꾸지 말고 그대로 비교하면 된다.</p>
+
+<h2>8. 주의할 점</h2>
+<ul>
+  <li><strong>RQ-VAE는 다시 학습해야 한다.</strong> 바뀐 것: 학습 기사 9,738 → 10,419, Q2 초기화용 Train 사건 9,145 → 9,794, checkpoint 선택용 validation 기사 3,122 → 2,741. 기존 checkpoint는 다시 쓸 수 없다.</li>
+  <li><strong>사건 번호, 정규화 키 일부(102개 언급), IDF 값</strong>이 기존과 다르다. 예전 SID와 섞지 말아야 한다.</li>
+  <li><strong>카테고리(c1) 매핑은 완전히 같다.</strong> 유효 기사 중 Train에 없는 카테고리 13개 기사는 <code>&lt;UNK&gt;</code>=0이다. 그중 validation-only에 1개가 있다.</li>
+  <li>원본 NER이 비어 있는 기사가 많다(Train 2,184, Validation-only 753). 흔한 개체 필터를 빼도 31개만 살아난다. 그래서 필터는 그대로 두었다.</li>
+</ul>
+
+</main>
+</body>
+</html>
