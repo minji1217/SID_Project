@@ -126,3 +126,15 @@ python experiments/rqvae_uni_fixedcluster_v1/parse_log.py data/output/rqvae/uni_
 - Train 기사: 기사별 nearest code
 - Validation-only 기사: Train 사건에만 배정 (timeupdate 수정본)
 - 생성한 SID로 `python -m src.main post-rqvae` 를 돌리고 Transformer를 학습한다.
+
+## 나중에 할 것 (메모)
+
+- [ ] **사건 안 c2 일관성 확인** (2026-11-18 보류)
+  - 목적: 지금 방식(Train c2 = 기사별 최근접)으로도 c2가 사건을 잘 담는지 보기. 결과에 따라 갈린다.
+    - 높게 나오면 A(지금 그대로)로 충분하다.
+    - 낮게 나오면 교수님께 B(사건 일관성 손실 추가)를 제안할 근거가 된다.
+  - 대상: 기사 2개 이상인 Train 사건 324개(기사 949개, 쌍 2,634개). 우연 수준(다른 사건 · 같은 c1, 72h 안 같은 c1)과 비교한다.
+  - AWS 실행 (1~2분):
+    ```bash
+    python experiments/rqvae_uni_fixedcluster_v1/event_c2_consistency.py --code_dir ~/minji/rqvae_uni_code_127ae7e/RQVAE --input_dir data/output/fixedcluster_v1/exports/rqvae_inputs --ckpt ver1=$HOME/minji/checkpoint_best_rec.pt --ckpt ver2_s42=data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s42/checkpoint_best_rec.pt --ckpt ver2_s123=data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s123/checkpoint_best_rec.pt --ckpt ver2_s2026=data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s2026/checkpoint_best_rec.pt --out data/output/rqvae/event_c2_consistency
+    ```
