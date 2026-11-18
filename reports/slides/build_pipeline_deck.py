@@ -282,7 +282,8 @@ s = d.new()
 d.frame(s, "04", CH["04"], "④ SID 부여 — 새 기사는 train 사건의 C2를 물려받는다",
         "train 사건 정보(z(E)·C2·개체·시각)를 먼저 준비하고, validation-only 기사는 발행 시각 순으로 train 사건에만 붙인다")
 cards = [("A. train 기사", "blue", ["c1 = 카테고리", "**c2 = 기사마다 r1 최근접**", "c3 = r2 최근접",
-                                    "c4 = 앞 3자리 같으면 순번 (train 먼저)"]),
+                                    "c4 = 같은 c1·c2·c3끼리 0, 1, 2…",
+                                    "  train은 article_id 순 → 새 기사는 발행 순"]),
          ("B. train 사건 정보 (시작 때 준비)", "amber", None),
          ("C. validation-only 기사", "green", ["발행 시각 순으로 하나씩", "기존 train 사건에 붙어",
                                               "**그 사건의 C2를 물려받음**", "새 사건은 만들지 않음"])]
@@ -293,7 +294,7 @@ for i, (h_, kind, lines) in enumerate(cards):
     rect(s, f"Card {i+1} bar", x, cy0, cwid, 6, fill=f"k-{kind}-line", radius=3)
     text(s, f"Card {i+1} title", x + 22, cy0 + 18, cwid - 40, 32, h_, "body-strong", "ink", size=22, one_line=True)
     if lines:
-        text(s, f"Card {i+1} body", x + 22, cy0 + 58, cwid - 40, 150, lines, "caption", "slate", gap=2)
+        text(s, f"Card {i+1} body", x + 22, cy0 + 56, cwid - 40, 160, lines, "caption", "slate", gap=0, lh=1.32)
     if i < 2:
         arrow(s, f"Card arrow {i+1}", [(x + cwid + 14, cy0 + chh / 2), (x + cwid + 50, cy0 + chh / 2)], width_pt=2)
 tb = table(s, "Event summary table", 120 + cwid + 64 + 22, cy0 + 58, [70, 86, 64, 126, 130], 34,
