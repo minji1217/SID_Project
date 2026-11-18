@@ -386,12 +386,12 @@ def tok(name, x, y, v, kind="gray", w=58):
     return x + w + 8
 
 
-def group(name, x, y, label, vals):
+def group(name, x, y, label, vals, lw=56):
     """점선 묶음 (입력 / 후보)."""
-    w = 56 + len(vals) * 66 + 8
+    w = lw + len(vals) * 66 + 8
     rect(s, name, x, y - 8, w, 58, fill=None, line="hairline", radius=10, dash="dash")
-    text(s, name + " label", x + 10, y, 50, 42, label, "footer", "slate", anchor="m")
-    xx = x + 56
+    text(s, name + " label", x + 10, y, lw - 6, 42, label, "footer", "slate", anchor="m")
+    xx = x + lw
     for v, kind in vals:
         xx = tok(f"{name} {v}", xx, y, v, kind)
     return x + w
@@ -400,7 +400,7 @@ def group(name, x, y, label, vals):
 # 노출마다: ① 현재 기사(behaviors.article_id)를 history 끝에 (마지막과 같으면 생략) → ② 문제 저장 → ③ 클릭 기사 붙이기
 rows = [("시작", "history.parquet", None),
         ("노출 1", "30을 읽던 중", ("30", True, ["10", "20", ("30", "blue")],
-                                  [("40", "green"), "50", "60", "70", "80"], "정답 40")),
+                                  [("40", "green"), "50", "60", "70", "80", "90"], "정답 40")),
         ("노출 2", "40 = 마지막 → 안 붙임", ("40", False, ["10", "20", "30", ("40", "blue")],
                                          ["55", ("65", "green"), "75", "85", "95"], "정답 65")),
         ("마지막", "id → SID", None)]
@@ -442,9 +442,15 @@ for i, (aid, sid, st, kind) in enumerate(cands):
                                               (st, {"weight": 700, "size": 19})], kind, line_w=1.5, style="caption")
     if kind == "red":
         hline(s, "Strike 70", x + 112, 770, 42, color="error", width_px=2)
-text(s, "Neg note", L, 872, 1660, 32,
-     "정답 1 + 오답 4. **정답과 (c1, c2, c3)가 똑같은 오답은 뺌** — 점수에 c4를 안 써서 구분이 안 되기 때문 (교수님 9/18)",
+text(s, "Neg note", L, 864, 1660, 32,
+     "노출 1의 후보 6개 → 정답 1 + 오답 4. **정답과 (c1, c2, c3)가 똑같은 오답(70)은 뺌** — 점수에 c4를 안 써서 구분이 안 되기 때문 (교수님 9/18)",
      "caption", "slate", one_line=True)
+yr = 924
+text(s, "Result label", L, yr - 6, 220, 30, "결과 행", "body-strong", "ink", size=22)
+text(s, "Result note", L, yr + 24, 230, 24, "history는 노출 1 시점 그대로", "footer", "slate")
+xe = group("Res hist", L + 240, yr, "history", [("10", "gray"), ("20", "gray"), ("30", "gray")], lw=96)
+xe = group("Res cand", xe + 20, yr, "후보", [("40", "green"), ("50", "gray"), ("60", "gray"), ("80", "gray"), ("90", "gray")])
+group("Res label", xe + 20, yr, "정답 표시", [("1", "green"), ("0", "gray"), ("0", "gray"), ("0", "gray"), ("0", "gray")], lw=110)
 
 # ════════ 7. Transformer ════════
 s = d.new(notes="후보 점수 = log p(c1) + log p(c2|c1) + log p(c3|c1,c2)")
