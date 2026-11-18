@@ -103,7 +103,7 @@
     <li><strong>RQ-VAE(UNI 설정, seed 42)를 새 입력으로 재학습했어요.</strong> SID 생성에는 이 checkpoint를 써요. 경로는 맨 아래 "다시 돌리는 순서"에 있어요.</li>
     <li>RQ-VAE 입력이 <strong>폴더 하나</strong>(<code>exports/rqvae_inputs/</code>)로 바뀌었어요. timeupdate가 읽을 파일이 모두 이 폴더에 있어요(바로 아래 표).</li>
     <li>1번(validation <code>event_id</code>를 쓰면 안 되는 이유), 2번(N 위치), 7번(c3 크기)을 고쳤어요.</li>
-    <li>최신 커밋 반영: 6번(파일 이름)은 <strong>완료</strong>. 4번에 동점 규칙이 전처리와 다르다는 점, 7번에 c1 크기 확인, 공유할 결과에 코사인 값 분포를 추가했어요.</li>
+    <li>최신 커밋 반영: 6번(파일 이름)은 <strong>완료</strong>. 4번 동점 규칙은 전처리와 같게 "번호 작은 사건"으로 결정(11/18), 7번에 c1 크기 확인, 공유할 결과에 코사인 값 분포를 추가했어요.</li>
   </ul>
 </div>
 
@@ -129,8 +129,8 @@
     <tr><td class="num">1</td><td>기사 개체를 <code>article_entities.parquet</code>에서 읽기</td><td>timeupdate</td><td><span class="badge must">필수 · 1순위</span></td></tr>
     <tr><td class="num">2</td><td>유사도 식을 IDF 가중 <strong>Jaccard</strong>로 바꾸기</td><td>timeupdate</td><td><span class="badge must">필수 · 1순위</span></td></tr>
     <tr><td class="num">3</td><td>사건 갱신 규칙을 A/B/C 옵션으로 만들고 세 가지 다 돌리기</td><td>timeupdate</td><td><span class="badge must">필수 · 2순위</span></td></tr>
-    <tr><td class="num">4</td><td>사건 번호를 숫자로 정렬</td><td>timeupdate</td><td><span class="badge rec">권장</span></td></tr>
-    <tr><td class="num">5</td><td>물려주는 사건 C2를 r1 평균으로 계산</td><td>timeupdate</td><td><span class="badge hold">보류 · 교수님 확인 후</span></td></tr>
+    <tr><td class="num">4</td><td>사건 번호를 숫자로 정렬 (동점이면 번호 작은 사건)</td><td>timeupdate</td><td><span class="badge must">필수 · 11/18 결정</span></td></tr>
+    <tr><td class="num">5</td><td>물려주는 사건 C2를 r1 평균으로 계산</td><td>timeupdate</td><td><span class="badge hold">보류 · 다음 미팅 결정</span></td></tr>
     <tr><td class="num">6</td><td><s>파일 이름 <code>.py.py</code> → <code>.py</code></s></td><td>timeupdate</td><td><span class="badge ok">완료 · bcd1168</span></td></tr>
     <tr><td class="num">7</td><td>c3 크기를 RQ-VAE 설정과 맞추기 (UNI = <strong>512 그대로</strong>) + c1 크기 확인</td><td>Transformer gin</td><td><span class="badge ok">확인 · v2 수정</span></td></tr>
     <tr><td class="num">8</td><td>c4 크기 자동 계산 + 상한 검사</td><td>Transformer</td><td><span class="badge must">필수 · 3순위</span></td></tr>
@@ -258,26 +258,23 @@ if do_time and (pd.isna(prev_last) or timestamp &gt; prev_last):   # 기존 시�
 
 <!-- 4 -->
 <div class="task">
-  <div class="task-head"><span class="n">4</span><h3>사건 번호를 숫자로 정렬</h3><span class="badge rec">권장</span></div>
+  <div class="task-head"><span class="n">4</span><h3>사건 번호를 숫자로 정렬</h3><span class="badge must">필수 · 11/18 결정</span></div>
   <div class="task-body">
     <div class="row"><div class="label">지금</div><div>675번 줄 <code>sorted(train_event_representations, key=lambda x: str(x))</code> → 1, 10, 100, 2, 9 순서</div></div>
     <div class="row"><div class="label">문제</div><div>점수가 같으면 앞쪽 사건을 골라요. 사건 9와 10이 동점이면 전처리는 9, timeupdate는 10을 골라요. 동점은 드물어서 영향은 작아요.</div></div>
-    <div class="row"><div class="label do">이렇게</div><div><code>key=lambda x: int(x)</code>로 바꾸기. 동점이면 코사인 높은 순 → 최근 순 → 번호 작은 순으로 고르고, 결과에 <strong>"0.3 넘은 후보 수"</strong> 컬럼을 추가해요.</div></div>
+    <div class="row"><div class="label do">이렇게</div><div><code>key=lambda x: int(x)</code>로 바꾸기. 동점이면 <strong>event_id 숫자가 작은 사건</strong>을 골라요 (11/18 결정, 전처리와 같은 규칙). 결과에 <strong>"0.3 넘은 후보 수"</strong> 컬럼도 추가해요.</div></div>
     <div class="row"><div class="label">참고</div><div>
-      이 동점 규칙은 <strong>전처리와 다른 새 규칙</strong>이에요. 전처리(<code>src/build_validation.py</code> 713~741번 줄)는 사건 번호를 숫자 순으로 돌면서 점수가 <strong>더 클 때만</strong> 바꾸므로, 동점이면 <strong>번호가 가장 작은 사건</strong>을 골라요.
-      <ul>
-        <li>전처리와 똑같이 맞추려면 → "번호 작은 순"만 쓰기</li>
-        <li>위 규칙(코사인 → 최근 → 번호)을 쓰려면 → 결과 보고 때 "동점 규칙이 전처리와 다름"을 같이 적기</li>
-      </ul>
-      코사인으로 넘어간 경우(<code>np.argmax</code>)도 동점이면 맨 앞 사건을 고르니, 정렬만 숫자로 바꾸면 같은 규칙이 적용돼요.
+      전처리(<code>src/build_validation.py</code> 713~741번 줄)도 사건 번호를 숫자 순으로 돌면서 점수가 <strong>더 클 때만</strong> 바꾸므로, 동점이면 <strong>번호가 가장 작은 사건</strong>을 골라요.
+      코사인으로 넘어간 경우(<code>np.argmax</code>)도 동점이면 맨 앞 사건을 고르니, 정렬만 숫자로 바꾸면 개체 점수 · 코사인 모두 같은 규칙이 적용돼요. 다른 동점 규칙은 추가하지 않아요.
     </div></div>
   </div>
 </div>
 
 <!-- 5 -->
 <div class="task">
-  <div class="task-head"><span class="n">5</span><h3>물려주는 사건 C2를 r1 평균으로 계산</h3><span class="badge hold">보류 · 교수님 확인 후</span></div>
+  <div class="task-head"><span class="n">5</span><h3>물려주는 사건 C2를 r1 평균으로 계산</h3><span class="badge hold">보류 · 다음 미팅 결정</span></div>
   <div class="task-body">
+    <div class="row"><div class="label">현황</div><div>사건 C2와 Q2 KMeans 초기화를 <strong>어느 공간(r1 평균 / h 평균)으로 맞출지</strong>는 다음 미팅에서 정해요. 정해지면 이 항목을 고쳐서 다시 보낼게요. 그 전까지는 손대지 않아도 돼요.</div></div>
     <div class="row"><div class="label">어디</div><div>학습이 아니라 <strong>SID 생성 단계</strong>예요. <code>compute_event_c2_from_mean_h()</code>(467번 줄)가 Train 사건마다 대표 C2를 정하고, 이 값이 Validation 기사에 물려줄 C2가 돼요(869, 936번 줄). Train 기사 자신의 C2와는 상관없어요.</div></div>
     <div class="row"><div class="label">지금</div><div>509번 줄 <code>h = model.encode(x)</code>의 <strong>h 평균</strong>을 558번 줄에서 그대로 Q2에 넣어요. 그런데 Q2는 <strong>r1 = h − Q1[카테고리]</strong> 공간에서 학습됐어요.</div></div>
     <div class="row"><div class="label">예시</div><div>
