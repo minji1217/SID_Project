@@ -1,0 +1,46 @@
+# V1 Transformer 설정 (여민 Transformer 코드용, baekyeomin/SID_Project main)
+#
+# 출처: minji1217/sid_project-transformer @ claude/hopeful-mendel-fhc2n4
+#   - Transformer/configs/transformer_ebnerd.gin      (기본값)
+#   - Transformer/analysis/rerun_final_config.py      (FINAL_CONFIG, 6단계·84번 설정 탐색으로 고른 값)
+# 기본 gin 위에 FINAL_CONFIG를 덮어쓴 값과 같다.
+#
+# 빠진 것: use_amp / amp_dtype / prefetch_factor / save_every_epoch / save_optimizer_state
+#   여민 코드에 이 설정이 없어서 넣으면 에러가 난다. V1은 AMP(bfloat16)로 학습했고 여민 코드는 fp32라 결과가 아주 조금 다를 수 있다.
+#
+# 어휘 크기(c1~c4_vocab_size)는 적지 않는다. train_transformer.py가 --sid-path 의 SID 파일에서 (최댓값 + 1)로 자동으로 넣는다.
+#
+# 실행 (Transformer/ 안에서):
+#   python train_transformer.py --config <이 파일> --sid-path <새 article_semantic_ids.parquet>
+# 경로 3개(train_path, validation_path, save_dir)는 실험마다 바꾼다.
+
+# Dataset ------------------------------------------
+NewsSequenceDataset.max_history_length = 50      # 여민 기본 20
+NewsSequenceDataset.drop_empty_history = True
+NewsSequenceDataset.validate_data = True
+
+# Model --------------------------------------------
+NewsEncoderDecoderTransformer.d_model = 256      # 여민 기본 384
+NewsEncoderDecoderTransformer.num_heads = 8      # 여민 기본 6
+NewsEncoderDecoderTransformer.d_ff = 1024
+NewsEncoderDecoderTransformer.num_layers = 2     # 여민 기본 4
+NewsEncoderDecoderTransformer.dropout_rate = 0.0 # 여민 기본 0.1
+NewsEncoderDecoderTransformer.use_sep = False    # 여민 기본 True
+
+# Loss ---------------------------------------------
+TransformerLoss.lambda_preference = 1.0
+
+# Data paths (실험마다 바꿈) ------------------------
+train.train_path = "datasets/ebnerd/train_sequences_1pos4neg.parquet"
+train.validation_path = "datasets/ebnerd/validation_sequences_1pos4neg_half.parquet"
+train.save_dir = "out/transformer/ebnerd_v1"
+
+# Training -----------------------------------------
+train.batch_size = 128
+train.num_epochs = 30
+train.learning_rate = 0.00005                    # 여민 기본 0.0001
+train.weight_decay = 0.0                         # 여민 기본 0.01
+train.gradient_clip_norm = 1.0
+train.num_workers = 0
+train.seed = 42
+train.early_stopping_patience = 5
