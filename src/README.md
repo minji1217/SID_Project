@@ -88,3 +88,28 @@ export 직전 검사 항목은 다음과 같다.
 - 개체 키가 모두 `TYPE::surface` 형식 (`WD::` 혼용 금지)
 - Train 기사 개체 키 집합 == `entity_idf.entity`
 - `idf` 가 `entity_idf_meta.train_article_count` 로 다시 계산한 값과 같음
+
+## SID를 받은 뒤: 시퀀스 → 1pos4neg → 후보 순서 섞기
+
+RQ-VAE·SID 생성 결과(`article_semantic_ids.parquet`)를 받으면 실험 폴더 하나에 차례로 만든다. 기존 결과는 덮어쓰지 않는다.
+
+```bash
+EXP=<실험 이름>          # 예: uni_fixedcluster_h_s42
+E=data/output/experiments/$EXP
+
+# 1) 시퀀스 (train / validation)
+python -m src.main post-rqvae --experiment $EXP --sid-path <article_semantic_ids.parquet>
+
+# 2) 1pos4neg: 정답마다 한 행, 오답은 label 0만, 정답과 (c1,c2,c3) 같은 오답 제거, 오답끼리 SID 중복 제거, 4개 미만이면 버림, seed 42 해시로 4개
+python -m src.build_1pos4neg_sequences --out-dir $E/candidate_1pos4neg \
+  --path $E/post_rqvae/train_sequences.parquet --path $E/post_rqvae/validation_sequences.parquet \
+  --report $E/candidate_1pos4neg/report.json
+
+# 3) 후보 순서만 섞기 (정답이 항상 첫 자리면 argmax 동점이 정답으로 처리되어 Top-1이 부풀기 때문)
+python -m src.shuffle_candidate_order --input-dir $E/candidate_1pos4neg \
+  --output-dir $E/candidate_1pos4neg_shuffled --report $E/candidate_1pos4neg_shuffled/report.json
+```
+
+- `candidate_1pos4neg_shuffled/`의 train / validation 파일을 Transformer에 넘긴다. validation을 앞 절반(모델 고르기)과 test로 나누는 건 Transformer 쪽 `split_validation.py`.
+- `analyze_candidate_sid_collision.py`는 1pos4neg가 불러 쓰는 SID 로딩·충돌 분석 함수다.
+- 세 스크립트는 `claude/festive-bell-a5sfbx`(정책 2026-09-18 확정)에서 그대로 가져왔다. 2026-11-23 여민 SID 생성 코드의 시험 출력으로 1)→3)이 끝까지 돌고 섞기 검증이 모두 통과하는 것을 확인했다.
