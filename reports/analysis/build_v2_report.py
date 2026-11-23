@@ -1,31 +1,48 @@
-"""v2 재실험 보고서 HTML 생성 (seed 42). 숫자는 AWS 실행 결과를 그대로 옮긴 것.
+"""v2 재실험 보고서 HTML 생성 (Transformer seed 42 · 123 · 2026). 숫자는 AWS 실행 결과를 그대로 옮긴 것.
 
-    python reports/analysis/build_v2_report.py   →  reports/v2_재실험_결과_seed42.html
+    python reports/analysis/build_v2_report.py   →  reports/v2_재실험_결과_3seed.html
+    (seed 42 하나로 쓴 이전 판은 reports/v2_재실험_결과_seed42.html 에 그대로 둔다)
 
 출처 (AWS, ~/minji/SID_Project/data/output/fixedcluster_v1/v2/)
   rqvae/*/summary.json, sid/{h,r}/check_sid.txt, transformer/*/test_metrics.json,
-  analysis/test_breakdown_seed42.json, analysis/popularity_fusion_seed42.json
+  analysis/test_breakdown_seed42.json, analysis/popularity_fusion_seed{42,123,2026}.json
+  진단(5장)과 λ 곡선(6장 그림)은 seed 42 결과
 """
+from statistics import mean, stdev
 from pathlib import Path
 from html import escape
 
-OUT = Path(__file__).resolve().parents[1] / "v2_재실험_결과_seed42.html"
+OUT = Path(__file__).resolve().parents[1] / "v2_재실험_결과_3seed.html"
 COL = {"V1": "var(--s-v1)", "H": "var(--s-h)", "R": "var(--s-r)", "인기만": "var(--s-pop)"}
 
 # ---------------- 데이터 ----------------
-TEST = {  # 모델만
-    "V1": dict(top1=26.16, auc=0.5686, mrr=0.5101, ndcg=0.6308),
-    "H": dict(top1=27.51, auc=0.5836, mrr=0.5223, ndcg=0.6401),
-    "R": dict(top1=27.67, auc=0.5888, mrr=0.5249, ndcg=0.6422),
+SEEDS = [42, 123, 2026]
+RUNS = ["V1", "H", "R"]
+TEST_S = {  # 모델만 test: seed → (top1, auc, mrr, ndcg)   (collect_results.py)
+    "V1": {42: (26.16, 0.5686, 0.5101, 0.6308), 123: (26.79, 0.5831, 0.5187, 0.6375), 2026: (26.76, 0.5789, 0.5168, 0.6360)},
+    "H": {42: (27.51, 0.5836, 0.5223, 0.6401), 123: (27.81, 0.5810, 0.5224, 0.6401), 2026: (27.70, 0.5889, 0.5252, 0.6424)},
+    "R": {42: (27.67, 0.5888, 0.5249, 0.6422), 123: (27.17, 0.5810, 0.5197, 0.6381), 2026: (27.69, 0.5852, 0.5237, 0.6412)},
 }
-FUSION = {  # test Top-1: 모델만 / 인기만 / 결합(λ=5) / 결합+나이(λ=5, μ=-1)
-    "V1": (26.16, 42.94, 43.23, 43.41),
-    "H": (27.51, 42.93, 43.96, 44.21),
-    "R": (27.67, 42.97, 44.10, 44.23),
+FUSION_S = {  # test Top-1: seed → (모델만, 인기만, 결합 λ=5, 결합+나이, 고른 μ)   (popularity_fusion.py --with-age)
+    "V1": {42: (26.16, 42.94, 43.23, 43.41, -1), 123: (26.79, 42.94, 43.51, 43.73, -1), 2026: (26.76, 42.94, 43.59, 43.84, -2)},
+    "H": {42: (27.51, 42.93, 43.96, 44.21, -1), 123: (27.81, 42.93, 43.80, 44.14, -1), 2026: (27.70, 42.93, 44.14, 44.37, -1)},
+    "R": {42: (27.67, 42.97, 44.10, 44.23, -1), 123: (27.17, 42.97, 44.02, 44.35, -1), 2026: (27.69, 42.97, 43.91, 44.09, -2)},
 }
-FUSION_FULL = {  # 결합+나이 test: auc, mrr, ndcg
-    "V1": (0.7394, 0.6546, 0.7413), "H": (0.7418, 0.6589, 0.7445), "R": (0.7438, 0.6599, 0.7454),
+FUSION_FULL_S = {  # 결합+나이 test: seed → (auc, mrr, ndcg)
+    "V1": {42: (0.7394, 0.6546, 0.7413), 123: (0.7407, 0.6565, 0.7428), 2026: (0.7398, 0.6566, 0.7428)},
+    "H": {42: (0.7418, 0.6589, 0.7445), 123: (0.7419, 0.6588, 0.7445), 2026: (0.7431, 0.6602, 0.7455)},
+    "R": {42: (0.7438, 0.6599, 0.7454), 123: (0.7436, 0.6604, 0.7457), 2026: (0.7421, 0.6587, 0.7444)},
 }
+
+
+def ms(vals, f="{:.2f}"):
+    """평균 ± 표준편차(seed 3개, 표본 표준편차) 문자열."""
+    return f"{f.format(mean(vals))} ± {f.format(stdev(vals))}"
+
+
+TEST = {n: [mean(TEST_S[n][s][k] for s in SEEDS) for k in range(4)] for n in RUNS}           # 평균
+FUSION = {n: [mean(FUSION_S[n][s][k] for s in SEEDS) for k in range(4)] for n in RUNS}       # 평균
+GAIN = {n: [FUSION_S[n][s][3] - FUSION_S[n][s][1] for s in SEEDS] for n in RUNS}            # 결합+나이 − 인기만
 LAMS = ["0", "0.05", "0.1", "0.2", "0.3", "0.5", "0.75", "1", "1.5", "2", "3", "5", "10"]
 VAL_LAM = {
     "V1": [25.91, 27.17, 28.32, 30.58, 32.57, 35.60, 38.02, 39.63, 41.46, 42.33, 42.90, 43.06, 42.88],
@@ -39,8 +56,8 @@ COS_N = {"H": [679, 18557, 57857, 42847], "R": [1320, 31762, 53346, 33433]}
 
 
 # ---------------- 그림 함수 ----------------
-def bars(cats, series, ymax, unit="%", ref=None, ref_label="", h=260, fmt="{:.2f}", ns=None):
-    """묶은 세로 막대. series: [(이름, 값 리스트)]"""
+def bars(cats, series, ymax, unit="%", ref=None, ref_label="", h=260, fmt="{:.2f}", ns=None, pts=None):
+    """묶은 세로 막대. series: [(이름, 값 리스트)]. pts: {이름: [[seed별 값], ...]} 이면 막대 위에 seed 점을 찍는다."""
     W, L, B, T, RM = 640, 44, 36, 18, 74
     pw, ph = W - L - RM, h - B - T
     ng, ns_ = len(cats), len(series)
@@ -66,6 +83,9 @@ def bars(cats, series, ymax, unit="%", ref=None, ref_label="", h=260, fmt="{:.2f
                      f'<path d="M{x:.1f},{T+ph} V{yy+4:.1f} q0,-4 4,-4 h{bw-8:.1f} q4,0 4,4 V{T+ph} Z" fill="{COL[name]}"/>'
                      f'<rect x="{x-1:.1f}" y="{T}" width="{bw+2:.1f}" height="{ph}" fill="transparent"/></g>'
                      f'<text x="{x+bw/2:.1f}" y="{yy-5:.1f}" class="val" text-anchor="middle">{fmt.format(v)}</text>')
+            if pts:
+                for sv in pts[name][gi]:
+                    s.append(f'<circle cx="{x+bw/2:.1f}" cy="{y(sv):.1f}" r="2.6" class="seed"/>')
         s.append(f'<text x="{L+gi*gw+gw/2:.1f}" y="{h-12}" class="cat" text-anchor="middle">{escape(c)}</text>')
     s.append(f'<line x1="{L}" x2="{W-RM}" y1="{T+ph}" y2="{T+ph}" class="axis"/></svg>')
     return "".join(s)
@@ -129,8 +149,12 @@ def table(head, rows, num_from=1):
 
 # ---------------- 본문 ----------------
 fig_main = bars(["모델만 (SID)", "인기만", "결합 + 나이"],
-                [(n, [FUSION[n][0], FUSION[n][1], FUSION[n][3]]) for n in ["V1", "H", "R"]],
+                [(n, [FUSION[n][0], FUSION[n][1], FUSION[n][3]]) for n in RUNS],
                 50, ref=20, ref_label="무작위 20%")
+fig_model = bars(["seed 42", "seed 123", "seed 2026", "평균"],
+                 [(n, [TEST_S[n][s][0] for s in SEEDS] + [TEST[n][0]]) for n in RUNS], 30, h=240)
+fig_gain = bars(["seed 42", "seed 123", "seed 2026", "평균"],
+                [(n, GAIN[n] + [mean(GAIN[n])]) for n in RUNS], 1.6, unit="%p", h=240)
 fig_c2 = hbars(C2_USE, 128)
 fig_cos = bars(COS_BINS, [("H", COS_TOP1["H"]), ("R", COS_TOP1["R"])], 40, ref=20, ref_label="무작위 20%", ns=COS_N)
 fig_lam = lines(LAMS, [(n, VAL_LAM[n]) for n in ["V1", "H", "R"]], 25, 45)
@@ -159,6 +183,7 @@ h3 {{ font-size:16px; margin:22px 0 8px; }}
 .chart text {{ font-family:inherit; }} .tick {{ fill:var(--muted); font-size:11px; }} .cat {{ fill:var(--text); font-size:12.5px; }}
 .val {{ fill:var(--text); font-size:11.5px; font-weight:600; }}
 .grid {{ stroke:var(--line); stroke-width:1; }} .axis {{ stroke:var(--muted); stroke-width:1; }} .ref {{ stroke:var(--muted); stroke-dasharray:4 4; }}
+.seed {{ fill:var(--surface); stroke:var(--text); stroke-width:1.4; }}
 .mark:hover path, .mark:hover circle:first-of-type {{ opacity:.8; }}
 .legend {{ display:flex; gap:16px; flex-wrap:wrap; font-size:13px; color:var(--muted); margin:2px 4px 6px; }}
 .legend i {{ display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; }}
@@ -173,14 +198,14 @@ tr.hl td {{ background:var(--hl); font-weight:600; }}
 </style></head><body><main>
 
 <h1>v2 재실험 결과 — 새 SID · 실험 H vs R · 인기 결합</h1>
-<p class="sub">EB-NeRD small · 여민 코드(RQ-VAE·SID 생성·Transformer) + 우리 설정(RQ-VAE UNI, Transformer V1) · Transformer seed 42 · 2026-11-23</p>
+<p class="sub">EB-NeRD small · 여민 코드(RQ-VAE·SID 생성·Transformer) + 우리 설정(RQ-VAE UNI, Transformer V1) · Transformer seed 42 · 123 · 2026 · 2026-11-23</p>
 
 <div class="box"><b>한 줄 요약</b>
 <ul>
-<li><b>새 전처리 + UNI 재학습으로 만든 SID(H, R)가 예전 SID(V1)보다 좋아요.</b> 같은 코드·같은 조건에서 test Top-1 26.16% → 27.51%(H) · 27.67%(R).</li>
-<li><b>H와 R은 Transformer 성능이 거의 같아요.</b> 다만 R은 Q2 코드를 128개 중 59~93개만 써요(H는 128개 모두).</li>
+<li><b>새 전처리 + UNI 재학습으로 만든 SID(H, R)가 예전 SID(V1)보다 좋아요.</b> Transformer seed 3개 평균 test Top-1 {ms([TEST_S["V1"][s][0] for s in SEEDS])}% → {ms([TEST_S["H"][s][0] for s in SEEDS])}%(H) · {ms([TEST_S["R"][s][0] for s in SEEDS])}%(R). 차이(약 1%p)가 seed 사이 흔들림(표준편차 0.15~0.36%p)보다 커요.</li>
+<li><b>H와 R은 Transformer 성능이 같다고 봐야 해요.</b> 평균 차이 0.16%p로 흔들림 안이고, seed마다 앞서는 쪽이 바뀌어요. 다만 R은 Q2 코드를 128개 중 59~93개만 써요(H는 128개 모두).</li>
 <li><b>병목은 두 곳이에요.</b> ① test에서 맞혀야 할 정답의 98%가 validation-only 기사인데, SID 생성 때 비슷하지 않은 사건에 억지로 붙은 기사는 거의 못 맞혀요. ② 인기 정보가 없어요. 직전 24시간 클릭 수만으로 42.9%를 맞혀요.</li>
-<li><b>재학습 없이 인기·나이를 점수에 더하면 44.2%.</b> SID는 인기 위에 +1.3%p를 더 보태고, 예전 SID(+0.5%p)보다 2.7배 많이 보태요.</li>
+<li><b>재학습 없이 인기·나이를 점수에 더하면 44.2%</b>(H·R, seed 3개 평균). SID가 인기 위에 보태는 몫은 H +{mean(GAIN["H"]):.2f}%p · R +{mean(GAIN["R"]):.2f}%p로 예전 SID(+{mean(GAIN["V1"]):.2f}%p)의 약 1.8배이고, seed 3개 모두 H·R이 V1보다 커요(범위가 겹치지 않음).</li>
 </ul></div>
 
 <h2>1. 실험 구성</h2>
@@ -216,14 +241,19 @@ tr.hl td {{ background:var(--hl); font-weight:600; }}
   ["validation-only가 물려받은 C2 종류", "127", "57"]])}
 <p class="cap">R1 코드에 H checkpoint를 넣어 돌리면 H와 같은 사건에 <b>100%</b> 붙어요(코사인을 둘 다 h로 하는지 확인). H와 R은 모델이 달라 실제로는 55%만 같은 사건에 붙어요.</p>
 
-<h2>4. Transformer 결과 (모델만, test)</h2>
-{table(["", "Top-1", "AUC", "MRR", "nDCG@5", "best epoch (validation Top-1)"],
- [["V1 재실행", f"{TEST['V1']['top1']:.2f}%", f"{TEST['V1']['auc']:.4f}", f"{TEST['V1']['mrr']:.4f}", f"{TEST['V1']['ndcg']:.4f}", "1 (25.91%)"],
-  ["★ H", f"{TEST['H']['top1']:.2f}%", f"{TEST['H']['auc']:.4f}", f"{TEST['H']['mrr']:.4f}", f"{TEST['H']['ndcg']:.4f}", "1 (27.58%)"],
-  ["★ R", f"{TEST['R']['top1']:.2f}%", f"{TEST['R']['auc']:.4f}", f"{TEST['R']['mrr']:.4f}", f"{TEST['R']['ndcg']:.4f}", "2 (27.11%)"]])}
-<p class="cap">test 122,573~122,680행 · seed 42 하나. V1 seed 사이 Top-1 흔들림이 약 0.4%p라, H · R의 +1.4%p는 그보다 커요. H와 R의 차이(0.16%p)는 그 안이에요. 모든 실험이 epoch 1~2에서 정점을 찍고 내려가요(빠른 과적합).</p>
+<h2>4. Transformer 결과 (모델만, test · seed 3개)</h2>
+{table(["seed 3개 평균 ± 표준편차", "Top-1 (%)", "AUC", "MRR", "nDCG@5"],
+ [[("★ " if n != "V1" else "") + ("V1 재실행" if n == "V1" else n),
+   ms([TEST_S[n][s][0] for s in SEEDS]), ms([TEST_S[n][s][1] for s in SEEDS], "{:.4f}"),
+   ms([TEST_S[n][s][2] for s in SEEDS], "{:.4f}"), ms([TEST_S[n][s][3] for s in SEEDS], "{:.4f}")] for n in RUNS])}
+<div class="fig">{legend(RUNS)}{fig_model}
+<p class="cap">test Top-1 (모델만). 세 seed 모두 H · R이 V1보다 높아요(H − V1 = +1.35 · +1.02 · +0.94%p).</p></div>
+{table(["test Top-1", "seed 42", "seed 123", "seed 2026"],
+ [[n] + [f"{TEST_S[n][s][0]:.2f}%" for s in SEEDS] for n in RUNS])}
+<p class="cap">test 122,573~122,680행. SID는 셋 다 RQ-VAE seed 42 모델로 만든 같은 파일이고, seed는 Transformer만 바꿨어요. H · R과 V1의 차이(약 1%p)는 표준편차보다 커서 우연으로 보기 어려워요. H와 R의 차이(0.16%p)는 표준편차 안이에요. seed 42에서는 모든 실험이 epoch 1~2에서 정점을 찍고 내려갔어요(빠른 과적합).</p>
 
 <h2>5. 어디서 막히나 — 진단</h2>
+<p class="cap">이 장은 Transformer seed 42 결과로 나눴어요.</p>
 <p>4번의 Top-1을 잰 <b>test 행</b>(validation 기간 노출의 뒤 절반, 약 12만 2천 행)을 다시 나눠 봤어요. 행마다 후보 5개 중 정답 기사가 하나 있는데, <b>그 정답 기사가 어떤 기사인지</b>에 따라 Transformer가 얼마나 맞혔는지를 봐요. 기사의 SID는 그보다 앞선 SID 생성 단계에서 이미 정해진 값이에요.</p>
 <h3>5-1. test 행의 정답 기사는 98%가 validation-only 기사</h3>
 {table(["", "정답이 validation-only 기사일 때 Top-1", "정답이 Train 기사일 때 Top-1", "후보 중 validation-only 기사"],
@@ -245,26 +275,32 @@ tr.hl td {{ background:var(--hl); font-weight:600; }}
 <p class="cap">클릭 수는 노출 시각 <b>이전</b>만 셌어요(미래 정보 없음). 모델(27%대)보다 인기만 쓴 쪽이 15%p 높아요. SID에는 "무슨 내용인지"만 있고 "지금 얼마나 읽히는지"는 없어요.</p>
 
 <h2>6. 인기·나이 결합 (재학습 없음)</h2>
-<p>최종 점수 = 모델 점수 + λ · log(1 + 직전 24시간 클릭 수) + μ · log(1 + 기사 나이(시간)). λ, μ는 <b>validation 앞 절반</b>에서 고르고(λ 13개 × μ 10개) test에는 한 번만 적용했어요. 세 실험 모두 <b>λ = 5, μ = −1</b>을 골랐어요.</p>
+<p>최종 점수 = 모델 점수 + λ · log(1 + 직전 24시간 클릭 수) + μ · log(1 + 기사 나이(시간)). λ, μ는 <b>validation 앞 절반</b>에서 고르고(λ 13개 × μ 10개) test에는 한 번만 적용했어요. 9번(실험 3개 × seed 3개) 모두 <b>λ = 5</b>를 골랐고, μ는 −1(7번) 또는 −2(V1 · R seed 2026)였어요.</p>
 <div class="fig">{legend(["V1", "H", "R"])}{fig_lam}
-<p class="cap">validation Top-1 vs λ (μ = 0). 꼭대기가 λ = 3~10 사이에서 평평해요.</p></div>
+<p class="cap">validation Top-1 vs λ (μ = 0, seed 42). 꼭대기가 λ = 3~10 사이에서 평평해요. seed 123 · 2026도 모양이 같아요.</p></div>
 <div class="fig">{legend(["V1", "H", "R"])}{fig_main}
-<p class="cap">test Top-1. 점선 = 무작위 20%.</p></div>
-{table(["test Top-1", "모델만", "인기만", "결합 (λ=5)", "결합 + 나이", "결합 + 나이 − 인기만"],
- [[n, f"{FUSION[n][0]:.2f}%", f"{FUSION[n][1]:.2f}%", f"{FUSION[n][2]:.2f}%", f"<b>{FUSION[n][3]:.2f}%</b>", f"<b>+{FUSION[n][3]-FUSION[n][1]:.2f}%p</b>"] for n in ["V1", "H", "R"]])}
-{table(["결합 + 나이 (test)", "AUC", "MRR", "nDCG@5"],
- [[n, f"{FUSION_FULL[n][0]:.4f}", f"{FUSION_FULL[n][1]:.4f}", f"{FUSION_FULL[n][2]:.4f}"] for n in ["V1", "H", "R"]])}
-<p class="cap"><b>읽는 법:</b> 크게 오른 건 인기 자체의 힘이에요. 봐야 할 건 마지막 열 — SID가 인기 위에 더 보태는 정보예요. 새 SID(H, R)는 +1.3%p, 예전 SID(V1)는 +0.5%p. 나이는 +0.1~0.25%p로 작지만 방향은 일관돼요.</p>
+<p class="cap">test Top-1, seed 3개 평균. 점선 = 무작위 20%. seed 사이 차이는 0.5%p 안쪽이라 이 축에서는 안 보여서, 아래 표와 그림에 seed별로 따로 적었어요.</p></div>
+{table(["test Top-1 (seed 3개 평균)", "모델만", "인기만", "결합 (λ=5)", "결합 + 나이", "결합 + 나이 − 인기만"],
+ [[n, f"{FUSION[n][0]:.2f}%", f"{FUSION[n][1]:.2f}%", f"{FUSION[n][2]:.2f}%", f"<b>{FUSION[n][3]:.2f}%</b>", f"<b>+{mean(GAIN[n]):.2f}%p</b>"] for n in RUNS])}
+<h3>SID가 인기 위에 보태는 몫 (결합 + 나이 − 인기만)</h3>
+<div class="fig">{legend(RUNS)}{fig_gain}
+<p class="cap">seed별 값과 평균. V1은 가장 높은 seed도 +{max(GAIN["V1"]):.2f}%p, H · R은 가장 낮은 seed도 +{min(GAIN["H"] + GAIN["R"]):.2f}%p라 범위가 겹치지 않아요.</p></div>
+{table(["결합 + 나이 − 인기만", "seed 42", "seed 123", "seed 2026", "평균 ± 표준편차"],
+ [[n] + [f"+{g:.2f}%p" for g in GAIN[n]] + [f"+{ms(GAIN[n])}%p"] for n in RUNS])}
+{table(["결합 + 나이 (test, seed 3개 평균 ± 표준편차)", "AUC", "MRR", "nDCG@5"],
+ [[n] + [ms([FUSION_FULL_S[n][s][k] for s in SEEDS], "{:.4f}") for k in range(3)] for n in RUNS])}
+<p class="cap"><b>읽는 법:</b> 크게 오른 건 인기 자체의 힘이에요. 봐야 할 건 SID가 인기 위에 더 보태는 몫이에요. 새 SID(H, R)는 +1.3%p, 예전 SID(V1)는 +0.7%p. H와 R은 여기서도 차이가 없어요. 나이는 +0.1~0.35%p로 작지만 9번 모두 같은 방향이에요.</p>
 
 <h2>7. 다음 단계</h2>
 {table(["", "내용", "상태"],
- [["seed 123 · 2026", "V1 · H · R Transformer를 seed 2개 더 → 차이가 우연이 아닌지 확인", "진행 중"],
-  ["인기·나이 함께 학습", "후보 점수 = SID 점수 + w1·logpop + w2·logage, w를 같이 학습(시작값 5, −1). Transformer가 인기로 설명 안 되는 개인 취향에 집중하도록", "여민 코드 수정 요청함, 입력 파일 준비 완료"],
+ [["seed 123 · 2026", "V1 · H · R Transformer를 seed 2개 더 → 차이가 우연이 아닌지 확인", "완료 (이 보고서)"],
+  ["인기·나이 함께 학습", "후보 점수 = SID 점수 + w1·logpop + w2·logage, w를 같이 학습(시작값 5, −1). Transformer가 인기로 설명 안 되는 개인 취향에 집중하도록. 나중에 더한 결합(H 44.24%)과 비교", "여민 코드에 우리 패치를 적용해 실행 준비 완료 (H → R → V1, seed 42)"],
   ["새 기사 SID 배정 개선", "코사인이 기준값보다 낮으면 사건 C2를 물려받지 않고 기사 자기 r1로 C2를 정하기", "제안"],
   ["R 초기화 보완", "Q2 초기화를 몇 epoch 학습 뒤에 하거나, r1을 정규화해 카테고리 쏠림 줄이기", "제안"]], num_from=99)}
 <div class="note"><b>주의</b><ul>
-<li>Transformer seed 42 하나의 결과예요. seed 123 · 2026 결과로 보완할 예정이에요.</li>
-<li>validation 앞 절반을 best epoch 고르기와 λ · μ 고르기에 두 번 썼어요. 고르는 값이 둘뿐이고 세 실험이 같은 값을 골라 영향은 작다고 봐요.</li>
+<li>seed는 Transformer만 바꿨어요. SID는 RQ-VAE seed 42 모델 하나로 만든 것이라, RQ-VAE seed에 따른 흔들림은 이 보고서에 들어 있지 않아요.</li>
+<li>5장 진단과 6장 λ 곡선은 seed 42 결과예요.</li>
+<li>validation 앞 절반을 best epoch 고르기와 λ · μ 고르기에 두 번 썼어요. 고르는 값이 둘뿐이고 λ는 9번 모두 같은 값(5)을 골라 영향은 작다고 봐요.</li>
 <li>클릭 기록이 train 노출 기간(5/18)부터라 train 첫 24시간 행의 클릭 수는 적게 세져요. test에는 해당 없어요.</li>
 </ul></div>
 </main></body></html>

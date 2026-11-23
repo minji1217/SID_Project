@@ -9,6 +9,7 @@
 #   입력  $V2/features/<RUN>/ (add_candidate_features.py 로 만든 파일) + SID 파일
 #   코드  ~/minji/yeomin_code_22028ba_features (없으면 여민 코드를 복사해 패치를 적용해서 만든다. 원래 여민 코드 폴더는 건드리지 않음)
 #   (선택) FEATURE_INIT="5.0, -1.0"  FEATURE_LR=0.01  NUM_EPOCHS=<n>
+#          FEATURE_LR=0 이면 가중치를 시작값(5, −1)에 고정하고 Transformer 만 학습 → 결과 폴더 <RUN>_seed<SEED>_flr0
 # 결과: $V2/transformer_feat/<RUN>_seed<SEED>/ (transformer.gin, checkpoint_best.pt, test_candidate_scores.parquet(sid_score 포함), test_metrics.json)
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -25,6 +26,9 @@ case "$RUN" in
 esac
 SID="$(realpath -m "${SID_PATH:-$SID}")"
 SUFFIX=""; [[ -n "${NUM_EPOCHS:-}" ]] && SUFFIX="_ep${NUM_EPOCHS}"
+# 가중치를 고정(FEATURE_LR=0)하거나 시작값을 바꾸면 결과 폴더를 따로 쓴다 (예: h_seed42_flr0)
+[[ -n "${FEATURE_LR:-}" && "${FEATURE_LR}" != "0.01" ]] && SUFFIX="${SUFFIX}_flr${FEATURE_LR}"
+[[ -n "${FEATURE_INIT:-}" ]] && SUFFIX="${SUFFIX}_init$(echo "$FEATURE_INIT" | tr -d ' ' | tr ',' '_')"
 OUT="$V2/transformer_feat/${RUN}_seed${SEED}${SUFFIX}"
 
 echo "== ⑥ 인기·나이 함께 학습: $RUN · seed $SEED → $OUT"
