@@ -1,0 +1,1650 @@
+import argparse
+import inspect
+import json
+import math
+
+from pathlib import Path
+from typing import Any
+
+import polars as pl
+
+from src import config
+
+
+# ============================================================
+# STEP 13. Candidate SID 충돌 분석
+#
+# 목적:
+# Transformer 입력용으로 만든 sequences parquet에서
+# 같은 impression 안의 candidate들이
+# SID만으로 서로 구분되는지 확인한다.
+#
+# 왜 필요한가:
+# Transformer는 candidate를 article_id가 아니라 SID로 본다.
+# 그래서 negative의 SID가 positive의 SID와 같으면
+# 모델 입력만 보고는 두 candidate를 구분할 수 없고,
+# 그 negative는 학습에서 사실상 label noise가 된다.
+#
+# 한 impression에 positive가 여러 개일 수 있으므로
+# 세 가지 관점으로 나눠서 본다.
+#
+#   1. negative 기준
+#      negative 중 positive와 SID가 겹치는 비율
+#
+#   2. positive 기준
+#      positive 하나하나가 몇 개의 negative와 겹치는지
+#      (positive가 여러 개면 오염 정도가 서로 다르다)
+#
+#   3. candidate 전체 기준
+#      candidate list 자체가 SID로 얼마나 구분되는지
+#
+# 입력:
+#   train_sequences.parquet
+#   validation_sequences.parquet
+#   (candidate_article_ids / candidate_c1~c4 / candidate_labels 필요)
+# ============================================================
+
+
+# 한 번에 메모리에 올릴 impression 수.
+# candidate list를 펼치면 행 수가 수십 배로 늘어나므로
+# 파일 전체를 올리지 않고 이 단위로 나눠서 누적한다.
+DEFAULT_CHUNK_SIZE = 100_000
+
+
+# SID 없이도 항상 필요한 컬럼
+BASE_CANDIDATE_COLUMNS = [
+    "candidate_article_ids",
+    "candidate_labels",
+]
+
+
+# sequences parquet 안에 들어 있는 SID 컬럼
+SID_CANDIDATE_COLUMNS = [
+    "candidate_c1",
+    "candidate_c2",
+    "candidate_c3",
+    "candidate_c4",
+]
+
+
+CANDIDATE_COLUMNS = (
+    BASE_CANDIDATE_COLUMNS
+    + SID_CANDIDATE_COLUMNS
+)
+
+
+# polars 2.0부터 explode의 empty_as_null 기본값이 바뀐다.
+# 빈 candidate list는 candidate 0개로 보는 것이 맞으므로
+# (null candidate 1개가 아니라) False를 명시한다.
+# 구버전 polars에는 인자가 없으므로 지원 여부를 확인하고 넘긴다.
+_EXPLODE_SUPPORTS_EMPTY_AS_NULL = (
+    "empty_as_null"
+    in inspect.signature(pl.DataFrame.explode).parameters
+)
+
+
+# RQ-VAE 실험 폴더 안의 SID 파일 이름
+SEMANTIC_ID_FILE_NAME = "article_semantic_ids.parquet"
+
+
+# article_semantic_ids.parquet에서 읽을 컬럼
+SEMANTIC_ID_COLUMNS = [
+    "article_id",
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+]
+
+
+# prefix level 정의
+# (c1,c2,c3)가 기본 분석 대상이고,
+# 나머지는 비교용으로 같이 계산한다.
+PREFIX_LEVELS: list[tuple[str, list[str]]] = [
+    ("c1", ["candidate_c1"]),
+    ("c1c2", ["candidate_c1", "candidate_c2"]),
+    ("c1c2c3", ["candidate_c1", "candidate_c2", "candidate_c3"]),
+    (
+        "c1c2c3c4",
+        [
+            "candidate_c1",
+            "candidate_c2",
+            "candidate_c3",
+            "candidate_c4",
+        ],
+    ),
+]
+
+
+# positive별 충돌 개수 분포를 자세히 볼 level
+PRIMARY_LEVEL = "c1c2c3"
+
+
+# impression별 candidate 수 분포에서 볼 백분위
+SIZE_QUANTILES = [0.01, 0.05, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
+
+
+# 분포를 낼 대상
+SIZE_TARGETS = [
+    ("candidate", "candidate 수"),
+    ("positive", "positive 수"),
+    ("negative", "negative 수"),
+]
+
+
+# 같은 SID를 공유하는 negative 묶음의 크기 구간
+NEGATIVE_GROUP_BUCKETS = [
+    ("2", 2, 2),
+    ("3-4", 3, 4),
+    ("5-9", 5, 9),
+    ("10+", 10, None),
+]
+
+
+# positive 하나가 몇 개의 negative와 겹치는지에 대한 분포 구간
+COLLISION_BUCKETS = [
+    ("0", 0, 0),
+    ("1", 1, 1),
+    ("2-4", 2, 4),
+    ("5-9", 5, 9),
+    ("10+", 10, None),
+]
+
+
+def _required_candidate_columns(
+    use_external_sid: bool,
+) -> list[str]:
+    """
+    분석에 필요한 candidate 컬럼 목록.
+
+    외부 article_semantic_ids.parquet에서 SID를 붙일 때는
+    sequences 쪽 SID 컬럼이 없어도 된다.
+    """
+
+    if use_external_sid:
+        return list(BASE_CANDIDATE_COLUMNS)
+
+    return list(CANDIDATE_COLUMNS)
+
+
+def _validate_candidate_columns(
+    column_names: list[str],
+    use_external_sid: bool = False,
+) -> None:
+    """
+    candidate 분석에 필요한 컬럼이 모두 있는지 검사한다.
+    """
+
+    missing_columns = [
+        column_name
+        for column_name in _required_candidate_columns(
+            use_external_sid
+        )
+        if column_name not in column_names
+    ]
+
+    if missing_columns:
+        raise ValueError(
+            "candidate 컬럼이 없습니다: "
+            + ", ".join(missing_columns)
+        )
+
+
+def _explode_candidates(
+    sequence_df: pl.DataFrame,
+    columns: list[str] | None = None,
+) -> pl.DataFrame:
+    """
+    impression 단위 list 컬럼을 candidate 단위 long format으로 편다.
+
+    한 행 = 하나의 candidate
+    row_index = 원래 impression 식별자
+    """
+
+    if columns is None:
+        columns = list(CANDIDATE_COLUMNS)
+
+    explode_options = (
+        {"empty_as_null": False}
+        if _EXPLODE_SUPPORTS_EMPTY_AS_NULL
+        else {}
+    )
+
+    return (
+        sequence_df
+        .select(columns)
+        .with_row_index("row_index")
+        .explode(columns, **explode_options)
+    )
+
+
+def resolve_semantic_ids_path(
+    semantic_ids_path: Path,
+) -> Path:
+    """
+    실험 폴더 경로를 줘도 되도록 한다.
+
+    폴더를 주면 그 안의 article_semantic_ids.parquet을 찾는다.
+    VS Code에서 실험 폴더를 그대로 복사해 붙여넣는 경우가 많다.
+    """
+
+    semantic_ids_path = Path(semantic_ids_path)
+
+    if semantic_ids_path.is_dir():
+        candidate_path = (
+            semantic_ids_path
+            / SEMANTIC_ID_FILE_NAME
+        )
+
+        if not candidate_path.exists():
+            raise FileNotFoundError(
+                f"{semantic_ids_path} 안에 "
+                f"{SEMANTIC_ID_FILE_NAME}이 없습니다."
+            )
+
+        return candidate_path
+
+    if not semantic_ids_path.exists():
+        raise FileNotFoundError(
+            f"경로를 찾을 수 없습니다: {semantic_ids_path}"
+        )
+
+    return semantic_ids_path
+
+
+def _load_sid_lookup(
+    semantic_ids_path: Path,
+) -> pl.DataFrame:
+    """
+    article_semantic_ids.parquet을 읽어서
+    candidate에 join할 수 있는 lookup table로 만든다.
+
+    RQ-VAE 실험 폴더마다 SID가 다르므로
+    sequences를 다시 빌드하지 않고
+    이 파일만 바꿔서 실험 간 비교를 할 수 있다.
+    """
+
+    semantic_ids_path = resolve_semantic_ids_path(semantic_ids_path)
+
+    semantic_id_df = pl.read_parquet(semantic_ids_path)
+
+    missing_columns = [
+        column_name
+        for column_name in SEMANTIC_ID_COLUMNS
+        if column_name not in semantic_id_df.columns
+    ]
+
+    if missing_columns:
+        raise ValueError(
+            f"{semantic_ids_path}에 컬럼이 없습니다: "
+            + ", ".join(missing_columns)
+        )
+
+    duplicate_count = (
+        semantic_id_df.height
+        - semantic_id_df.get_column("article_id").n_unique()
+    )
+
+    if duplicate_count != 0:
+        raise ValueError(
+            f"{semantic_ids_path}의 article_id가 중복입니다. "
+            f"중복 행 수={duplicate_count}"
+        )
+
+    return (
+        semantic_id_df
+        .select(SEMANTIC_ID_COLUMNS)
+        .with_columns(
+            pl.col("article_id").cast(pl.Int64)
+        )
+        .rename({
+            "article_id": "candidate_article_ids",
+            "c1": "candidate_c1",
+            "c2": "candidate_c2",
+            "c3": "candidate_c3",
+            "c4": "candidate_c4",
+        })
+    )
+
+
+def analyze_semantic_id_usage(
+    semantic_ids_path: Path,
+) -> dict[str, Any]:
+    """
+    article_semantic_ids.parquet 자체의 SID 사용 현황을 본다.
+
+    candidate 충돌은 결국
+    "몇 개의 기사가 같은 (c1,c2,c3)를 공유하는가"에서 나오므로
+    codebook 사용률과 SID당 기사 수 분포를 같이 봐야
+    충돌 비율의 원인을 알 수 있다.
+    """
+
+    semantic_ids_path = resolve_semantic_ids_path(semantic_ids_path)
+
+    semantic_id_df = pl.read_parquet(semantic_ids_path)
+
+    article_count = semantic_id_df.height
+
+    sid_group_df = (
+        semantic_id_df
+        .group_by(["c1", "c2", "c3"])
+        .agg(pl.len().alias("article_count"))
+    )
+
+    shared_article_count = int(
+        sid_group_df
+        .filter(pl.col("article_count") >= 2)
+        .get_column("article_count")
+        .sum()
+    )
+
+    return {
+        "semantic_ids_path": str(semantic_ids_path),
+        "article_count": article_count,
+        "distinct_c1_count": semantic_id_df.get_column("c1").n_unique(),
+        "distinct_c2_count": semantic_id_df.get_column("c2").n_unique(),
+        "distinct_c3_count": semantic_id_df.get_column("c3").n_unique(),
+        "distinct_c1c2c3_count": sid_group_df.height,
+        # 같은 (c1,c2,c3)를 다른 기사와 공유하는 기사 수
+        "shared_sid_article_count": shared_article_count,
+        "shared_sid_article_ratio": _safe_ratio(
+            shared_article_count,
+            article_count,
+        ),
+        # 하나의 (c1,c2,c3)에 몰린 최대 기사 수 (= max c4 + 1)
+        "max_article_per_sid": int(
+            sid_group_df.get_column("article_count").max() or 0
+        ),
+        "mean_article_per_sid": _safe_ratio(
+            article_count,
+            sid_group_df.height,
+        ),
+    }
+
+
+def _new_level_counter() -> dict[str, Any]:
+    """
+    prefix level 하나에 대한 누적 counter를 만든다.
+
+    chunk 단위로 값을 더해도 결과가 같도록
+    비율이 아니라 원시 count만 누적한다.
+    """
+
+    return {
+        # --- negative 기준 ---
+        "negative_count": 0,
+        "collided_negative_count": 0,
+        "row_with_negative_count": 0,
+        "row_with_collision_count": 0,
+        # impression별 충돌 negative 비율의 합 (macro 평균용)
+        "row_ratio_sum": 0.0,
+
+        # --- positive 기준 ---
+        "positive_count": 0,
+        # 충돌 negative를 하나라도 가진 positive 수
+        "positive_with_collision_count": 0,
+        # (positive, 충돌 negative) 쌍의 총 개수
+        "positive_negative_pair_count": 0,
+        # positive 하나가 겪는 최대 충돌 negative 수
+        "positive_collision_max": 0,
+        # positive별 (충돌 negative / 그 행의 negative 총수) 합
+        "positive_ratio_sum": 0.0,
+        # 다른 positive와 SID가 같아진 positive 수
+        "positive_in_positive_collision_count": 0,
+        # positive별 충돌 개수 분포
+        "collision_histogram": {
+            bucket_name: 0
+            for bucket_name, _, _ in COLLISION_BUCKETS
+        },
+
+        # --- negative끼리 충돌 ---
+        # 같은 impression 안에서 다른 negative와 SID가 같은 negative 수
+        "negative_in_negative_collision_count": 0,
+        # 그룹당 1개만 남긴다고 할 때 없어지는 negative 수
+        "redundant_negative_count": 0,
+        # negative가 2개 이상 뭉친 SID 그룹 수
+        "negative_duplicate_group_count": 0,
+        # 한 SID에 뭉친 최대 negative 수
+        "negative_collision_max": 0,
+        # 중복 negative를 가진 impression 수
+        "row_with_negative_duplicate_count": 0,
+        # impression별 중복 negative 비율의 합
+        "negative_duplicate_ratio_sum": 0.0,
+        # negative 묶음 크기 분포
+        "negative_group_histogram": {
+            bucket_name: 0
+            for bucket_name, _, _ in NEGATIVE_GROUP_BUCKETS
+        },
+
+        # --- candidate 전체 기준 ---
+        "candidate_count": 0,
+        # 같은 SID를 가진 candidate가 2개 이상인 그룹에 속한 candidate 수
+        "ambiguous_candidate_count": 0,
+        # 서로 다른 SID의 개수 (candidate list의 SID 해상도)
+        "distinct_sid_count": 0,
+    }
+
+
+def _bucket_expression(
+    buckets: list[tuple[str, int, int | None]],
+) -> pl.Expr:
+    """
+    negative_count를 분포 구간 이름으로 바꾸는 식.
+
+    buckets는 (이름, 하한, 상한) 목록이고 오름차순이어야 한다.
+    상한이 None이면 마지막 구간이다.
+    """
+
+    first_name, _, first_upper = buckets[0]
+
+    expression = pl.when(
+        pl.col("negative_count") <= first_upper
+    ).then(pl.lit(first_name))
+
+    for bucket_name, lower_bound, upper_bound in buckets[1:]:
+        if upper_bound is None:
+            expression = expression.when(
+                pl.col("negative_count") >= lower_bound
+            ).then(pl.lit(bucket_name))
+        else:
+            expression = expression.when(
+                pl.col("negative_count") <= upper_bound
+            ).then(pl.lit(bucket_name))
+
+    return expression.otherwise(pl.lit(buckets[-1][0]))
+
+
+def _accumulate_level(
+    counter: dict[str, Any],
+    candidate_df: pl.DataFrame,
+    sid_columns: list[str],
+) -> None:
+    """
+    chunk 하나의 충돌 결과를 counter에 더한다.
+
+    핵심 아이디어:
+    (impression, SID prefix) 단위로 묶으면
+    한 그룹 안의 positive 수와 negative 수만으로
+    negative 기준 / positive 기준 통계를 모두 만들 수 있다.
+
+    예) 한 그룹에 positive 2개, negative 3개가 있으면
+        - 충돌 negative는 3개 (positive가 몇 개든 중복으로 세지 않는다)
+        - positive 2개는 각각 negative 3개와 충돌한다
+        - 그 positive 2개는 서로도 SID가 같다
+
+    chunk는 impression 단위로 자르므로
+    한 impression의 candidate가 두 chunk로 쪼개지지 않는다.
+    """
+
+    # STEP 13-1. (impression, SID) 그룹 집계
+    group_df = (
+        candidate_df
+        .group_by(["row_index"] + sid_columns)
+        .agg([
+            (pl.col("candidate_labels") == 1)
+            .sum()
+            .alias("positive_count"),
+
+            (pl.col("candidate_labels") == 0)
+            .sum()
+            .alias("negative_count"),
+        ])
+        .with_columns(
+            (
+                pl.col("positive_count")
+                + pl.col("negative_count")
+            ).alias("candidate_count")
+        )
+    )
+
+    # STEP 13-2. impression 단위 집계
+    # 충돌 negative는 positive가 있는 그룹의 negative 전부다.
+    row_df = (
+        group_df
+        .group_by("row_index")
+        .agg([
+            pl.col("negative_count")
+            .sum()
+            .alias("row_negative_count"),
+
+            pl.col("negative_count")
+            .filter(pl.col("positive_count") > 0)
+            .sum()
+            .alias("row_collided_negative_count"),
+
+            # 다른 negative와 SID가 같은 negative 수
+            pl.col("negative_count")
+            .filter(pl.col("negative_count") >= 2)
+            .sum()
+            .alias("row_duplicate_negative_count"),
+        ])
+        .with_columns([
+            pl.col("row_collided_negative_count").fill_null(0),
+            pl.col("row_duplicate_negative_count").fill_null(0),
+        ])
+    )
+
+    row_with_negative_df = row_df.filter(
+        pl.col("row_negative_count") > 0
+    )
+
+    counter["negative_count"] += int(
+        row_df.get_column("row_negative_count").sum()
+    )
+
+    counter["collided_negative_count"] += int(
+        row_df.get_column("row_collided_negative_count").sum()
+    )
+
+    counter["row_with_negative_count"] += row_with_negative_df.height
+
+    counter["row_with_collision_count"] += (
+        row_df
+        .filter(pl.col("row_collided_negative_count") > 0)
+        .height
+    )
+
+    counter["row_ratio_sum"] += float(
+        row_with_negative_df
+        .select(
+            (
+                pl.col("row_collided_negative_count")
+                / pl.col("row_negative_count")
+            ).sum()
+        )
+        .item()
+    )
+
+    # STEP 13-2-1. negative끼리 충돌 집계
+    # positive 유무와 무관하게 negative가 2개 이상 뭉친 SID 그룹을 본다.
+    # positive와도 겹치는 negative가 여기에 같이 잡힐 수 있는데,
+    # 서로 다른 관점의 지표이므로 중복 계상이 맞다.
+    negative_group_df = group_df.filter(
+        pl.col("negative_count") >= 2
+    )
+
+    counter["negative_in_negative_collision_count"] += int(
+        negative_group_df.get_column("negative_count").sum()
+    )
+
+    counter["redundant_negative_count"] += int(
+        negative_group_df
+        .select(
+            (pl.col("negative_count") - 1).sum()
+        )
+        .item()
+        or 0
+    )
+
+    counter["negative_duplicate_group_count"] += (
+        negative_group_df.height
+    )
+
+    chunk_negative_max = (
+        negative_group_df
+        .get_column("negative_count")
+        .max()
+    )
+
+    if chunk_negative_max is not None:
+        counter["negative_collision_max"] = max(
+            counter["negative_collision_max"],
+            int(chunk_negative_max),
+        )
+
+    counter["row_with_negative_duplicate_count"] += (
+        row_df
+        .filter(pl.col("row_duplicate_negative_count") > 0)
+        .height
+    )
+
+    counter["negative_duplicate_ratio_sum"] += float(
+        row_with_negative_df
+        .select(
+            (
+                pl.col("row_duplicate_negative_count")
+                / pl.col("row_negative_count")
+            ).sum()
+        )
+        .item()
+        or 0.0
+    )
+
+    negative_histogram_df = (
+        negative_group_df
+        .group_by(
+            _bucket_expression(NEGATIVE_GROUP_BUCKETS).alias("bucket")
+        )
+        .agg(pl.len().alias("count"))
+    )
+
+    for bucket_name, bucket_count in negative_histogram_df.iter_rows():
+        counter["negative_group_histogram"][bucket_name] += int(
+            bucket_count
+        )
+
+    # STEP 13-3. positive 기준 집계
+    # 그룹의 negative 수가 곧 그 그룹에 속한 positive 각각의 충돌 개수다.
+    positive_group_df = (
+        group_df
+        .filter(pl.col("positive_count") > 0)
+        .join(
+            row_df.select(["row_index", "row_negative_count"]),
+            on="row_index",
+            how="left",
+        )
+    )
+
+    counter["positive_count"] += int(
+        positive_group_df.get_column("positive_count").sum()
+    )
+
+    counter["positive_negative_pair_count"] += int(
+        positive_group_df
+        .select(
+            (
+                pl.col("positive_count")
+                * pl.col("negative_count")
+            ).sum()
+        )
+        .item()
+    )
+
+    counter["positive_with_collision_count"] += int(
+        positive_group_df
+        .filter(pl.col("negative_count") > 0)
+        .get_column("positive_count")
+        .sum()
+    )
+
+    chunk_collision_max = (
+        positive_group_df
+        .get_column("negative_count")
+        .max()
+    )
+
+    if chunk_collision_max is not None:
+        counter["positive_collision_max"] = max(
+            counter["positive_collision_max"],
+            int(chunk_collision_max),
+        )
+
+    # positive 하나가 그 행의 negative 중 몇 %와 겹치는지
+    counter["positive_ratio_sum"] += float(
+        positive_group_df
+        .filter(pl.col("row_negative_count") > 0)
+        .select(
+            (
+                pl.col("positive_count")
+                * pl.col("negative_count")
+                / pl.col("row_negative_count")
+            ).sum()
+        )
+        .item()
+        or 0.0
+    )
+
+    # positive끼리 SID가 같아진 경우
+    counter["positive_in_positive_collision_count"] += int(
+        positive_group_df
+        .filter(pl.col("positive_count") >= 2)
+        .get_column("positive_count")
+        .sum()
+    )
+
+    # STEP 13-4. positive별 충돌 개수 분포
+    histogram_df = (
+        positive_group_df
+        .group_by(
+            _bucket_expression(COLLISION_BUCKETS).alias("bucket")
+        )
+        .agg(
+            pl.col("positive_count").sum().alias("count")
+        )
+    )
+
+    for bucket_name, bucket_count in histogram_df.iter_rows():
+        counter["collision_histogram"][bucket_name] += int(
+            bucket_count
+        )
+
+    # STEP 13-5. candidate 전체 기준 집계
+    counter["candidate_count"] += candidate_df.height
+
+    counter["ambiguous_candidate_count"] += int(
+        group_df
+        .filter(pl.col("candidate_count") >= 2)
+        .get_column("candidate_count")
+        .sum()
+    )
+
+    counter["distinct_sid_count"] += group_df.height
+
+
+def _new_size_counter() -> dict[str, dict[int, int]]:
+    """
+    impression별 candidate 수 분포를 담을 빈도표를 만든다.
+
+    candidate 수는 작은 정수라서
+    "값 -> 등장 횟수" 빈도표를 누적하면
+    chunk로 나눠 읽어도 중앙값과 백분위를 정확히 구할 수 있다.
+    (평균만 누적하면 분포를 복원할 수 없다.)
+    """
+
+    return {
+        target_key: {}
+        for target_key, _ in SIZE_TARGETS
+    }
+
+
+def _accumulate_sizes(
+    size_counter: dict[str, dict[int, int]],
+    chunk_df: pl.DataFrame,
+) -> None:
+    """
+    chunk의 impression별 candidate / positive / negative 수를
+    빈도표에 더한다.
+
+    candidate_labels는 0/1 list이므로
+    길이가 candidate 수, 합이 positive 수다.
+    """
+
+    size_df = (
+        chunk_df
+        .select([
+            pl.col("candidate_labels")
+            .list.len()
+            .cast(pl.Int64)
+            .alias("candidate"),
+
+            pl.col("candidate_labels")
+            .list.sum()
+            .cast(pl.Int64)
+            .alias("positive"),
+        ])
+        .with_columns(
+            (
+                pl.col("candidate")
+                - pl.col("positive")
+            ).alias("negative")
+        )
+    )
+
+    for target_key, _ in SIZE_TARGETS:
+        value_count_df = (
+            size_df
+            .get_column(target_key)
+            .value_counts()
+        )
+
+        for value, count in value_count_df.iter_rows():
+            size_counter[target_key][int(value)] = (
+                size_counter[target_key].get(int(value), 0)
+                + int(count)
+            )
+
+
+def _quantile_from_histogram(
+    sorted_values: list[int],
+    cumulative_counts: list[int],
+    total_count: int,
+    quantile: float,
+) -> int:
+    """
+    빈도표에서 백분위 값을 구한다.
+
+    nearest-rank 방식:
+    정렬했을 때 ceil(quantile * N)번째 값을 그대로 쓴다.
+    보간하지 않으므로 항상 실제로 존재하는 값이 나온다.
+    """
+
+    if total_count <= 0:
+        return 0
+
+    target_rank = max(
+        1,
+        math.ceil(quantile * total_count),
+    )
+
+    for index, cumulative_count in enumerate(cumulative_counts):
+        if cumulative_count >= target_rank:
+            return sorted_values[index]
+
+    return sorted_values[-1]
+
+
+def _finalize_size(
+    histogram: dict[int, int],
+) -> dict[str, Any]:
+    """
+    빈도표를 분포 통계로 바꾼다.
+    """
+
+    if not histogram:
+        return {
+            "impression_count": 0,
+            "total": 0,
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0,
+            "max": 0,
+            "zero_count": 0,
+            "zero_ratio": 0.0,
+            "quantiles": {},
+            "most_common": [],
+        }
+
+    sorted_values = sorted(histogram.keys())
+
+    cumulative_counts = []
+    running_total = 0
+
+    for value in sorted_values:
+        running_total += histogram[value]
+        cumulative_counts.append(running_total)
+
+    total_count = running_total
+
+    value_sum = sum(
+        value * histogram[value]
+        for value in sorted_values
+    )
+
+    mean = value_sum / total_count
+
+    variance = sum(
+        histogram[value] * (value - mean) ** 2
+        for value in sorted_values
+    ) / total_count
+
+    most_common = sorted(
+        histogram.items(),
+        key=lambda item: (-item[1], item[0]),
+    )[:5]
+
+    return {
+        "impression_count": total_count,
+        "total": value_sum,
+        "mean": mean,
+        "std": math.sqrt(variance),
+        "min": sorted_values[0],
+        "max": sorted_values[-1],
+        # 해당 값이 0인 impression (negative가 없는 행 등)
+        "zero_count": histogram.get(0, 0),
+        "zero_ratio": _safe_ratio(
+            histogram.get(0, 0),
+            total_count,
+        ),
+        "quantiles": {
+            f"p{int(quantile * 100)}": _quantile_from_histogram(
+                sorted_values,
+                cumulative_counts,
+                total_count,
+                quantile,
+            )
+            for quantile in SIZE_QUANTILES
+        },
+        "most_common": [
+            {"value": value, "count": count}
+            for value, count in most_common
+        ],
+    }
+
+
+def _safe_ratio(
+    numerator: float,
+    denominator: float,
+) -> float:
+    if denominator <= 0:
+        return 0.0
+
+    return numerator / denominator
+
+
+def _finalize_level(
+    counter: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    누적 counter를 최종 비율로 바꾼다.
+    """
+
+    negative_count = int(counter["negative_count"])
+    positive_count = int(counter["positive_count"])
+    candidate_count = int(counter["candidate_count"])
+
+    return {
+        # --- negative 기준 ---
+        "negative_count": negative_count,
+        "collided_negative_count": int(
+            counter["collided_negative_count"]
+        ),
+        # micro: negative 전체를 한 덩어리로 보고 계산한 비율
+        "collided_negative_ratio_micro": _safe_ratio(
+            counter["collided_negative_count"],
+            negative_count,
+        ),
+        # macro: impression마다 비율을 구한 뒤 평균
+        "collided_negative_ratio_macro": _safe_ratio(
+            counter["row_ratio_sum"],
+            counter["row_with_negative_count"],
+        ),
+        "row_with_negative_count": int(
+            counter["row_with_negative_count"]
+        ),
+        "row_with_collision_count": int(
+            counter["row_with_collision_count"]
+        ),
+        "row_with_collision_ratio": _safe_ratio(
+            counter["row_with_collision_count"],
+            counter["row_with_negative_count"],
+        ),
+
+        # --- positive 기준 ---
+        "positive_count": positive_count,
+        "positive_with_collision_count": int(
+            counter["positive_with_collision_count"]
+        ),
+        # 충돌 negative를 하나라도 가진 positive 비율
+        "positive_with_collision_ratio": _safe_ratio(
+            counter["positive_with_collision_count"],
+            positive_count,
+        ),
+        "positive_negative_pair_count": int(
+            counter["positive_negative_pair_count"]
+        ),
+        # positive 하나당 평균 충돌 negative 개수
+        "collision_per_positive_mean": _safe_ratio(
+            counter["positive_negative_pair_count"],
+            positive_count,
+        ),
+        "collision_per_positive_max": int(
+            counter["positive_collision_max"]
+        ),
+        # positive 하나가 같은 행 negative 중 평균 몇 %와 겹치는지
+        "collision_ratio_per_positive_mean": _safe_ratio(
+            counter["positive_ratio_sum"],
+            positive_count,
+        ),
+        "positive_in_positive_collision_count": int(
+            counter["positive_in_positive_collision_count"]
+        ),
+        "positive_in_positive_collision_ratio": _safe_ratio(
+            counter["positive_in_positive_collision_count"],
+            positive_count,
+        ),
+        "collision_histogram": dict(
+            counter["collision_histogram"]
+        ),
+
+        # --- negative끼리 충돌 ---
+        "negative_in_negative_collision_count": int(
+            counter["negative_in_negative_collision_count"]
+        ),
+        # 다른 negative와 SID가 같은 negative의 비율
+        "negative_in_negative_collision_ratio": _safe_ratio(
+            counter["negative_in_negative_collision_count"],
+            negative_count,
+        ),
+        "redundant_negative_count": int(
+            counter["redundant_negative_count"]
+        ),
+        # 그룹당 1개만 남길 때 사라지는 negative 비율
+        "redundant_negative_ratio": _safe_ratio(
+            counter["redundant_negative_count"],
+            negative_count,
+        ),
+        "negative_duplicate_group_count": int(
+            counter["negative_duplicate_group_count"]
+        ),
+        "negative_collision_max": int(
+            counter["negative_collision_max"]
+        ),
+        "row_with_negative_duplicate_count": int(
+            counter["row_with_negative_duplicate_count"]
+        ),
+        "row_with_negative_duplicate_ratio": _safe_ratio(
+            counter["row_with_negative_duplicate_count"],
+            counter["row_with_negative_count"],
+        ),
+        # impression별 중복 negative 비율의 평균
+        "negative_duplicate_ratio_macro": _safe_ratio(
+            counter["negative_duplicate_ratio_sum"],
+            counter["row_with_negative_count"],
+        ),
+        "negative_group_histogram": dict(
+            counter["negative_group_histogram"]
+        ),
+
+        # --- candidate 전체 기준 ---
+        "candidate_count": candidate_count,
+        "ambiguous_candidate_count": int(
+            counter["ambiguous_candidate_count"]
+        ),
+        # SID가 같은 candidate가 2개 이상인 그룹에 속한 candidate 비율
+        "ambiguous_candidate_ratio": _safe_ratio(
+            counter["ambiguous_candidate_count"],
+            candidate_count,
+        ),
+        "distinct_sid_count": int(counter["distinct_sid_count"]),
+        # candidate 대비 고유 SID 비율 (1.0이면 완전히 구분됨)
+        "distinct_sid_ratio": _safe_ratio(
+            counter["distinct_sid_count"],
+            candidate_count,
+        ),
+    }
+
+
+def analyze_candidate_sid_collision(
+    sequences_path: Path,
+    split_name: str,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    limit: int | None = None,
+    semantic_ids_path: Path | None = None,
+) -> dict[str, Any]:
+    """
+    sequences parquet 하나를 읽어서
+    prefix level별 candidate SID 충돌 통계를 만든다.
+
+    파일 전체를 한 번에 올리지 않고
+    impression chunk 단위로 읽어서 누적하므로
+    candidate 수가 많아도 메모리 사용량이 일정하다.
+
+    semantic_ids_path를 주면
+    sequences 안의 SID 컬럼을 무시하고
+    그 파일의 SID를 candidate_article_ids에 붙여서 분석한다.
+    RQ-VAE 실험별 SID를 sequences 재생성 없이 비교할 때 쓴다.
+    """
+
+    if chunk_size <= 0:
+        raise ValueError(
+            "chunk_size는 1 이상의 정수여야 합니다."
+        )
+
+    use_external_sid = semantic_ids_path is not None
+
+    if use_external_sid:
+        semantic_ids_path = resolve_semantic_ids_path(
+            semantic_ids_path
+        )
+
+    sid_lookup_df = (
+        _load_sid_lookup(semantic_ids_path)
+        if use_external_sid
+        else None
+    )
+
+    read_columns = _required_candidate_columns(use_external_sid)
+
+    lazy_frame = pl.scan_parquet(sequences_path)
+
+    _validate_candidate_columns(
+        lazy_frame.collect_schema().names(),
+        use_external_sid=use_external_sid,
+    )
+
+    total_row_count = (
+        lazy_frame
+        .select(pl.len())
+        .collect()
+        .item()
+    )
+
+    if limit is not None:
+        total_row_count = min(total_row_count, limit)
+
+    impression_count = 0
+    total_candidate_count = 0
+    positive_count = 0
+    negative_count = 0
+    same_article_negative_count = 0
+    multi_positive_row_count = 0
+    missing_sid_candidate_count = 0
+
+    level_counters = {
+        level_name: _new_level_counter()
+        for level_name, _ in PREFIX_LEVELS
+    }
+
+    size_counter = _new_size_counter()
+
+    for offset in range(0, total_row_count, chunk_size):
+        current_chunk_size = min(
+            chunk_size,
+            total_row_count - offset,
+        )
+
+        chunk_df = (
+            lazy_frame
+            .slice(offset, current_chunk_size)
+            .select(read_columns)
+            .collect()
+        )
+
+        candidate_df = _explode_candidates(chunk_df, read_columns)
+
+        impression_count += chunk_df.height
+
+        # STEP 13-5-0. impression별 candidate 구성 분포
+        # SID를 못 찾아 제외되는 candidate가 있어도
+        # 여기서는 원래 candidate list 기준으로 센다.
+        _accumulate_sizes(size_counter, chunk_df)
+
+        # STEP 13-5-1. 외부 SID 붙이기
+        # article_semantic_ids.parquet에 없는 기사는 SID가 null이 되므로
+        # 따로 세고 분석에서는 제외한다.
+        if use_external_sid:
+            candidate_df = candidate_df.with_columns(
+                pl.col("candidate_article_ids").cast(pl.Int64)
+            ).join(
+                sid_lookup_df,
+                on="candidate_article_ids",
+                how="left",
+            )
+
+            missing_df = candidate_df.filter(
+                pl.col("candidate_c1").is_null()
+            )
+
+            missing_sid_candidate_count += missing_df.height
+
+            if missing_df.height > 0:
+                candidate_df = candidate_df.filter(
+                    pl.col("candidate_c1").is_not_null()
+                )
+
+        total_candidate_count += candidate_df.height
+
+        positive_df = candidate_df.filter(
+            pl.col("candidate_labels") == 1
+        )
+
+        negative_df = candidate_df.filter(
+            pl.col("candidate_labels") == 0
+        )
+
+        positive_count += positive_df.height
+        negative_count += negative_df.height
+
+        # positive가 2개 이상인 impression 수
+        multi_positive_row_count += (
+            chunk_df
+            .filter(pl.col("candidate_labels").list.sum() >= 2)
+            .height
+        )
+
+        # STEP 13-6. article_id 자체가 겹치는 경우
+        # SID 해상도 문제가 아니라 candidate 생성 문제이므로 따로 센다.
+        same_article_negative_count += (
+            negative_df
+            .select(["row_index", "candidate_article_ids"])
+            .join(
+                positive_df
+                .select(["row_index", "candidate_article_ids"])
+                .unique(),
+                on=["row_index", "candidate_article_ids"],
+                how="semi",
+            )
+            .height
+        )
+
+        # STEP 13-7. prefix level별 충돌 누적
+        for level_name, sid_columns in PREFIX_LEVELS:
+            _accumulate_level(
+                level_counters[level_name],
+                candidate_df,
+                sid_columns,
+            )
+
+    return {
+        "split_name": split_name,
+        "sequences_path": str(sequences_path),
+        "impression_count": impression_count,
+        "multi_positive_row_count": multi_positive_row_count,
+        "multi_positive_row_ratio": _safe_ratio(
+            multi_positive_row_count,
+            impression_count,
+        ),
+        "total_candidate_count": total_candidate_count,
+        "positive_count": positive_count,
+        "negative_count": negative_count,
+        "positive_per_row_mean": _safe_ratio(
+            positive_count,
+            impression_count,
+        ),
+        "same_article_negative_count": same_article_negative_count,
+        "semantic_ids_path": (
+            str(semantic_ids_path)
+            if semantic_ids_path is not None
+            else None
+        ),
+        "missing_sid_candidate_count": missing_sid_candidate_count,
+        "size_distribution": {
+            target_key: _finalize_size(size_counter[target_key])
+            for target_key, _ in SIZE_TARGETS
+        },
+        "levels": {
+            level_name: _finalize_level(level_counters[level_name])
+            for level_name, _ in PREFIX_LEVELS
+        },
+    }
+
+
+def _print_size_distribution(
+    size_distribution: dict[str, Any],
+) -> None:
+    """
+    impression별 candidate / positive / negative 수 분포를 출력한다.
+    """
+
+    quantile_names = [
+        f"p{int(quantile * 100)}"
+        for quantile in SIZE_QUANTILES
+    ]
+
+    print()
+    print("[0-1] impression별 candidate 구성 분포")
+
+    header = (
+        f"{'항목':<14}{'평균':>9}{'표준편차':>10}{'최소':>7}"
+    )
+
+    for quantile_name in quantile_names:
+        header += f"{quantile_name:>7}"
+
+    header += f"{'최대':>8}"
+
+    print(header)
+    print("-" * (40 + 7 * len(quantile_names) + 8))
+
+    for target_key, target_label in SIZE_TARGETS:
+        stats = size_distribution[target_key]
+
+        line = (
+            f"{target_label:<14}"
+            f"{stats['mean']:>9.3f}"
+            f"{stats['std']:>10.3f}"
+            f"{stats['min']:>7,}"
+        )
+
+        for quantile_name in quantile_names:
+            line += f"{stats['quantiles'][quantile_name]:>7,}"
+
+        line += f"{stats['max']:>8,}"
+
+        print(line)
+
+    print()
+
+    for target_key, target_label in SIZE_TARGETS:
+        stats = size_distribution[target_key]
+
+        print(
+            f"  {target_label}가 0인 impression : "
+            f"{stats['zero_count']:>10,} "
+            f"({stats['zero_ratio']:.4%})"
+        )
+
+    print()
+    print("  가장 흔한 candidate 수 (상위 5개)")
+
+    candidate_stats = size_distribution["candidate"]
+
+    for entry in candidate_stats["most_common"]:
+        print(
+            f"    {entry['value']:>5,}개 : "
+            f"{entry['count']:>10,} impression "
+            f"({_safe_ratio(entry['count'], candidate_stats['impression_count']):>8.4%})"
+        )
+
+    print()
+    print(
+        "  * 백분위는 보간 없이 실제 존재하는 값으로 계산한다 "
+        "(nearest-rank)"
+    )
+
+
+def _print_result(
+    result: dict[str, Any],
+) -> None:
+    """
+    분석 결과를 터미널에서 보기 쉽게 출력한다.
+    """
+
+    print()
+    print("=" * 78)
+    print(f"[{result['split_name']}] candidate SID 충돌 분석")
+    print("=" * 78)
+
+    print(f"파일                 : {result['sequences_path']}")
+
+    if result.get("semantic_ids_path"):
+        print(f"SID 출처             : {result['semantic_ids_path']}")
+
+        print(
+            "SID를 찾지 못한 candidate : "
+            f"{result['missing_sid_candidate_count']:,} (분석에서 제외)"
+        )
+
+    print(f"impression 수        : {result['impression_count']:,}")
+    print(f"candidate 총 개수    : {result['total_candidate_count']:,}")
+    print(
+        f"positive 개수        : {result['positive_count']:,} "
+        f"(impression당 평균 {result['positive_per_row_mean']:.2f}개)"
+    )
+    print(
+        f"positive 2개 이상 행 : {result['multi_positive_row_count']:,} "
+        f"({result['multi_positive_row_ratio']:.2%})"
+    )
+    print(f"negative 개수        : {result['negative_count']:,}")
+    print(
+        "positive와 article_id가 같은 negative : "
+        f"{result['same_article_negative_count']:,}"
+    )
+
+    # --- impression별 candidate 구성 ---
+    _print_size_distribution(result["size_distribution"])
+
+    # --- negative 기준 ---
+    print()
+    print("[1] negative 기준 : negative 중 positive와 SID가 겹치는 비율")
+    print(
+        f"{'level':<10}{'충돌 negative':>15}{'micro':>11}"
+        f"{'macro':>11}{'충돌 포함 행':>15}"
+    )
+    print("-" * 62)
+
+    for level_name, _ in PREFIX_LEVELS:
+        level = result["levels"][level_name]
+
+        print(
+            f"{level_name:<10}"
+            f"{level['collided_negative_count']:>15,}"
+            f"{level['collided_negative_ratio_micro']:>11.4%}"
+            f"{level['collided_negative_ratio_macro']:>11.4%}"
+            f"{level['row_with_collision_ratio']:>15.4%}"
+        )
+
+    # --- negative끼리 충돌 ---
+    print()
+    print("[1-1] negative끼리 : negative 중 다른 negative와 SID가 겹치는 비율")
+    print(
+        f"{'level':<10}{'중복 negative':>15}{'비율':>10}"
+        f"{'macro':>10}{'제거 대상':>12}{'비율':>10}"
+        f"{'묶음 수':>10}{'최대':>7}{'중복 포함 행':>15}"
+    )
+    print("-" * 99)
+
+    for level_name, _ in PREFIX_LEVELS:
+        level = result["levels"][level_name]
+
+        print(
+            f"{level_name:<10}"
+            f"{level['negative_in_negative_collision_count']:>15,}"
+            f"{level['negative_in_negative_collision_ratio']:>10.4%}"
+            f"{level['negative_duplicate_ratio_macro']:>10.4%}"
+            f"{level['redundant_negative_count']:>12,}"
+            f"{level['redundant_negative_ratio']:>10.4%}"
+            f"{level['negative_duplicate_group_count']:>10,}"
+            f"{level['negative_collision_max']:>7,}"
+            f"{level['row_with_negative_duplicate_ratio']:>15.4%}"
+        )
+
+    print()
+    print(
+        "  * 중복 negative : 같은 impression 안에서 "
+        "다른 negative와 SID가 같은 negative"
+    )
+    print(
+        "  * 제거 대상     : SID 묶음마다 1개만 남길 때 "
+        "사라지는 negative 수"
+    )
+    print(
+        "  * 묶음 수       : negative가 2개 이상 뭉친 SID 그룹 수"
+    )
+
+    primary_level = result["levels"][PRIMARY_LEVEL]
+
+    print()
+    print(f"  negative 묶음 크기 분포 ({PRIMARY_LEVEL})")
+
+    group_count = primary_level["negative_duplicate_group_count"]
+
+    for bucket_name, _, _ in NEGATIVE_GROUP_BUCKETS:
+        bucket_count = primary_level["negative_group_histogram"][
+            bucket_name
+        ]
+
+        print(
+            f"    {bucket_name:<5}개 묶음 : "
+            f"{bucket_count:>10,} "
+            f"({_safe_ratio(bucket_count, group_count):>8.4%})"
+        )
+
+    # --- positive 기준 ---
+    print()
+    print("[2] positive 기준 : positive 하나하나가 얼마나 오염됐는지")
+    print(
+        f"{'level':<10}{'오염 positive':>15}{'비율':>10}"
+        f"{'평균 충돌수':>13}{'최대':>8}{'평균 충돌비율':>15}"
+    )
+    print("-" * 71)
+
+    for level_name, _ in PREFIX_LEVELS:
+        level = result["levels"][level_name]
+
+        print(
+            f"{level_name:<10}"
+            f"{level['positive_with_collision_count']:>15,}"
+            f"{level['positive_with_collision_ratio']:>10.4%}"
+            f"{level['collision_per_positive_mean']:>13.3f}"
+            f"{level['collision_per_positive_max']:>8,}"
+            f"{level['collision_ratio_per_positive_mean']:>15.4%}"
+        )
+
+    print()
+    print(
+        "  * 오염 positive : 같은 SID를 가진 negative가 "
+        "1개 이상인 positive"
+    )
+    print(
+        "  * 평균 충돌수   : positive 하나당 겹치는 negative 개수"
+    )
+    print(
+        "  * 평균 충돌비율 : positive 하나가 그 행의 negative 중 "
+        "몇 %와 겹치는지"
+    )
+
+    # --- candidate 전체 기준 ---
+    print()
+    print("[3] candidate 전체 기준 : candidate list가 SID로 구분되는 정도")
+    print(
+        f"{'level':<10}{'구분불가 candidate':>22}{'비율':>10}"
+        f"{'고유 SID 비율':>16}{'positive끼리 충돌':>20}"
+    )
+    print("-" * 78)
+
+    for level_name, _ in PREFIX_LEVELS:
+        level = result["levels"][level_name]
+
+        print(
+            f"{level_name:<10}"
+            f"{level['ambiguous_candidate_count']:>22,}"
+            f"{level['ambiguous_candidate_ratio']:>10.4%}"
+            f"{level['distinct_sid_ratio']:>16.4%}"
+            f"{level['positive_in_positive_collision_count']:>20,}"
+        )
+
+    print()
+    print(
+        "  * 구분불가 candidate : 같은 SID를 가진 candidate가 "
+        "2개 이상인 그룹에 속한 candidate (label 무관)"
+    )
+    print(
+        "  * 고유 SID 비율      : 서로 다른 SID 수 / candidate 수 "
+        "(100%면 완전히 구분됨)"
+    )
+
+    # --- positive별 충돌 분포 ---
+    primary_level = result["levels"][PRIMARY_LEVEL]
+
+    print()
+    print(f"[4] positive별 충돌 negative 개수 분포 ({PRIMARY_LEVEL})")
+
+    positive_count = primary_level["positive_count"]
+
+    for bucket_name, _, _ in COLLISION_BUCKETS:
+        bucket_count = primary_level["collision_histogram"][bucket_name]
+
+        print(
+            f"  충돌 {bucket_name:<5} : "
+            f"{bucket_count:>12,} "
+            f"({_safe_ratio(bucket_count, positive_count):>8.4%})"
+        )
+
+    print()
+
+
+def _print_usage(
+    usage: dict[str, Any],
+) -> None:
+    """
+    article_semantic_ids.parquet 자체의 SID 사용 현황을 출력한다.
+    """
+
+    print()
+    print("=" * 78)
+    print("[0] SID 사용 현황 (article_semantic_ids.parquet 기준)")
+    print("=" * 78)
+
+    print(f"파일                     : {usage['semantic_ids_path']}")
+    print(f"기사 수                  : {usage['article_count']:,}")
+    print(f"사용된 c1 코드 수        : {usage['distinct_c1_count']:,}")
+    print(f"사용된 c2 코드 수        : {usage['distinct_c2_count']:,}")
+    print(f"사용된 c3 코드 수        : {usage['distinct_c3_count']:,}")
+    print(
+        "서로 다른 (c1,c2,c3) 수  : "
+        f"{usage['distinct_c1c2c3_count']:,}"
+    )
+    print(
+        "SID를 공유하는 기사 수   : "
+        f"{usage['shared_sid_article_count']:,} "
+        f"({usage['shared_sid_article_ratio']:.4%})"
+    )
+    print(
+        "SID당 평균 기사 수       : "
+        f"{usage['mean_article_per_sid']:.3f}"
+    )
+    print(
+        "SID당 최대 기사 수       : "
+        f"{usage['max_article_per_sid']:,} "
+        "(= max c4 + 1)"
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Transformer 입력 sequences parquet에서 "
+            "positive와 SID가 완전히 겹치는 negative 비율을 계산한다."
+        )
+    )
+
+    parser.add_argument(
+        "--path",
+        type=Path,
+        action="append",
+        default=None,
+        help=(
+            "분석할 sequences parquet 경로. "
+            "여러 번 지정 가능. "
+            "생략하면 config의 train/validation sequences를 사용한다."
+        ),
+    )
+
+    parser.add_argument(
+        "--semantic-ids",
+        type=Path,
+        default=None,
+        help=(
+            "RQ-VAE 실험 폴더 경로 또는 그 안의 "
+            "article_semantic_ids.parquet 경로. "
+            "폴더를 주면 안에서 파일을 찾는다. "
+            "지정하면 sequences의 SID 컬럼 대신 이 파일의 SID를 사용한다. "
+            "sequences를 다시 빌드하지 않고 실험별 비교를 할 때 쓴다."
+        ),
+    )
+
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=DEFAULT_CHUNK_SIZE,
+        help=(
+            "한 번에 처리할 impression 수. "
+            "메모리가 부족하면 줄인다. "
+            f"기본값 {DEFAULT_CHUNK_SIZE:,}"
+        ),
+    )
+
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help=(
+            "앞에서부터 이 개수의 impression만 분석한다. "
+            "빠른 확인용."
+        ),
+    )
+
+    parser.add_argument(
+        "--report",
+        type=Path,
+        default=None,
+        help="결과를 저장할 JSON 경로. 생략하면 저장하지 않는다.",
+    )
+
+    args = parser.parse_args()
+
+    if args.path:
+        targets = [
+            (path.stem, path)
+            for path in args.path
+        ]
+    else:
+        targets = [
+            ("train", config.TRAIN_SEQUENCES_PATH),
+            ("validation", config.VALIDATION_SEQUENCES_PATH),
+        ]
+
+    if args.semantic_ids is not None:
+        _print_usage(
+            analyze_semantic_id_usage(args.semantic_ids)
+        )
+
+    results = []
+
+    for split_name, sequences_path in targets:
+        result = analyze_candidate_sid_collision(
+            sequences_path,
+            split_name,
+            chunk_size=args.chunk_size,
+            limit=args.limit,
+            semantic_ids_path=args.semantic_ids,
+        )
+
+        _print_result(result)
+
+        results.append(result)
+
+    if args.report is not None:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+
+        args.report.write_text(
+            json.dumps(results, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        print(f"리포트 저장 : {args.report}")
+
+
+if __name__ == "__main__":
+    main()

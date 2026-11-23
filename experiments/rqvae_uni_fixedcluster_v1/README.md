@@ -127,6 +127,32 @@ python experiments/rqvae_uni_fixedcluster_v1/parse_log.py data/output/rqvae/uni_
 - Validation-only 기사: Train 사건에만 배정 (timeupdate 수정본)
 - 생성한 SID로 `python -m src.main post-rqvae` 를 돌리고 Transformer를 학습한다.
 
+## 실험 R (Q2 초기화 = 사건별 r1 평균)
+
+H(위 학습, ver2)와 **코드·설정·입력이 모두 같고**, 학습 전 Q2 K-means 초기화에 넣는 사건 대표 벡터만 바꾼다.
+
+| | H (지금 ver2) | R |
+|---|---|---|
+| 사건 대표 z(E) | 사건 기사들의 h(a) 평균 | 사건 기사들의 r1(a) = h(a) − Q1[c1(a)] 평균 |
+| 그 외 (UNI 설정, uniqueness loss, early stopping, best_rec) | 같음 | 같음 |
+
+- `train_rqvae_r1.py`: UNI 학습 코드(`train_rqvae.py`)는 고치지 않고, Q2 초기화가 부르는 `encode_all_train_articles`만 r1 버전으로 바꿔 끼운다. r1은 모델의 `get_c2_residual`과 같은 값.
+- `run_aws.sh`에 `VARIANT=r1`을 주면 이 파일로 학습하고, 결과 폴더 이름에 `_r1`이 붙는다. `VARIANT`를 안 주면 지금과 똑같이 H로 동작한다.
+- 학습 로그에 `[R] Q2 K-means 입력 = 사건별 r1(a) 평균`이 없으면 실패로 처리한다.
+
+AWS (seed마다 한 줄씩, GPU 하나씩):
+```bash
+cd ~/minji/SID_Project
+git pull
+INPUT_DIR=data/output/fixedcluster_v1/exports/rqvae_inputs A_CKPT=$HOME/minji/checkpoint_best_rec.pt VARIANT=r1 SEED=42 CUDA_VISIBLE_DEVICES=0 nohup bash experiments/rqvae_uni_fixedcluster_v1/run_aws.sh > ~/minji/rqvae_uni_fixedcluster_r1_s42.log 2>&1 &
+tail -f ~/minji/rqvae_uni_fixedcluster_r1_s42.log
+```
+결과: `data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_r1_s<SEED>/checkpoint_best_rec.pt`
+
+확인한 것 (이 세션, CPU 1 epoch 스모크): Q2 초기화가 r1 경로로 실행됨(기사 10,419 · Train 사건 9,794 · 중심 128×128), 학습·평가·checkpoint 저장 정상.
+
+참고: 초기화 시점은 학습 전이라 encoder와 Q1이 아직 학습되지 않은 상태다. H도 같은 시점에 h 평균을 쓰므로 조건은 같다.
+
 ## 나중에 할 것 (메모)
 
 - [ ] **사건 안 c2 일관성 확인** (2026-11-18 보류)
