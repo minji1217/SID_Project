@@ -67,10 +67,13 @@ def metrics(p: pd.DataFrame, score: np.ndarray) -> dict:
     ties = ((s == pos) & neg).sum(1)
     top1 = np.where(greater == 0, 1.0 / (1 + ties), 0.0)
     auc = (4 - greater - ties + 0.5 * ties) / 4.0
-    # 동점 안에서 정답 순위는 1+greater .. 1+greater+ties 중 균등 → 평균
-    ranks = [np.arange(1 + g, 2 + g + t) for g, t in zip(greater, ties)]
-    mrr = np.array([np.mean(1.0 / r) for r in ranks])
-    ndcg = np.array([np.mean(1.0 / np.log2(r + 1)) for r in ranks])
+    # 동점 안에서 정답 순위는 1+greater .. 1+greater+ties 중 균등 → 평균 (누적합 표로 한 번에 계산)
+    r = np.arange(1, 7)
+    cum_rr = np.concatenate([[0.0], np.cumsum(1.0 / r)])
+    cum_dg = np.concatenate([[0.0], np.cumsum(1.0 / np.log2(r + 1))])
+    lo, hi = greater, greater + ties + 1               # 순위 lo+1 .. hi
+    mrr = (cum_rr[hi] - cum_rr[lo]) / (ties + 1)
+    ndcg = (cum_dg[hi] - cum_dg[lo]) / (ties + 1)
     return {"top1": float(top1.mean()), "auc": float(auc.mean()), "mrr": float(mrr.mean()), "ndcg@5": float(ndcg.mean())}
 
 
