@@ -146,6 +146,13 @@
   .chart-svg .hit { fill: transparent; cursor: default; }
   .chart-svg .row:hover .bar:not(.hi) { fill: var(--muted); }
 
+  .deep { border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px 10px; margin: 24px 0; background: var(--panel); }
+  .deep-h { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-weight: 700; font-size: 16px; margin-bottom: 6px; }
+  .deep h4 { font-size: 15px; margin: 24px 0 6px; }
+  .deep th { background: var(--bg); }
+  .deep td { background: var(--panel); }
+  .deep .fig { background: var(--bg); }
+  .deep .eq { background: var(--bg); }
   .review-list li { margin: 8px 0; }
   .shape td:first-child { white-space: nowrap; }
   footer { margin-top: 56px; font-size: 12.5px; color: var(--muted); }
@@ -285,21 +292,99 @@
     <tr><td>D</td><td>h* m개, 후보 h<sub>t</sub> → ŷ</td><td>관심 시퀀스의 변화를 AUGRU로 모델링하고 MLP로 점수를 내요</td><td>관심의 시간적 진화 반영</td></tr>
   </table></div>
 
+  <div class="note ok"><p>논문 3절(방법론)의 3.1–3.4가 이 페이지의 5–8절이에요. 각 절 끝의 <b>"더 깊이"</b> 상자에 식에 나오는 기법과 용어를 처음부터 풀어 두었어요. metric learning, 메시지 전달, centroid와 medoid, 덧셈형 어텐션, DiffPool, 프로베니우스 노름, GRU와 AUGRU 등이에요.</p></div>
+
   <!-- ============================================================ 5 -->
   <h2 id="s5"><span class="no">5</span>A. 관심 그래프 만들기 <span class="small muted">(3.1절)</span></h2>
 
   <h3>5-1. 노드와 엣지</h3>
   <p>사용자 기록의 아이템 하나가 노드 하나예요(노드 수 <span class="m"><i>n</i></span> = 기록 길이). 각 노드는 아이템 임베딩 <span class="m"><b class="vec">h</b><sub><i>i</i></sub> ∈ ℝ<sup><i>d</i></sup></span>를 가져요. 무방향 그래프의 인접 행렬 <span class="m"><i>A</i> ∈ ℝ<sup><i>n</i>×<i>n</i></sup></span>를 <b>학습</b>하는 것이 목표예요. 그래서 그래프 만들기 문제를 "노드 유사도를 재는 함수를 학습하는 문제(metric learning)"로 바꿔요. 이 함수는 추천 손실과 <b>함께</b> 학습돼요.</p>
 
+  <div class="note">
+    <p><b>어떤 쌍을 계산하나요?</b> 랜덤으로 두 개를 고르지 않고, 그 사용자 기록 안의 <b>모든 아이템 쌍</b>을 계산해요. 식의 i, j는 특정 두 아이템이 아니라 "모든 i와 모든 j"를 뜻하는 첨자예요.</p>
+    <ul>
+      <li>기록이 n개면 n × n 유사도 행렬 M을 통째로 채워요. 아이템 10개면 100칸(서로 다른 쌍 45개), Taobao 최대 길이 50이면 2,500칸(1,225쌍), Kuaishou 최대 길이 250이면 62,500칸이에요. <span class="m"><i>M<sub>ij</sub></i> = <i>M<sub>ji</sub></i></span>라서 대칭이에요.</li>
+      <li>쌍마다 따로 계산하지 않고 행렬 곱 한 번으로 끝내요. 임베딩을 쌓은 <span class="m"><i>H</i></span>(n × d)의 각 행에 w를 곱하고 길이를 1로 맞춘 <span class="m"><i>Ĥ</i></span>를 만들면, <span class="m"><i>M</i> = <i>ĤĤ</i><sup>T</sup></span>가 곧 모든 쌍의 가중 코사인이에요. 길이가 1인 벡터끼리의 내적은 코사인과 같기 때문이에요.</li>
+      <li>5-3절의 식 (3)이 모든 칸을 한 줄로 세워 순위를 매기므로, 일부 쌍만 뽑아서는 이 방식이 성립하지 않아요.</li>
+      <li>범위는 <b>사용자 한 명의 학습 샘플 하나</b>예요. 다른 사용자의 아이템과는 쌍을 만들지 않고, 기록이 한 클릭 늘어나면 그래프도 새로 만들어요. M은 기록만으로 정해지고, 후보 아이템은 B단계의 질의 인식 점수 β에서 처음 들어가요.</li>
+      <li>논문에 없는 세부도 있어요. 짧은 기록을 채운 패딩 칸을 순위에서 어떻게 빼는지, 같은 아이템을 두 번 클릭하면 노드를 둘로 둘지 하나로 합칠지는 적혀 있지 않아요.</li>
+    </ul>
+  </div>
+
   <h3>5-2. 학습형 유사도: 가중 코사인 + 멀티헤드</h3>
   <div class="eq"><span><i>M<sub>ij</sub></i> = cos( <b class="vec">w</b> ⊙ <b class="vec">h</b><sub><i>i</i></sub> , <b class="vec">w</b> ⊙ <b class="vec">h</b><sub><i>j</i></sub> )</span><span class="n">(1)</span></div>
   <div class="eq"><span><i>M</i><sup>δ</sup><sub><i>ij</i></sub> = cos( <b class="vec">w</b><sub>δ</sub> ⊙ <b class="vec">h</b><sub><i>i</i></sub> , <b class="vec">w</b><sub>δ</sub> ⊙ <b class="vec">h</b><sub><i>j</i></sub> ),&nbsp;&nbsp; <i>M<sub>ij</sub></i> = (1/φ) Σ<sub>δ=1</sub><sup>φ</sup> <i>M</i><sup>δ</sup><sub><i>ij</i></sub></span><span class="n">(2)</span></div>
   <ul>
     <li><span class="m"><b class="vec">w</b></span>는 학습되는 가중치 벡터예요. 임베딩의 차원마다 "이 차원을 유사도에서 얼마나 중요하게 볼지"를 정해요. <span class="m">⊙</span>는 원소별 곱이에요.</li>
-    <li>헤드 φ개가 서로 다른 <span class="m"><b class="vec">w</b><sub>δ</sub></span>로 각자 유사도 행렬을 만들고 평균을 내요. 헤드마다 다른 관점(예: 가격대, 용도)을 볼 수 있고 학습이 안정돼요.</li>
+    <li>헤드 φ개가 서로 다른 <span class="m"><b class="vec">w</b><sub>δ</sub></span>로 각자 유사도 행렬을 만들고 평균을 내요. φ는 헤드 개수, δ는 헤드 번호예요. 헤드마다 다른 관점(예: 가격대, 용도)을 볼 수 있고 학습이 안정돼요. 숫자 예시는 아래 "더 깊이" 상자에 있어요.</li>
     <li>커널 방식(코사인·유클리드·마할라노비스)과 어텐션 방식 가운데, 표현력과 계산량의 균형 때문에 가중 코사인을 골랐다고 해요.</li>
     <li>임베딩이 학습되면서 그래프 구조도 계속 바뀌어요. 처음 보는 아이템에도 바로 그래프를 만들 수 있어요(귀납적 학습 가능).</li>
   </ul>
+
+  <div class="deep" id="deep-metric">
+    <div class="deep-h"><span class="tag t-acc">더 깊이</span> metric learning이 뭔가요?</div>
+    <p><b>metric</b>은 "두 대상이 얼마나 가깝고 먼지 재는 자"예요. 유클리드 거리와 코사인 유사도가 대표적이에요. 이런 자는 공식이 정해져 있어서 모든 차원을 똑같은 비중으로 봐요. <b>metric learning</b>은 이 자 안에 학습할 수 있는 부분을 넣고, 데이터를 보면서 <b>"이 과제에서는 무엇을 비슷하다고 봐야 하는가"</b>를 배우는 방법이에요.</p>
+    <p>SURGE에서 학습되는 부분은 가중치 벡터 <b>w</b> 하나예요. w의 원소 하나하나를 임베딩 한 차원의 볼륨 손잡이라고 생각하면 돼요. 손잡이를 올리면 그 차원의 차이가 유사도에 크게 반영되고, 0 가까이 내리면 그 차원은 무시돼요. 아래에서 "색상" 손잡이를 직접 움직여 보세요.</p>
+    <figure class="fig">
+      <div class="controls">
+        <label for="wColor">색상 차원 가중치 w<sub>색상</sub></label>
+        <input type="range" id="wColor" min="0" max="1" step="0.01" value="1">
+        <span class="readout" id="wOut"></span>
+      </div>
+      <div class="legend"><span><i class="dot d0"></i>운동화 A</span><span><i class="dot d1"></i>운동화 B</span><span>막대 = w ⊙ h (가중치를 곱한 뒤의 값)</span></div>
+      <div class="scroll"><svg class="mid" id="metricSvg" viewBox="0 0 640 270" role="img" aria-label="가중치에 따라 두 운동화의 가중 코사인 유사도가 바뀌는 모습"></svg></div>
+      <figcaption class="cap"><b>그림 D1.</b> 운동화 A = [1, 0.2, 0.9], 운동화 B = [1, 0.2, −0.9]예요(차원: 운동 관련성 · 가격대 · 색상, 설명용 예시). 색상만 정반대라 그냥 코사인(w<sub>색상</sub> = 1)은 0.12로 "다른 아이템"이에요. 색상 가중치를 0.1까지 내리면 0.98이 되어 같은 관심으로 묶여요. 학습은 이 손잡이를 "클릭 예측이 잘 맞는 쪽"으로 자동으로 돌리는 과정이에요.</figcaption>
+    </figure>
+
+    <h4>w는 어떻게 학습되나: 정답 쌍 없이, 추천 손실로</h4>
+    <p>"이 두 아이템은 비슷하다"고 w에 가르쳐 줄 라벨은 없어요. w는 식 (18)의 클릭 예측 손실과 <b>함께(end-to-end)</b> 학습돼요. 어떤 아이템끼리 이어야 다음 클릭을 더 잘 맞히면, 역전파가 w를 그쪽으로 조금씩 바꿔요. 그래서 SURGE가 배운 "비슷함"은 사람이 정한 의미가 아니라 <b>클릭 예측에 쓸모 있는 비슷함</b>이에요.</p>
+    <div class="tbl"><table>
+      <tr><th></th><th>일반적인 metric learning</th><th>SURGE의 metric learning</th></tr>
+      <tr><td>학습 신호</td><td>정답 쌍 라벨. "같은 것은 가깝게, 다른 것은 멀게" (대조 손실, triplet 손실)</td><td>쌍 라벨 없음. 최종 과제(다음 클릭 예측)의 손실만</td></tr>
+      <tr><td>학습된 비슷함의 뜻</td><td>라벨이 정한 의미 (예: 같은 사람)</td><td>과제에 쓸모 있는 비슷함</td></tr>
+      <tr><td>예</td><td>얼굴 인식(같은 사람 사진끼리 가깝게), 이미지 검색, 문장 임베딩(우리가 쓰는 E5도 대조 학습으로 만든 임베딩)</td><td>사용자마다 관심 그래프의 엣지를 정하는 유사도</td></tr>
+    </table></div>
+    <p class="small muted">triplet 손실은 기준(anchor), 같은 것(positive), 다른 것(negative) 세 개를 한 묶음으로 봐요. "기준–같은 것" 거리가 "기준–다른 것" 거리보다 일정 간격(margin)만큼 짧아지도록 학습해요. 대조 손실도 같은 발상이에요.</p>
+
+    <h4>논문이 언급한 척도 종류</h4>
+    <p>논문은 metric learning을 <b>커널 방식</b>(정해진 수식에 가중치를 넣음)과 <b>어텐션 방식</b>(작은 신경망이 점수를 냄)으로 나눠요. 그리고 표현력과 계산량의 균형 때문에 가중 코사인을 골랐어요.</p>
+    <div class="tbl"><table>
+      <tr><th>척도</th><th>식</th><th>학습 파라미터</th><th>특징</th></tr>
+      <tr><td>유클리드 거리</td><td class="m">‖x − y‖</td><td>없음</td><td>벡터 길이(크기)에도 민감</td></tr>
+      <tr><td>코사인 유사도</td><td class="m">x·y / (‖x‖ ‖y‖)</td><td>없음</td><td>방향만 봄. 길이는 무시</td></tr>
+      <tr><td>마할라노비스 거리</td><td class="m">√((x − y)<sup>T</sup> W (x − y))</td><td>d × d 행렬 W</td><td>차원 사이의 상관까지 학습. 파라미터가 d²개라 비싸고 불안정할 수 있음</td></tr>
+      <tr><td><b>가중 코사인 (SURGE)</b></td><td class="m">cos(w ⊙ x, w ⊙ y)</td><td>길이 d 벡터 w</td><td>차원별 중요도만 학습. 마할라노비스의 W를 대각 행렬로 줄인 것과 비슷한 발상</td></tr>
+      <tr><td>어텐션 방식</td><td class="m">f(W<sub>1</sub>x, W<sub>2</sub>y)</td><td>신경망 전체</td><td>표현력이 가장 크지만 파라미터·계산이 많고, 비대칭(i→j ≠ j→i)이 될 수 있음</td></tr>
+    </table></div>
+
+    <h4>식에 나온 기호와 용어</h4>
+    <ul>
+      <li><b>⊙ (Hadamard product, 원소별 곱):</b> 같은 위치끼리 곱해서 같은 길이의 벡터를 내요. [1, 2, 3] ⊙ [0.5, 1, 0] = [0.5, 2, 0]이에요. 곱한 뒤 합까지 해서 숫자 하나를 내는 내적과 달라요.</li>
+      <li><b>귀납적 학습(inductive)과 전이적 학습(transductive):</b> 전이적 방법은 학습 때 본 노드에만 쓸 수 있어요(예: 노드마다 임베딩을 따로 외우는 그래프 모델). 귀납적 방법은 "임베딩을 넣으면 유사도를 내는 함수"를 배우므로 처음 보는 아이템에도 바로 쓸 수 있어요. SURGE의 그래프 만들기는 함수라서 귀납적이에요.</li>
+      <li><b>그래프 구조 학습(graph structure learning):</b> 그래프가 주어지지 않거나 믿기 어려울 때 인접 행렬 자체를 학습하는 연구 분야예요(참고문헌 [48]). SURGE는 그중 "유사도 학습 → 희소화" 계열이에요.</li>
+    </ul>
+
+    <h4>멀티헤드: δ와 φ, 그리고 평균을 내는 이유</h4>
+    <p>식 (2)의 그리스 문자 두 개는 이렇게 읽어요.</p>
+    <ul>
+      <li><b>φ (파이):</b> 헤드의 개수예요. 논문은 실제로 몇 개를 썼는지 밝히지 않았어요.</li>
+      <li><b>δ (델타):</b> 몇 번째 헤드인지 가리키는 번호예요(1, 2, …, φ). 노드 번호에 i, j를 쓰듯 헤드 번호에 δ를 쓴 것이라, "변화량"을 뜻하는 Δ와는 상관없어요. <span class="m"><b class="vec">w</b><sub>δ</sub></span>는 δ번째 헤드의 가중치, <span class="m"><i>M</i><sup>δ</sup><sub><i>ij</i></sub></span>는 δ번째 헤드가 잰 i와 j의 유사도예요.</li>
+    </ul>
+    <p>헤드 하나는 w 하나, 즉 "무엇을 중요하게 볼지"에 대한 관점 하나예요. 헤드가 φ개면 w를 φ개 따로 학습해요. 각 헤드가 기록 전체의 n × n 유사도 행렬을 하나씩 만들고, 마지막에 <b>같은 칸끼리 평균</b>을 내요. 아래는 헤드 2개의 예시예요. 아이템은 검정 운동화 A = [1, 0.2, 0.9], 흰 운동화 B = [1, 0.2, −0.9], 검정 티셔츠 C = [0.1, 0.2, 0.9]이고(차원: 운동 관련성 · 가격대 · 색상), w 값은 설명을 위해 정했어요.</p>
+    <div class="tbl"><table>
+      <tr><th>쌍</th><th class="n">헤드 1: w₁ = [1, 1, 0.1]<br><span class="muted">색상을 거의 무시 (용도 관점)</span></th><th class="n">헤드 2: w₂ = [0.1, 1, 1]<br><span class="muted">용도를 거의 무시 (색상 관점)</span></th><th class="n">평균 = 최종 M</th></tr>
+      <tr><td>A–B (운동화끼리, 색 다름)</td><td class="n"><b>0.98</b></td><td class="n">−0.88</td><td class="n">0.05</td></tr>
+      <tr><td>A–C (검정끼리, 용도 다름)</td><td class="n">0.60</td><td class="n"><b>1.00</b></td><td class="n"><b>0.80</b></td></tr>
+      <tr><td>B–C (용도·색 모두 다름)</td><td class="n">0.53</td><td class="n">−0.90</td><td class="n">−0.18</td></tr>
+    </table></div>
+    <p>헤드 1은 A와 B를 "둘 다 운동화"로, 헤드 2는 A와 C를 "둘 다 검정"으로 봐요. 최종 그래프는 두 관점을 섞은 평균으로 만들어서, 이 예시에서는 A–C가 가장 가까워요. 실제로는 w가 클릭 예측 손실로 학습되므로, 학습이 "운동화끼리 이어야 예측이 잘 맞는다"고 판단하면 두 헤드 모두 용도 쪽으로 움직여요. 어떤 관점이 남을지는 데이터가 정해요.</p>
+    <p><b>왜 여러 개를 두나.</b> 아이템이 비슷하다는 기준은 용도, 가격대, 스타일처럼 여러 가지인데, w 하나로는 한 기준만 강하게 표현할 수 있어요. 또 학습 초기에 한 헤드의 w가 엉뚱하게 잡혀도 평균을 내면 그래프가 크게 흔들리지 않아요. 심사위원 여러 명의 평균 점수가 한 명의 점수보다 덜 들쭉날쭉한 것과 같아요. Transformer의 멀티헤드 어텐션도 같은 발상이에요.</p>
+    <p><b>왜 이어 붙이지 않고 평균을 내나.</b> 인접 행렬은 칸 하나에 숫자 하나(연결 강도)가 들어가야 해서, 헤드별 유사도를 숫자 하나로 합쳐야 해요. 가장 단순한 방법이 평균이에요. 반면 B단계의 식 (5)는 노드 <b>벡터</b>를 만드는 거라서, 헤드 결과를 이어 붙여 정보를 다 남겨요.</p>
+
+    <h4>우리 연구와 연결하면</h4>
+    <p>우리 사건 유사도인 IDF 가중 Jaccard도 <b>가중치가 들어간 척도</b>예요. IDF가 "개체마다 얼마나 중요하게 볼지"를 정하니까 SURGE의 w와 같은 자리예요. 차이는 가중치를 <b>공식으로 정해 고정</b>했는지(우리, IDF = log((N+1)/(df+1)) + 1), <b>데이터로 학습</b>했는지(SURGE)뿐이에요.</p>
+    <p>뉴스는 매일 새 기사가 나오니 귀납적 성질이 꼭 필요해요. E5 같은 콘텐츠 임베딩 위에 학습형 척도를 얹으면 이 조건을 만족해요. 학습 신호로는 기사 2개 이상인 Train 사건(같은 사건 쌍 = positive)이나, 사용자가 같이 읽은 기사 쌍을 쓸 수 있어요.</p>
+  </div>
 
   <h3>5-3. 희소화: 전체 그래프 기준 상대 순위 (ε-sparseness)</h3>
   <p>코사인 값은 [−1, 1]이라 그대로 쓰면 모든 노드가 연결된 완전 그래프가 돼요. 계산이 비싸고, 중요하지 않은 엣지가 잡음이 돼요. 그래서 <b>가장 강한 연결만</b> 남겨요.</p>
@@ -330,6 +415,19 @@
     <tr><td><b>(다) 전체 상대 순위 (SURGE)</b></td><td>식 (3)</td><td>하이퍼파라미터 ε에 덜 민감하고, 그래프의 희소 분포를 망가뜨리지 않아요.</td></tr>
   </table></div>
   <div class="note review"><p><span class="tag t-rev">리뷰어 메모</span> 식 (3)은 0/1 값만 내는 계단 함수라 미분이 0이에요. 그런데 본문은 <span class="m"><b class="vec">w</b></span>가 추천 손실과 함께 학습된다고 해요. 그래디언트가 <span class="m"><b class="vec">w</b></span>까지 어떻게 가는지(예: 마스크 위치의 <span class="m"><i>M<sub>ij</sub></i></span> 값을 가중치로 쓰는지)는 본문에 없어요. 재현할 때는 공식 코드를 확인해야 해요.</p></div>
+
+  <div class="deep">
+    <div class="deep-h"><span class="tag t-acc">더 깊이</span> 그래프를 만드는 고전적인 방법과 이름 헷갈림 주의</div>
+    <p>점(데이터)만 있고 엣지가 없을 때 그래프를 만드는 고전적인 방법은 두 가지예요. 스펙트럴 클러스터링 같은 군집 기법에서 오래 써 온 방법이에요.</p>
+    <div class="tbl"><table>
+      <tr><th>방법</th><th>규칙</th><th>5-4절의 분류</th></tr>
+      <tr><td>ε-이웃 그래프 (ε-neighborhood graph)</td><td>거리가 ε 이하(또는 유사도가 θ 이상)인 쌍을 모두 연결</td><td>(가) 전체 절대 임계값</td></tr>
+      <tr><td>k-최근접 이웃 그래프 (kNN graph)</td><td>노드마다 가장 가까운 k개와 연결</td><td>(나) 노드별 상대 순위</td></tr>
+      <tr><td>SURGE의 ε-sparseness</td><td>전체 쌍 중 유사도 상위 ε 비율만 연결</td><td>(다) 전체 상대 순위</td></tr>
+    </table></div>
+    <p><b>주의:</b> 고전적인 "ε-이웃 그래프"의 ε는 <b>거리 임계값</b>이고, SURGE의 ε는 <b>남길 비율</b>이에요. 기호는 같지만 뜻이 달라요. SURGE 방식은 "상위 몇 %"를 고정하므로, 유사도 값들이 전체적으로 오르내려도 엣지 수가 변하지 않아요.</p>
+    <p><b>대각선과 대칭:</b> <span class="m">ε<i>n</i>²</span>은 행렬 원소 수 기준이에요. 자기 자신과의 유사도(대각선, 항상 1)가 맨 위에 오고, 무방향 그래프라 엣지 하나가 원소 두 개(<span class="m"><i>M<sub>ij</sub></i></span>와 <span class="m"><i>M<sub>ji</sub></i></span>)로 세어져요. 그래서 실제 엣지 수는 대략 <span class="m">(ε<i>n</i>² − <i>n</i>) / 2</span>개예요. 그림 3에서 ε = 0.30이면 (30 − 10) / 2 = 10개예요.</p>
+  </div>
 
   <!-- ============================================================ 6 -->
   <h2 id="s6"><span class="no">6</span>B. 관심 융합 그래프 합성곱 <span class="small muted">(3.2절)</span></h2>
@@ -400,6 +498,62 @@
   </table></div>
   <div class="note review"><p><span class="tag t-rev">리뷰어 메모</span> 식 (8)을 쓰인 그대로 계산하면 <b>α<sub>i</sub>는 결과에 영향이 없어요.</b> softmax는 <span class="m"><i>j</i></span>에 대해 정규화하는데, α<sub>i</sub>는 모든 <span class="m"><i>j</i></span>에 같은 값으로 더해지므로 분자와 분모에서 <span class="m">exp(α<sub><i>i</i></sub>)</span>가 약분돼요(위 표). 그런데 Table 4에서는 군집 인식을 빼면 성능이 떨어져요(Taobao AUC 0.8906 → 0.8764). 그러니 실제 구현은 식 (8)과 다를 가능성이 커요. 예를 들어 노드 전체에 대해 정규화하거나, α를 다른 곳에 곱해 쓸 수 있어요. 이 구조를 재사용하려면 공식 코드를 꼭 확인해야 해요.</p></div>
 
+  <div class="deep">
+    <div class="deep-h"><span class="tag t-acc">더 깊이</span> B단계에 쓰인 기법들</div>
+
+    <h4>메시지 전달(message passing)의 세 단계</h4>
+    <p>그래프 합성곱에서는 모든 노드가 동시에 다음 세 가지를 해요. 식 (4)를 이 순서로 읽으면 쉬워요.</p>
+    <ol>
+      <li><b>메시지 만들기:</b> 이웃 j가 자기 벡터 <span class="m"><b class="vec">h</b><sub><i>j</i></sub></span>에 가중치 <span class="m"><i>E<sub>ij</sub></i></span>를 곱해 보내요.</li>
+      <li><b>모으기(Aggregate):</b> 노드 i가 받은 메시지를 하나로 합쳐요.</li>
+      <li><b>업데이트:</b> 합친 것에 선형 변환 <span class="m"><i>W<sub>a</sub></i></span>, 잔차, 비선형 함수 σ를 거쳐 새 벡터 <span class="m"><b class="vec">h</b>′<sub><i>i</i></sub></span>를 만들어요.</li>
+    </ol>
+    <div class="tbl"><table>
+      <tr><th>Aggregate</th><th>장점</th><th>약점</th></tr>
+      <tr><td><b>Sum (SURGE 선택)</b></td><td>이웃이 많을수록 신호가 커져서 <b>차수 정보가 남아요</b></td><td>차수가 큰 노드는 값이 커질 수 있음</td></tr>
+      <tr><td>Mean</td><td>값의 크기가 안정적</td><td>이웃이 3개든 30개든 같아져서 차수 정보가 사라짐</td></tr>
+      <tr><td>Max</td><td>가장 두드러진 신호만 잡음</td><td>나머지 정보를 버림</td></tr>
+      <tr><td>GRU 등 순환망</td><td>표현력이 큼</td><td>이웃에는 순서가 없는데 순서를 가정함</td></tr>
+    </table></div>
+    <p class="small">SURGE의 가정은 "이웃이 많은 촘촘한 곳 = 핵심 관심"이에요. 차수 정보를 지키는 Sum이 이 가정과 잘 맞아요. 다만 식 (8)의 softmax 가중치는 합이 1이라, 실제로는 가중 평균에 가까워져요.</p>
+
+    <h4>잔차 연결 (residual connection)</h4>
+    <p><span class="m"><b class="vec">h</b>′ = <i>f</i>(<b class="vec">h</b>) + <b class="vec">h</b></span>처럼 입력을 출력에 그대로 더해 주는 길이에요. ResNet에서 널리 퍼졌어요. 변환 <span class="m"><i>f</i></span>가 잘못 학습돼도 원래 정보가 남고, 기울기가 입력까지 곧바로 흘러가서 깊은 모델도 잘 학습돼요. 그래프에서는 이웃 정보를 계속 섞다가 모든 노드가 비슷해지는 문제(과평활화, over-smoothing)도 줄여 줘요.</p>
+
+    <h4>self-loop, k-hop, 수용 영역</h4>
+    <ul>
+      <li><b>self-loop:</b> 노드가 자기 자신과도 연결된 것으로 봐요. 그래야 업데이트할 때 자기 정보도 이웃 정보와 같은 방식으로 섞여요. SURGE의 <span class="m"><i>N<sub>i</sub></i></span>는 i 자신을 포함해요.</li>
+      <li><b>k-hop 이웃:</b> 엣지를 최대 k번 건너서 닿는 노드들이에요. 1-hop은 바로 이웃, 2-hop은 이웃의 이웃까지예요.</li>
+      <li><b>수용 영역(receptive field):</b> 한 노드의 결과에 영향을 주는 노드의 범위예요. CNN에서 출력 픽셀 하나가 보는 입력 영역과 같은 개념이에요. SURGE는 k-hop 이웃을 "노드 i를 중심으로 한 군집의 범위"로 써요.</li>
+    </ul>
+
+    <h4>군집의 중심: centroid와 medoid</h4>
+    <div class="tbl"><table>
+      <tr><th></th><th>centroid (평균점)</th><th>medoid (대표 노드)</th></tr>
+      <tr><td>정의</td><td>군집 안 벡터들의 평균</td><td>군집 안 <b>실제 노드</b> 중 나머지와 가장 가까운 것</td></tr>
+      <tr><td>실제 데이터인가</td><td>아니요 (계산된 점)</td><td>예</td></tr>
+      <tr><td>SURGE에서</td><td><span class="m"><b class="vec">h</b><sub><i>i</i></sub><sup><i>c</i></sup></span> = k-hop 이웃의 평균</td><td>노드 i가 medoid에 가까울수록 α가 큼</td></tr>
+    </table></div>
+    <p class="small">k-means는 centroid를, k-medoids는 medoid를 군집 중심으로 써요. 우리 RQ-VAE의 Q2 KMeans 초기화도 centroid 방식이에요.</p>
+
+    <h4>어텐션 두 종류: 덧셈형과 곱셈형</h4>
+    <div class="tbl"><table>
+      <tr><th></th><th>덧셈형 (additive, Bahdanau 2015)</th><th>곱셈형 (dot-product, Transformer)</th></tr>
+      <tr><td>점수</td><td>작은 신경망: <span class="m">v<sup>T</sup> tanh(W [q ‖ k])</span></td><td>내적: <span class="m">q · k / √d</span></td></tr>
+      <tr><td>특징</td><td>비선형 관계를 잡기 쉬움. 계산은 조금 더 듦</td><td>빠르고 GPU에 잘 맞음</td></tr>
+      <tr><td>SURGE</td><td colspan="2">점수 자체는 2층 신경망(덧셈형 계열)으로 내고, 군집 점수와 질의 점수를 <b>더해서</b> 합쳐요. 논문의 "additive attention"은 Bahdanau의 덧셈형 어텐션을 인용한 표현이에요.</td></tr>
+    </table></div>
+
+    <h4>입력 구성 <span class="m">[ a ‖ b ‖ a ⊙ b ]</span>은 왜 이렇게 만드나</h4>
+    <p>식 (6)(7)은 두 벡터를 그대로 이어 붙이고(‖), 원소별 곱도 함께 넣어요. 신경망은 덧셈과 선형 변환은 쉽게 배우지만 "두 입력을 곱하는 관계"는 배우기 어려워요. 원소별 곱을 미리 넣어 주면 "차원마다 두 벡터가 얼마나 같은 방향인가"라는 상호작용 정보를 바로 쓸 수 있어요. DIN 같은 CTR 모델에서도 흔히 쓰는 입력 구성이에요.</p>
+
+    <h4>LeakyReLU</h4>
+    <p>ReLU는 음수를 모두 0으로 만들어요. 그래서 어떤 뉴런이 계속 음수만 받으면 기울기가 0이 되어 학습이 영영 멈춰요(죽은 뉴런). LeakyReLU는 음수에 작은 기울기(예: 0.2x)를 남겨 이 문제를 피해요. GAT도 어텐션 점수에 LeakyReLU를 써요.</p>
+
+    <h4>멀티헤드 결과: 이어 붙이기와 평균</h4>
+    <p>GAT에서는 중간 층은 헤드 결과를 이어 붙이고, 마지막 층은 평균을 내요. SURGE는 합성곱 결과를 이어 붙이고(식 5, φd′ 차원), 유사도 척도는 평균을 내요(식 2). 이어 붙이면 헤드별 정보가 다 남고, 평균을 내면 크기가 일정해요.</p>
+  </div>
+
   <!-- ============================================================ 7 -->
   <h2 id="s7"><span class="no">7</span>C. 관심 추출 그래프 풀링 <span class="small muted">(3.3절)</span></h2>
   <p>B단계로 관심이 또렷해졌지만 노드는 여전히 <span class="m"><i>n</i></span>개예요. C단계는 CNN의 다운샘플링처럼 그래프를 <span class="m"><i>m</i></span>개 군집 노드로 <b>줄여요</b>(<span class="m"><i>m</i> &lt; <i>n</i></span>). 느슨한 관심이 촘촘한 관심으로 바뀌고, 관심의 분포는 유지돼요.</p>
@@ -449,6 +603,61 @@
   <div class="eq"><span><b class="vec">h</b><sub><i>g</i></sub> = Readout( { γ<sub><i>i</i></sub> · <b class="vec">h</b>′<sub><i>i</i></sub> , <i>i</i> ∈ <i>G</i> } )&nbsp;&nbsp; (Readout = sum)</span><span class="n">(15)</span></div>
   <p>풀링과 별개로, 풀링 <b>전</b> 그래프의 모든 노드를 중요도 γ로 가중합해 그래프 전체 표현 <span class="m"><b class="vec">h</b><sub><i>g</i></sub></span>를 만들어요. 순서에 무관한 합을 써서 순열 불변성을 지켜요. 이 벡터는 예측층에 같이 들어가, 풀링 층이 각 군집 정보를 더 잘 뽑도록 도와요. Table 4에서 readout을 빼면 Taobao AUC가 0.8906 → 0.8578로 꽤 떨어져요.</p>
 
+  <div class="deep">
+    <div class="deep-h"><span class="tag t-acc">더 깊이</span> C단계에 쓰인 기법들</div>
+
+    <h4>그래프 풀링의 종류</h4>
+    <figure class="fig">
+      <div class="scroll"><svg class="wide" id="poolTypes" viewBox="0 0 1000 280" role="img" aria-label="그래프 풀링 세 종류: 평탄 readout, 노드 선택형, 군집 배정형"></svg></div>
+      <figcaption class="cap"><b>그림 D2.</b> 같은 6노드 그래프를 세 방식으로 줄인 모습이에요. <b>(가)</b> 그래프 전체를 벡터 하나로 요약해서 구조가 사라져요. <b>(나)</b> 점수 높은 노드만 남기고 나머지는 버려요. <b>(다)</b> 노드를 군집으로 합쳐서 모든 노드의 정보가 군집 벡터에 남아요. SURGE는 (다)를 기본으로 쓰고, (가)를 보조로 함께 써요(식 15).</figcaption>
+    </figure>
+    <div class="tbl"><table>
+      <tr><th>종류</th><th>대표 방법</th><th>하는 일</th><th>장단점</th></tr>
+      <tr><td>평탄 readout</td><td>합·평균·최댓값</td><td>노드 전체를 벡터 1개로</td><td>간단함. 구조 정보를 잃음</td></tr>
+      <tr><td>노드 선택형</td><td>SAGPool [17]</td><td>노드마다 점수를 매겨 상위 노드만 남김</td><td>빠르고 단순함. 버린 노드의 정보는 사라짐</td></tr>
+      <tr><td>군집 배정형</td><td>DiffPool [37]</td><td>노드를 m개 군집으로 소프트하게 합침</td><td>정보를 보존함. 학습이 어렵고 n × m 배정 행렬이 필요함</td></tr>
+      <tr><td>혼합형</td><td>ASAP [22]</td><td>노드 주변으로 군집을 만든 뒤 좋은 군집만 고름</td><td>두 방식의 절충</td></tr>
+    </table></div>
+
+    <h4>DiffPool에서 가져온 것과 SURGE가 새로 더한 것</h4>
+    <p>DiffPool(Ying et al., NeurIPS 2018)은 "미분 가능한 풀링(differentiable pooling)"이라는 뜻이에요. 노드→군집 배정을 softmax 확률로 만들어서, 풀링까지 역전파로 학습할 수 있게 했어요. 원래는 그래프 전체를 분류하는 과제(예: 분자 그래프의 성질 맞히기)용이에요. 이 논문도 "분류 손실만으로는 배정 행렬을 학습하기 어렵다"고 보고 보조 손실 두 개를 썼어요.</p>
+    <div class="tbl"><table>
+      <tr><th>SURGE의 구성 요소</th><th>출처</th></tr>
+      <tr><td>소프트 배정 S를 GNN 한 층으로 만들기 (식 11), <span class="m"><i>S</i><sup>T</sup><i>H</i></span>, <span class="m"><i>S</i><sup>T</sup><i>AS</i></span></td><td>DiffPool 그대로</td></tr>
+      <tr><td>같은 군집 정규화 L<sub>M</sub> = ‖A, SSᵀ‖<sub>F</sub></td><td>DiffPool의 보조 링크 예측 손실 그대로</td></tr>
+      <tr><td>단일 소속 정규화 L<sub>A</sub> (엔트로피)</td><td>DiffPool의 엔트로피 정규화 그대로</td></tr>
+      <tr><td><b>상대 위치 정규화 L<sub>P</sub></b></td><td><b>SURGE가 새로 추가</b>. 그래프 분류에는 노드 순서가 없지만, 시퀀스 추천은 시간 순서가 중요해서 필요함</td></tr>
+      <tr><td><b>군집 점수 γ* = Sᵀγ</b></td><td><b>SURGE가 새로 추가</b>. AUGRU의 게이트에 쓰려고</td></tr>
+    </table></div>
+    <p>즉 C단계에서 새로운 점은 정규화 대부분이 아니에요. <b>시퀀스 추천에 풀링을 쓰면서 시간 순서를 지키는 장치(L<sub>P</sub>)</b>와 <b>후보 아이템에 따라 풀링이 달라지는 점</b>이에요.</p>
+
+    <h4>"동적" 풀링의 진짜 뜻</h4>
+    <p>군집 수 m은 고정이지만, 배정 S는 사용자마다, 그리고 <b>후보 아이템마다</b> 달라져요. S는 B단계 결과 h′로 만들고(식 11), h′에는 후보 아이템을 보는 질의 인식 점수 β가 들어 있어요. 그래서 같은 사용자라도 후보가 "캠핑 랜턴"일 때와 "키보드"일 때 묶임이 달라질 수 있어요. 논문이 말하는 "지금 활성화된 관심을 뽑는다"는 이 뜻이에요.</p>
+
+    <h4>A* = SᵀAS는 왜 이렇게 생겼나</h4>
+    <p>원소 하나를 풀어 쓰면 <span class="m">(<i>S</i><sup>T</sup><i>AS</i>)<sub><i>kl</i></sub> = Σ<sub><i>i</i></sub> Σ<sub><i>j</i></sub> <i>S<sub>ik</sub></i> · <i>A<sub>ij</sub></i> · <i>S<sub>jl</sub></i></span>예요. "노드 i가 군집 k에 속할 확률 × i와 j가 연결됐는가 × 노드 j가 군집 l에 속할 확률"을 모든 노드 쌍에 대해 더한 값이에요. 그러니 <b>군집 k와 군집 l 사이 연결 수의 기대값</b>이에요. 대각선 <span class="m">(<i>A</i><sup>*</sup>)<sub><i>kk</i></sub></span>는 군집 안쪽의 연결 수라서, 클수록 촘촘한 군집이에요. 그림 6의 A*에서 신발 군집(1번)의 대각선이 14.2로 가장 큰 이유예요.</p>
+    <p>군집 벡터 <span class="m"><b class="vec">h</b><sup>*</sup><sub><i>k</i></sub> = Σ<sub><i>i</i></sub> <i>S<sub>ik</sub></i> <b class="vec">h</b>′<sub><i>i</i></sub></span>도 소속 확률로 가중한 <b>합</b>이에요(평균이 아님). 노드가 많이 모인 군집일수록 벡터가 커지니, 여기서도 "큰 군집 = 강한 관심"이 그대로 남아요.</p>
+
+    <h4>비볼록 최적화와 국소해</h4>
+    <p>손실 함수가 그릇 하나처럼 생겼으면(볼록) 어디서 시작해도 바닥에 닿아요. 신경망의 손실은 울퉁불퉁한 산지 같아서(비볼록), 시작점 근처의 작은 웅덩이(국소해)에 갇힐 수 있어요. 학습 초기의 S는 거의 무작위라서 추천 손실만 보면 "모든 노드를 한 군집에 몰기" 같은 나쁜 해에 빠지기 쉬워요. 정규화는 S에 직접 목표를 줘서 초기에 방향을 잡아 줘요.</p>
+
+    <h4>정규화 계산 감 잡기</h4>
+    <div class="tbl"><table>
+      <tr><th>S의 한 행 (군집 3개)</th><th class="n">엔트로피 H</th><th>뜻</th></tr>
+      <tr><td>[1, 0, 0]</td><td class="n">0</td><td>한 군집에 확실히 속함 (최적)</td></tr>
+      <tr><td>[0.94, 0.03, 0.03]</td><td class="n">0.27</td><td>거의 확실 (그림 6의 ③④)</td></tr>
+      <tr><td>[0.62, 0.19, 0.19]</td><td class="n">0.93</td><td>애매 (그림 6의 ②)</td></tr>
+      <tr><td>[1/3, 1/3, 1/3]</td><td class="n">1.10 (= ln 3)</td><td>전혀 모름 (최악)</td></tr>
+    </table></div>
+    <ul>
+      <li><b>프로베니우스 노름</b>은 행렬을 긴 벡터 하나로 펴서 잰 길이예요. <span class="m">‖<i>X</i>‖<sub><i>F</i></sub> = √(Σ<sub><i>ij</i></sub> <i>X<sub>ij</sub></i>²)</span>. 그래서 <span class="m">‖<i>A</i> − <i>SS</i><sup>T</sup>‖<sub><i>F</i></sub></span>는 "모든 노드 쌍에 대해 연결 여부와 같은 군집 확률의 차이를 제곱해 더한 것"의 제곱근이에요. 논문의 <span class="m">‖<i>A</i>, <i>SS</i><sup>T</sup>‖</span> 표기는 두 행렬의 차이를 뜻해요.</li>
+      <li><b>위치 인코딩 벡터</b> <span class="m"><i>P<sub>n</sub></i> = (1, …, <i>n</i>)</span>는 노드의 시간 순번이에요. <span class="m"><i>P<sub>n</sub>S</i></span>의 k번째 값은 "군집 k에 속한 노드들의 순번을 소속 확률로 더한 값"이에요. 이것을 (1, …, m)에 가깝게 만들면 앞쪽 노드가 앞쪽 군집으로 가요. 결과적으로 S의 큰 값들이 왼쪽 위에서 오른쪽 아래로 이어지는 대각선 띠 모양이 돼요(그림 6의 ④).</li>
+    </ul>
+
+    <h4>readout과 순열 불변성</h4>
+    <p>그래프 노드에는 정해진 순서가 없어요. 노드 번호만 바꿔 넣었는데 결과가 달라지면 안 돼요. 이 성질을 <b>순열 불변성(permutation invariance)</b>이라고 해요. 합·평균·최댓값은 순서를 바꿔도 결과가 같으니 readout으로 쓸 수 있어요. SURGE는 중요도 γ로 가중한 합을 썼어요.</p>
+  </div>
+
   <!-- ============================================================ 8 -->
   <h2 id="s8"><span class="no">8</span>D. 예측층과 손실 함수 <span class="small muted">(3.4절)</span></h2>
   <p>상대 위치 정규화 덕분에 군집 벡터 <span class="m"><b class="vec">h</b><sup>*</sup><sub>1</sub>, …, <b class="vec">h</b><sup>*</sup><sub><i>m</i></sub></span>는 시간 순서를 가진 <b>짧은 관심 시퀀스</b>로 볼 수 있어요("pooled graph를 flatten"). 여기에는 어떤 순차 모델이든 쓸 수 있는데, 논문은 AUGRU를 골랐어요.</p>
@@ -486,6 +695,84 @@
     <li>Predict는 은닉층 [100, 64]의 2층 피드포워드망이에요. <b>모든 비교 모델이 같은 예측망을 공유</b>해서 공정하게 비교했어요.</li>
     <li>손실은 CTR 예측의 표준인 음의 로그우도(이진 교차 엔트로피)에 L2 정규화를 더한 것이에요. 3.3.2절의 정규화 세 개도 최종 목적 함수에 더해요. 계수는 {1e−7, 1e−5, 1e−3} 중에서 골랐어요.</li>
   </ul>
+
+  <div class="deep">
+    <div class="deep-h"><span class="tag t-acc">더 깊이</span> D단계에 쓰인 기법들</div>
+
+    <h4>RNN에서 GRU로: 왜 게이트가 필요한가</h4>
+    <p>RNN은 단계마다 상태를 새로 계산해요. 시퀀스가 길어지면 오래된 정보가 곱셈을 거듭하며 사라지는 <b>기울기 소실(vanishing gradient)</b> 문제가 생겨요. GRU는 "이전 상태를 얼마나 유지할지"를 정하는 게이트를 두어, 필요한 정보를 오래 들고 가게 해요.</p>
+    <div class="eq"><span><b class="vec">r</b><sub><i>t</i></sub> = σ(<i>W<sub>r</sub></i><b class="vec">x</b><sub><i>t</i></sub> + <i>U<sub>r</sub></i><b class="vec">s</b><sub><i>t</i>−1</sub>)</span><span class="n">리셋 게이트: 후보를 만들 때 과거를 얼마나 쓸지</span></div>
+    <div class="eq"><span><b class="vec">u</b><sub><i>t</i></sub> = σ(<i>W<sub>u</sub></i><b class="vec">x</b><sub><i>t</i></sub> + <i>U<sub>u</sub></i><b class="vec">s</b><sub><i>t</i>−1</sub>)</span><span class="n">업데이트 게이트: 새 정보로 얼마나 바꿀지</span></div>
+    <div class="eq"><span><b class="vec">s̃</b><sub><i>t</i></sub> = tanh(<i>W</i><b class="vec">x</b><sub><i>t</i></sub> + <i>U</i>(<b class="vec">r</b><sub><i>t</i></sub> ⊙ <b class="vec">s</b><sub><i>t</i>−1</sub>))</span><span class="n">후보 상태</span></div>
+    <div class="eq"><span><b class="vec">s</b><sub><i>t</i></sub> = (1 − <b class="vec">u</b><sub><i>t</i></sub>) ⊙ <b class="vec">s</b><sub><i>t</i>−1</sub> + <b class="vec">u</b><sub><i>t</i></sub> ⊙ <b class="vec">s̃</b><sub><i>t</i></sub></span><span class="n">이전 상태와 후보를 게이트 비율로 섞음</span></div>
+    <p>게이트 값은 σ(sigmoid)를 거쳐 0~1 사이예요. <span class="m"><b class="vec">u</b><sub><i>t</i></sub></span>가 0이면 이전 상태를 그대로 두고, 1이면 후보로 완전히 바꿔요. 게이트는 벡터라서 차원마다 따로 정해져요. LSTM은 게이트 3개(입력·망각·출력)와 별도의 셀 상태를 써요. GRU는 게이트 2개로 비슷한 성능을 내면서 파라미터가 적고 빨라요. 논문이 GRU 계열을 고른 이유예요.</p>
+
+    <figure class="fig">
+      <div class="scroll"><svg class="mid" viewBox="0 0 720 250" role="img" aria-label="AUGRU 셀: 업데이트 게이트에 군집 점수 감마를 곱한다">
+        <text x="16" y="64" font-size="13" font-weight="700">s<tspan baseline-shift="sub" font-size="9">t−1</tspan></text>
+        <path d="M58 60 L304 60" class="ln" stroke-width="2"/>
+        <circle cx="320" cy="60" r="15" class="surface" stroke="var(--muted)" stroke-width="1.6"/>
+        <text x="320" y="65" text-anchor="middle" font-size="15">×</text>
+        <text x="320" y="34" text-anchor="middle" font-size="12" class="tx-m">× (1 − ũ<tspan baseline-shift="sub" font-size="8">t</tspan>)</text>
+        <path d="M335 60 L503 60" class="ln" stroke-width="2"/>
+        <circle cx="520" cy="60" r="15" class="surface" stroke="var(--muted)" stroke-width="1.6"/>
+        <text x="520" y="65" text-anchor="middle" font-size="15">+</text>
+        <path d="M535 60 L640 60" class="ln" stroke-width="2" marker-end="url(#ah)"/>
+        <text x="650" y="65" font-size="13" font-weight="700">s<tspan baseline-shift="sub" font-size="9">t</tspan></text>
+
+        <rect x="70" y="100" width="130" height="44" rx="8" class="box"/>
+        <text x="135" y="120" text-anchor="middle" font-size="12" font-weight="700">u<tspan baseline-shift="sub" font-size="8">t</tspan> = σ(…)</text>
+        <text x="135" y="136" text-anchor="middle" font-size="11" class="tx-m">업데이트 게이트</text>
+        <path d="M200 122 L244 122" class="ln" marker-end="url(#ah)"/>
+        <circle cx="260" cy="122" r="15" class="surface" stroke="var(--accent)" stroke-width="2"/>
+        <text x="260" y="127" text-anchor="middle" font-size="15" class="tx-a">×</text>
+        <path d="M260 214 L260 140" class="ln-a" marker-end="url(#aha)"/>
+        <text x="250" y="236" text-anchor="end" font-size="12.5" font-weight="700" class="tx-a">군집 점수 γ*<tspan baseline-shift="sub" font-size="8">t</tspan></text>
+        <text x="300" y="112" font-size="12" font-weight="700" class="tx-a">ũ<tspan baseline-shift="sub" font-size="8">t</tspan> = γ*<tspan baseline-shift="sub" font-size="8">t</tspan> · u<tspan baseline-shift="sub" font-size="8">t</tspan></text>
+        <path d="M272 112 L312 74" class="ln-a"/>
+        <path d="M274 128 Q360 170 424 178" class="ln-a" marker-end="url(#aha)"/>
+
+        <rect x="290" y="190" width="118" height="44" rx="8" class="box"/>
+        <text x="349" y="210" text-anchor="middle" font-size="12" font-weight="700">s̃<tspan baseline-shift="sub" font-size="8">t</tspan> = tanh(…)</text>
+        <text x="349" y="226" text-anchor="middle" font-size="11" class="tx-m">후보 상태</text>
+        <path d="M408 205 L424 192" class="ln"/>
+        <circle cx="440" cy="182" r="15" class="surface" stroke="var(--muted)" stroke-width="1.6"/>
+        <text x="440" y="187" text-anchor="middle" font-size="15">×</text>
+        <path d="M455 182 Q520 182 520 77" class="ln" stroke-width="2" marker-end="url(#ah)"/>
+        <text x="470" y="210" font-size="12" class="tx-m">× ũ<tspan baseline-shift="sub" font-size="8">t</tspan></text>
+        <text x="70" y="182" font-size="11.5" class="tx-m">두 상자의 입력:</text>
+        <text x="70" y="198" font-size="11.5" class="tx-m">h*<tspan baseline-shift="sub" font-size="8">t</tspan>, s<tspan baseline-shift="sub" font-size="8">t−1</tspan></text>
+      </svg></div>
+      <figcaption class="cap"><b>그림 D3.</b> 보통 GRU와 다른 곳은 파란 부분 하나예요. 업데이트 게이트 u<sub>t</sub>에 군집 점수 γ*<sub>t</sub>를 곱해 ũ<sub>t</sub>를 만들어요. γ*<sub>t</sub>가 0에 가까운 군집(후보와 관련 없는 관심)이면 ũ<sub>t</sub>도 0에 가까워져서, s<sub>t</sub> ≈ s<sub>t−1</sub>으로 상태가 거의 그대로 넘어가요.</figcaption>
+    </figure>
+
+    <h4>어텐션과 GRU를 합치는 세 가지 방법 (DIEN 논문)</h4>
+    <p>AUGRU는 DIEN(Zhou et al., AAAI 2019)이 비교한 세 가지 방법 중 하나예요.</p>
+    <div class="tbl"><table>
+      <tr><th>방법</th><th>어텐션 a<sub>t</sub>를 넣는 곳</th><th>약점 / 장점</th></tr>
+      <tr><td>AIGRU</td><td>입력에 곱함: <span class="m"><b class="vec">x</b>′<sub><i>t</i></sub> = <i>a<sub>t</sub></i> · <b class="vec">x</b><sub><i>t</i></sub></span></td><td>입력이 0에 가까워도 게이트는 그대로라 상태가 여전히 바뀜</td></tr>
+      <tr><td>AGRU</td><td>업데이트 게이트를 스칼라 a<sub>t</sub>로 <b>바꿈</b></td><td>차원마다 다르던 게이트 값을 잃음</td></tr>
+      <tr><td><b>AUGRU</b></td><td>업데이트 게이트 벡터에 a<sub>t</sub>를 <b>곱함</b></td><td>차원별 게이트를 유지하면서, 관련 없는 단계에서는 상태를 거의 그대로 둠. DIEN 실험에서 가장 좋았고 SURGE도 이것을 씀</td></tr>
+    </table></div>
+    <p><b>관심 표류(interest drifting):</b> 사용자 관심이 이것저것 옮겨 다니는 현상이에요. 보통 GRU는 신발 → 노트북 → 캠핑으로 바뀔 때마다 상태가 크게 흔들려요. AUGRU는 후보와 관련 없는 단계에서 게이트를 거의 닫아서, 후보와 관련 있는 관심의 흐름만 매끄럽게 이어 줘요. DIEN은 a<sub>t</sub>를 후보 기준 어텐션으로 계산하고, SURGE는 풀링에서 나온 군집 점수 γ*를 그 자리에 써요.</p>
+
+    <h4>마지막 이어 붙이기의 구성 (식 17)</h4>
+    <ul>
+      <li><span class="m"><b class="vec">h</b><sub><i>s</i></sub></span>: 관심이 시간에 따라 어떻게 변해 왔는지 (AUGRU 결과)</li>
+      <li><span class="m"><b class="vec">h</b><sub><i>g</i></sub></span>: 그래프 전체 요약 (순서 무시, 중요도 가중)</li>
+      <li><span class="m"><b class="vec">h</b><sub><i>t</i></sub></span>: 후보 아이템 자체</li>
+      <li><span class="m"><b class="vec">h</b><sub><i>g</i></sub> ⊙ <b class="vec">h</b><sub><i>t</i></sub></span>: 사용자 관심과 후보의 원소별 일치도. 6절 "더 깊이"에서 본 "곱 관계를 미리 넣어 주는" 기법이에요.</li>
+    </ul>
+    <p class="small muted"><span class="m"><b class="vec">h</b><sub><i>s</i></sub> ⊙ <b class="vec">h</b><sub><i>t</i></sub></span>는 넣지 않았는데, 논문은 이유를 설명하지 않아요.</p>
+
+    <h4>손실: 음의 로그우도와 L2 정규화</h4>
+    <ul>
+      <li><b>CTR 예측:</b> 노출된 아이템을 클릭할 확률을 맞히는 이진 분류예요. 정답 y는 클릭이면 1, 아니면 0이에요.</li>
+      <li><b>음의 로그우도(NLL) = 이진 교차 엔트로피:</b> 정답이 1인데 ŷ = 0.9면 손실은 −log 0.9 = 0.105, ŷ = 0.1이면 −log 0.1 = 2.303이에요. 틀린 쪽으로 확신할수록 크게 벌을 받아요.</li>
+      <li><b>출력층:</b> 논문은 "softmax 층의 출력"이라고 써요. 클릭/비클릭 두 칸짜리 softmax는 sigmoid 하나와 같아요.</li>
+      <li><b>L2 정규화 λ‖Θ‖²:</b> 모든 파라미터의 제곱합에 벌점을 줘서 값이 너무 커지지 않게 해요(가중치 감쇠). 학습 데이터에만 맞춰지는 과적합을 줄여요.</li>
+    </ul>
+  </div>
 
   <!-- ============================================================ 9 -->
   <h2 id="s9"><span class="no">9</span>텐서 모양 따라가기</h2>
@@ -951,6 +1238,85 @@
     el("path", { d: "M440 164 Q520 164 530 140 Q540 116 736 128", "class": "ln-a", "marker-end": "url(#aha)" }, g);
     txt(g, 492, 150, "h_s", { "font-size": 12.5, "font-weight": 700, "class": "tx-a" });
     txt(g, 40, 262, "후보가 캠핑 랜턴이면 캠핑 군집의 γ*가 커서 이 단계가 h_s를 주로 결정해요.", { "font-size": 12, "class": "tx-m" });
+  })();
+
+  // ---------- Figure D1: weighted cosine slider ----------
+  (function () {
+    var svg = document.getElementById("metricSvg");
+    var inp = document.getElementById("wColor");
+    var out = document.getElementById("wOut");
+    var A = [1, 0.2, 0.9], B = [1, 0.2, -0.9], dims = ["운동 관련성", "가격대", "색상"];
+    var Z = 330, U = 150;
+    function render() {
+      var wc = parseFloat(inp.value), w = [1, 1, wc];
+      var a = A.map(function (v, i) { return v * w[i]; }), b = B.map(function (v, i) { return v * w[i]; });
+      var c = cos(a, b);
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      el("line", { x1: Z, y1: 14, x2: Z, y2: 190, "class": "ln" }, svg);
+      txt(svg, Z, 12, "0", { "text-anchor": "middle", "font-size": 11, "class": "tx-m" });
+      dims.forEach(function (name, i) {
+        var y = 30 + i * 56;
+        txt(svg, 16, y + 22, name, { "font-size": 12.5, "font-weight": 650 });
+        txt(svg, 600, y + 22, "w = " + w[i].toFixed(2), { "text-anchor": "end", "font-size": 12, "class": i === 2 ? "tx-a" : "tx-m", "font-weight": i === 2 ? 700 : 400 });
+        [[a[i], "g0", 0], [b[i], "g1", 1]].forEach(function (p) {
+          var v = p[0], x0 = v >= 0 ? Z : Z + v * U, wd = Math.max(1, Math.abs(v) * U);
+          el("rect", { x: x0, y: y + 6 + p[2] * 18, width: wd, height: 14, rx: 3, "class": p[1] }, svg);
+        });
+      });
+      // cosine meter
+      var mx0 = 160, mx1 = 500, my = 228;
+      el("line", { x1: mx0, y1: my, x2: mx1, y2: my, "class": "ln", "stroke-width": 3 }, svg);
+      [-1, 0, 1].forEach(function (t) {
+        var x = mx0 + (t + 1) / 2 * (mx1 - mx0);
+        el("line", { x1: x, y1: my - 5, x2: x, y2: my + 5, "class": "ln" }, svg);
+        txt(svg, x, my + 20, String(t), { "text-anchor": "middle", "font-size": 11, "class": "tx-m" });
+      });
+      var cx = mx0 + (c + 1) / 2 * (mx1 - mx0);
+      el("circle", { cx: cx, cy: my, r: 8, "class": "g0 ring" }, svg);
+      txt(svg, 16, my + 5, "가중 코사인", { "font-size": 12.5, "font-weight": 650 });
+      txt(svg, cx, my - 14, c.toFixed(2), { "text-anchor": "middle", "font-size": 13, "font-weight": 700 });
+      out.innerHTML = "w = [1, 1, <b>" + wc.toFixed(2) + "</b>] · 가중 코사인 = <b>" + c.toFixed(3) + "</b> · 그냥 코사인 = 0.124";
+    }
+    inp.addEventListener("input", render);
+    render();
+  })();
+
+  // ---------- Figure D2: pooling types ----------
+  (function () {
+    var svg = document.getElementById("poolTypes");
+    var P = [[40, 40, 0], [95, 20, 0], [70, 90, 0], [190, 30, 1], [245, 70, 1], [200, 110, 1]];
+    var E = [[0, 1], [0, 2], [1, 2], [3, 4], [3, 5], [4, 5], [2, 5]];
+    var keep = { 1: true, 2: true, 4: true };
+    var titles = [["(가) 평탄 readout", "그래프 → 벡터 1개"], ["(나) 노드 선택형", "점수 상위 노드만 남김 · SAGPool"], ["(다) 군집 배정형", "노드를 군집으로 합침 · DiffPool, SURGE"]];
+    titles.forEach(function (t, k) {
+      var ox = 20 + k * 330, oy = 70;
+      txt(svg, ox + 145, 22, t[0], { "text-anchor": "middle", "font-size": 13.5, "font-weight": 700 });
+      txt(svg, ox + 145, 40, t[1], { "text-anchor": "middle", "font-size": 11.5, "class": "tx-m" });
+      E.forEach(function (e) {
+        var faded = k === 1 && !(keep[e[0]] && keep[e[1]]);
+        el("line", { x1: ox + P[e[0]][0], y1: oy + P[e[0]][1], x2: ox + P[e[1]][0], y2: oy + P[e[1]][1], "class": "edge", opacity: faded ? 0.2 : 1 }, svg);
+      });
+      P.forEach(function (p, i) {
+        var faded = k === 1 && !keep[i];
+        el("circle", { cx: ox + p[0], cy: oy + p[1], r: 10, "class": "g" + p[2] + " ring", opacity: faded ? 0.25 : 1 }, svg);
+      });
+      el("path", { d: "M" + (ox + 145) + " 196 L" + (ox + 145) + " 214", "class": "ln", "marker-end": "url(#ah)" }, svg);
+      if (k === 0) {
+        el("rect", { x: ox + 85, y: 222, width: 120, height: 30, rx: 6, "class": "box-a" }, svg);
+        txt(svg, ox + 145, 242, "그래프 벡터 1개", { "text-anchor": "middle", "font-size": 12, "font-weight": 700, "class": "tx-a" });
+      } else if (k === 1) {
+        [[1, 0], [2, 0], [4, 1]].forEach(function (q, j) {
+          el("circle", { cx: ox + 105 + j * 40, cy: 236, r: 10, "class": "g" + q[1] + " ring" }, svg);
+        });
+        txt(svg, ox + 145, 268, "3개만 남고 나머지 정보는 버림", { "text-anchor": "middle", "font-size": 11.5, "class": "tx-m" });
+      } else {
+        el("line", { x1: ox + 115, y1: 236, x2: ox + 175, y2: 236, "class": "edge" }, svg);
+        el("circle", { cx: ox + 115, cy: 236, r: 16, "class": "g0 ring" }, svg);
+        el("circle", { cx: ox + 175, cy: 236, r: 16, "class": "g1 ring" }, svg);
+        txt(svg, ox + 145, 270, "군집 2개, 모든 노드 정보가 합쳐짐", { "text-anchor": "middle", "font-size": 11.5, "class": "tx-m" });
+      }
+      if (k < 2) el("line", { x1: ox + 312, y1: 14, x2: ox + 312, y2: 272, "class": "ln dash" }, svg);
+    });
   })();
 
   // ---------- Figure 8: results chart ----------
