@@ -1,0 +1,1045 @@
+<title>SURGE 논문 해설</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: single reading column (max 980px), diagrams scroll sideways inside their own box on phones.
+     Palette follows the existing reports/ style (blue accent on cool neutrals); series-1..3 = interest groups. */
+  :root {
+    --bg: #ffffff; --panel: #f5f7fa; --line: #e1e5eb; --text: #1b2130; --muted: #5d6676;
+    --accent: #2f6fde; --accent-bg: #edf3ff; --code-bg: #f0f2f6;
+    --good: #17803d; --good-bg: #eaf7ef; --bad: #b4410f; --bad-bg: #fff2ea;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s0: #9aa1ad; --bar: #c9ced8; --grid: #e8ebf0;
+    --ff: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+    --ff-math: "Cambria Math", "STIX Two Math", "Times New Roman", serif;
+    --ff-mono: Consolas, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13161b; --panel: #1b1f26; --line: #2c323c; --text: #e6e9ef; --muted: #9aa3b2;
+      --accent: #7aa7ff; --accent-bg: #1c2a44; --code-bg: #222731;
+      --good: #5fd08a; --good-bg: #15301f; --bad: #ff9b6b; --bad-bg: #3a2216;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s0: #6f7785; --bar: #48505d; --grid: #262b33;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #13161b; --panel: #1b1f26; --line: #2c323c; --text: #e6e9ef; --muted: #9aa3b2;
+    --accent: #7aa7ff; --accent-bg: #1c2a44; --code-bg: #222731;
+    --good: #5fd08a; --good-bg: #15301f; --bad: #ff9b6b; --bad-bg: #3a2216;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s0: #6f7785; --bar: #48505d; --grid: #262b33;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 15.5px; line-height: 1.75; }
+  main { max-width: 980px; margin: 0 auto; padding-block: 36px 96px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .eyebrow { font-size: 12.5px; letter-spacing: .06em; color: var(--accent); font-weight: 700; text-transform: uppercase; }
+  h1 { font-size: 28px; line-height: 1.3; margin: 6px 0 6px; text-wrap: balance; }
+  .meta { color: var(--muted); font-size: 13.5px; margin: 0; }
+  h2 { font-size: 22px; margin: 64px 0 14px; padding-bottom: 8px; border-bottom: 2px solid var(--line); text-wrap: balance; scroll-margin-top: 16px; }
+  h2 .no { color: var(--accent); margin-right: 8px; font-variant-numeric: tabular-nums; }
+  h3 { font-size: 17px; margin: 32px 0 8px; }
+  p { margin: 8px 0; max-width: 72ch; }
+  ul, ol { margin: 6px 0; padding-left: 22px; max-width: 74ch; }
+  li { margin: 4px 0; }
+  b, strong { font-weight: 650; }
+  code { font-family: var(--ff-mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .lead { font-size: 16.5px; }
+  .summary { background: var(--accent-bg); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 22px 0 8px; }
+  .summary p { max-width: none; }
+  .note { border-left: 4px solid var(--accent); background: var(--panel); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+  .note.review { border-left-color: var(--bad); }
+  .note.ok { border-left-color: var(--good); }
+  .note > :first-child { margin-top: 0; } .note > :last-child { margin-bottom: 0; }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 650; padding: 0 8px; border-radius: 999px; white-space: nowrap; vertical-align: 1px; }
+  .t-rev { color: var(--bad); background: var(--bad-bg); } .t-ok { color: var(--good); background: var(--good-bg); }
+  .t-acc { color: var(--accent); background: var(--accent-bg); }
+  .toc { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 24px; margin: 18px 0 0; padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px; font-size: 14px; }
+  .toc a { color: var(--text); text-decoration: none; display: block; padding: 2px 0; }
+  .toc a:hover, .toc a:focus-visible { color: var(--accent); }
+  .toc .no { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .eq { font-family: var(--ff-math); font-size: 17px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 10px 0; overflow-x: auto; white-space: nowrap; display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+  .eq .n { font-family: var(--ff); font-size: 12.5px; color: var(--muted); }
+  .eq i { font-style: italic; }
+  .m { font-family: var(--ff-math); font-size: 1.06em; white-space: nowrap; }
+  .vec { font-weight: 700; font-style: normal; }
+
+  .fig { margin: 18px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+  .fig .cap { font-size: 13px; color: var(--muted); padding: 10px 14px; border-top: 1px solid var(--line); }
+  .fig .cap b { color: var(--text); }
+  .scroll { overflow-x: auto; }
+  .fig svg { display: block; width: 100%; height: auto; }
+  .fig .wide { min-width: 700px; }
+  .fig .mid { min-width: 560px; }
+
+  svg text { font-family: var(--ff); fill: var(--text); }
+  svg .tx-m { fill: var(--muted); }
+  svg .tx-a { fill: var(--accent); }
+  svg .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+  svg .box-a { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 1.4; }
+  svg .ln { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+  svg .ln-a { stroke: var(--accent); stroke-width: 2; fill: none; }
+  svg .dash { stroke-dasharray: 5 4; }
+  svg .arrowhead { fill: var(--muted); }
+  svg .arrowhead-a { fill: var(--accent); }
+  svg .g0 { fill: var(--s1); } svg .g1 { fill: var(--s2); } svg .g2 { fill: var(--s3); } svg .gn { fill: var(--s0); }
+  svg .st0 { stroke: var(--s1); } svg .st1 { stroke: var(--s2); } svg .st2 { stroke: var(--s3); } svg .stn { stroke: var(--s0); }
+  svg .ring { stroke: var(--bg); stroke-width: 2; }
+  svg .edge { stroke: var(--muted); stroke-opacity: .7; stroke-width: 2; }
+  svg .edge-x { stroke: var(--bad); stroke-opacity: .85; stroke-width: 2; stroke-dasharray: 4 3; }
+  svg .surface { fill: var(--bg); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { font: inherit; font-size: 13px; border: 0; background: var(--bg); color: var(--text); padding: 5px 11px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); font-weight: 650; }
+  input[type="range"] { accent-color: var(--accent); width: 200px; max-width: 50vw; }
+  .readout { font-variant-numeric: tabular-nums; font-family: var(--ff-mono); font-size: 12.5px; color: var(--muted); }
+  .readout b { color: var(--text); }
+
+  .tbl { overflow-x: auto; margin: 12px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); font-weight: 650; }
+  td.n, th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr.hl td { background: var(--accent-bg); font-weight: 650; }
+  td.flag { color: var(--bad); font-weight: 700; }
+  td.pos { color: var(--good); } td.neg { color: var(--bad); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 14px 0; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--panel); min-width: 0; }
+  .card h4 { margin: 0 0 4px; font-size: 14.5px; }
+  .card p { margin: 4px 0; font-size: 14px; }
+  .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 14px 0; }
+  .kv div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+  .kv .big { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); line-height: 1.3; }
+  .kv .lbl { font-size: 12.5px; color: var(--muted); }
+
+  .heat { border-collapse: separate; border-spacing: 2px; width: auto; font-size: 12.5px; }
+  .heat th, .heat td { border: 0; padding: 4px 8px; text-align: center; font-variant-numeric: tabular-nums; }
+  .heat th { background: transparent; color: var(--muted); font-weight: 600; }
+  .heat th.rowh { text-align: left; white-space: nowrap; }
+  .heat td { border-radius: 4px; min-width: 52px; }
+  .pool-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; padding: 14px; }
+  @media (max-width: 720px) { .pool-grid { grid-template-columns: minmax(0, 1fr); } }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px 2px 6px; font-size: 12.5px; background: var(--bg); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+  .d0 { background: var(--s1); } .d1 { background: var(--s2); } .d2 { background: var(--s3); } .dn { background: var(--s0); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); padding: 8px 14px 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  .chart-wrap { position: relative; padding: 6px 14px 10px; }
+  .tip { position: absolute; pointer-events: none; background: var(--text); color: var(--bg); font-size: 12.5px; padding: 6px 9px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -110%); font-variant-numeric: tabular-nums; }
+  .chart-svg .bar { fill: var(--bar); }
+  .chart-svg .bar.hi { fill: var(--s1); }
+  .chart-svg .gridl { stroke: var(--grid); stroke-width: 1; }
+  .chart-svg .axis { fill: var(--muted); font-size: 11.5px; }
+  .chart-svg .lab { font-size: 12.5px; }
+  .chart-svg .val { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .chart-svg .val.hi { fill: var(--text); font-weight: 700; }
+  .chart-svg .hit { fill: transparent; cursor: default; }
+  .chart-svg .row:hover .bar:not(.hi) { fill: var(--muted); }
+
+  .review-list li { margin: 8px 0; }
+  .shape td:first-child { white-space: nowrap; }
+  footer { margin-top: 56px; font-size: 12.5px; color: var(--muted); }
+  @media (prefers-reduced-motion: no-preference) { svg .edge, svg .edge-x { transition: opacity .2s; } }
+  @media (max-width: 520px) { h1 { font-size: 23px; } h2 { font-size: 19.5px; } body { font-size: 15px; } .eq { font-size: 15.5px; } }
+</style>
+
+<main>
+  <div class="eyebrow">논문 해설 · SIGIR 2021</div>
+  <h1>SURGE: Sequential Recommendation with Graph Neural Networks</h1>
+  <p class="meta">Jianxin Chang, Chen Gao, Yu Zheng, Yiqun Hui, Yanan Niu, Yang Song, Depeng Jin, Yong Li · 칭화대 전자공학과 · 콰이쇼우(Kuaishou) · DOI 10.1145/3404835.3462968</p>
+  <p class="meta">SURGE = <b>S</b>eq<b>U</b>ential <b>R</b>ecommendation with <b>G</b>raph neural n<b>E</b>tworks. 이 페이지의 식 번호는 논문의 식 번호와 같아요.</p>
+
+  <div class="summary">
+    <p class="lead"><b>한 줄 요약.</b> 사용자의 긴 클릭 기록을 <b>시간순 줄(시퀀스)</b>이 아니라 <b>비슷한 아이템끼리 이은 그래프</b>로 다시 만들어요. 그 그래프에서 <b>덩어리(군집)</b>로 뭉친 관심만 남기고, 줄여진 짧은 관심 시퀀스로 다음 클릭을 예측해요.</p>
+  </div>
+
+  <nav class="toc" aria-label="목차">
+    <a href="#s1"><span class="no">1</span>한 장 요약 (리뷰어 관점)</a>
+    <a href="#s2"><span class="no">2</span>읽기 전에 알아둘 개념</a>
+    <a href="#s3"><span class="no">3</span>문제의식: 왜 그래프인가</a>
+    <a href="#s4"><span class="no">4</span>전체 구조 한눈에</a>
+    <a href="#s5"><span class="no">5</span>A. 관심 그래프 만들기</a>
+    <a href="#s6"><span class="no">6</span>B. 관심 융합 그래프 합성곱</a>
+    <a href="#s7"><span class="no">7</span>C. 관심 추출 그래프 풀링</a>
+    <a href="#s8"><span class="no">8</span>D. 예측층과 손실 함수</a>
+    <a href="#s9"><span class="no">9</span>텐서 모양 따라가기</a>
+    <a href="#s10"><span class="no">10</span>실험 설정</a>
+    <a href="#s11"><span class="no">11</span>실험 결과</a>
+    <a href="#s12"><span class="no">12</span>피어리뷰: 장점과 한계</a>
+    <a href="#s13"><span class="no">13</span>내 연구(뉴스 SID)에 접목할 아이디어</a>
+    <a href="#s14"><span class="no">14</span>식 18개 한 표로</a>
+  </nav>
+
+  <!-- ============================================================ 1 -->
+  <h2 id="s1"><span class="no">1</span>한 장 요약 (리뷰어 관점)</h2>
+
+  <div class="cards">
+    <div class="card"><h4>핵심 연구 질문</h4><p>잡음 섞인 긴 행동 기록에서, <b>비슷한 행동을 군집으로 묶어 지금 활성화된 핵심 관심만 뽑아내면</b> 순차 추천이 더 정확하고 빨라지는가?</p></div>
+    <div class="card"><h4>방법 (4단계)</h4><p>① 학습형 유사도로 아이템-아이템 그래프 만들기 → ② 군집·질의 인식 어텐션으로 그래프 합성곱 → ③ 소프트 군집 배정으로 그래프 풀링 (정규화 3개) → ④ 줄어든 관심 시퀀스를 AUGRU로 예측</p></div>
+    <div class="card"><h4>결과</h4><p>Taobao·Kuaishou 두 데이터셋, 지표 4개 모두에서 기준 모델 7개보다 좋았어요. <b>기록이 길수록 격차가 컸고</b>, 풀링으로 시퀀스가 짧아져 학습도 빨랐어요.</p></div>
+  </div>
+
+  <div class="kv">
+    <div><div class="big">+0.024</div><div class="lbl">Taobao AUC: 0.8906 (최고 기준 모델 SLi-Rec 0.8664 대비)</div></div>
+    <div><div class="big">+0.037</div><div class="lbl">Kuaishou AUC: 0.8525 (최고 기준 모델 GRU4REC 0.8156 대비)</div></div>
+    <div><div class="big">14.96분</div><div class="lbl">Taobao 수렴까지 학습 시간. 비교 모델 중 가장 짧음</div></div>
+  </div>
+  <p class="small muted">논문 본문은 AUC 향상을 "약 0.03, 0.04"라고 적었어요. Table 2의 값으로 최고 기준 모델과 직접 빼면 위와 같아요.</p>
+
+  <!-- ============================================================ 2 -->
+  <h2 id="s2"><span class="no">2</span>읽기 전에 알아둘 개념</h2>
+  <p>SURGE는 여러 기존 기법을 조립한 모델이에요. 아래 여섯 가지를 알면 나머지는 따라갈 수 있어요.</p>
+
+  <div class="cards">
+    <div class="card"><h4>순차 추천 (CTR 형태)</h4><p>입력은 사용자의 클릭 기록 <span class="m"><i>x</i><sub>1</sub>, …, <i>x<sub>n</sub></i></span>과 후보 아이템 <span class="m"><i>x<sub>t</sub></i></span>이에요. 출력은 "다음에 <span class="m"><i>x<sub>t</sub></i></span>를 클릭할 확률" <span class="m"><i>ŷ</i></span>예요. 정답 1/0으로 이진 교차 엔트로피를 최소화해요.</p></div>
+    <div class="card"><h4>그래프 신경망 (메시지 전달)</h4><p>각 노드가 이웃 노드의 벡터를 모아(합·평균) 자기 벡터를 고쳐요. 한 번 하면 1-hop, 두 번 하면 2-hop 이웃 정보까지 섞여요.</p></div>
+    <div class="card"><h4>그래프 어텐션 (GAT)</h4><p>이웃을 똑같이 더하지 않고, 이웃마다 점수를 매겨 softmax로 정규화한 가중치로 더해요. SURGE의 B단계가 이 구조예요.</p></div>
+    <div class="card"><h4>그래프 풀링 (DiffPool)</h4><p>노드 <span class="m"><i>n</i></span>개를 군집 <span class="m"><i>m</i></span>개로 줄여요. "노드 <span class="m"><i>i</i></span>가 군집 <span class="m"><i>k</i></span>에 속할 확률" 행렬 <span class="m"><i>S</i></span> (<span class="m"><i>n</i>×<i>m</i></span>)를 학습하고 <span class="m"><i>S</i><sup>T</sup><i>H</i></span>로 군집 벡터를 만들어요. CNN의 풀링과 같은 역할이에요.</p></div>
+    <div class="card"><h4>GRU와 AUGRU</h4><p>GRU는 업데이트 게이트로 "이전 상태를 얼마나 덮어쓸지" 정하는 순환 신경망이에요. AUGRU(DIEN 논문)는 이 게이트에 <b>어텐션 점수를 곱해</b>, 관련 없는 입력은 상태를 거의 못 바꾸게 해요.</p></div>
+    <div class="card"><h4>정규화에 쓰인 도구</h4><p><b>프로베니우스 노름</b> <span class="m">‖<i>X</i>‖<sub><i>F</i></sub></span>: 행렬 원소 제곱합의 제곱근(행렬 간 거리). <b>엔트로피</b> <span class="m"><i>H</i>(<i>p</i>) = −Σ<i>p</i> log <i>p</i></span>: 분포가 한 곳에 몰릴수록 0에 가까워요.</p></div>
+  </div>
+
+  <!-- ============================================================ 3 -->
+  <h2 id="s3"><span class="no">3</span>문제의식: 왜 그래프인가</h2>
+  <p>논문은 기존 순차 추천이 풀지 못한 <b>두 가지 문제</b>에서 출발해요.</p>
+  <ol>
+    <li><b>암묵적이고 잡음 많은 신호.</b> 클릭·시청 같은 암묵적 피드백은 "좋아요"처럼 선호를 직접 말해주지 않아요. 관심 없는 것도 자주 클릭하고, 그런 기록은 실제 관심을 가리는 잡음이 돼요.</li>
+    <li><b>빠르게 바뀌는 선호.</b> 어느 시점에는 일부 관심만 켜져 있고 나머지는 꺼져 있어요. 예: 월드컵 기간에만 축구 뉴스를 보는 사용자. 잡음을 걸러도 "지금 켜진 관심"을 고르는 일이 남아요.</li>
+  </ol>
+
+  <figure class="fig">
+    <div class="scroll"><svg class="wide" viewBox="0 0 1000 210" role="img" aria-label="한 사용자의 클릭 시퀀스. 같은 관심(신발)이 시간적으로 흩어져 있고, 우산 클릭은 잡음이다.">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker>
+        <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead-a"/></marker>
+      </defs>
+      <text x="420" y="24" text-anchor="middle" class="tx-a" font-size="13" font-weight="700">같은 관심(신발)이 시간 축에 흩어져 있어요</text>
+      <path d="M60 84 Q104 46 148 84" class="ln-a"/>
+      <path d="M148 84 Q236 36 324 84" class="ln-a"/>
+      <path d="M324 84 Q500 -4 676 84" class="ln-a"/>
+      <g id="seqchips"></g>
+      <path d="M764 158 L764 140" class="ln" marker-end="url(#ah)"/>
+      <text x="764" y="175" text-anchor="middle" class="tx-m" font-size="12.5">잡음 클릭</text>
+      <rect x="902" y="88" width="88" height="48" rx="8" class="surface" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <text x="946" y="109" text-anchor="middle" font-size="12.5" font-weight="700" class="tx-a">다음 클릭?</text>
+      <text x="946" y="126" text-anchor="middle" font-size="11.5" class="tx-m">x<tspan baseline-shift="sub" font-size="9">n+1</tspan></text>
+      <path d="M20 198 L985 198" class="ln" marker-end="url(#ah)"/>
+      <text x="22" y="192" class="tx-m" font-size="11.5">시간 →</text>
+    </svg></div>
+    <figcaption class="cap"><b>그림 1.</b> 이 페이지 전체에서 쓰는 예시 사용자예요. 신발·전자기기·캠핑 세 가지 관심과 잡음 클릭(우산)이 섞여 있어요. RNN은 최근 것 위주로 기억해서 t1의 신발 관심을 잊기 쉽고, 우산 같은 잡음도 그대로 상태에 반영해요.</figcaption>
+  </figure>
+
+  <h3>기존 접근의 세 갈래와 한계</h3>
+  <div class="tbl"><table>
+    <tr><th>갈래</th><th>대표 모델</th><th>어떻게</th><th>논문이 지적한 한계</th></tr>
+    <tr><td>규칙·어텐션 가중</td><td>DIN, FPMC</td><td>시간 감쇠 규칙이나 후보 아이템 기준 어텐션으로 과거 아이템에 가중치</td><td>긴 시퀀스에서 핵심 부분에 집중하지 못함. 가장 큰 어텐션이 먼 과거의 엉뚱한 아이템에 갈 수 있음</td></tr>
+    <tr><td>순환 신경망</td><td>GRU4REC, DIEN</td><td>시퀀스를 RNN으로 요약해 마지막 상태를 사용자 표현으로</td><td>단기 병목. 긴 의존성을 잊고 최근 기록 위주. 잡음이 다음 단계 입력으로 전파됨</td></tr>
+    <tr><td>장·단기 분리</td><td>SLi-Rec</td><td>장기 관심과 단기 관심을 따로 모델링해 합침</td><td>장·단기를 나누고 합치는 기준이 모호함. 긴 시퀀스(Kuaishou)에서는 GRU4REC보다도 못함</td></tr>
+  </table></div>
+  <p>SURGE의 답은 <b>"시간 순서 대신 유사도로 다시 연결하자"</b>예요. 그래프로 만들면 t1과 t8의 신발이 시간상 멀어도 바로 이웃이 돼요. 자주 반복된 관심은 <b>노드 차수가 높은 촘촘한 덩어리</b>가 되고, 잡음은 <b>외톨이 노드</b>가 돼요. 논문은 이것을 "이웃은 비슷하고, 촘촘한 부분 그래프가 핵심 관심이다"라는 사전 가정(prior)으로 둬요.</p>
+  <div class="note"><p>세션 기반 추천의 그래프 모델(SR-GNN 등)과는 그래프를 만드는 기준이 달라요. 그쪽은 <b>"A 다음에 B를 클릭했다"는 전이</b>로 엣지를 만들어 짧은 세션 안의 반복 행동을 잡아요. 긴 기간에는 같은 행동이 잘 반복되지 않아서, SURGE는 전이 대신 <b>임베딩 유사도</b>로 엣지를 만들어요. 논문은 아이템 동시 출현(co-occurrence)도 사용자마다 연결된 그래프를 만들기에는 너무 희소하다고 봤어요.</p></div>
+
+  <!-- ============================================================ 4 -->
+  <h2 id="s4"><span class="no">4</span>전체 구조 한눈에</h2>
+  <figure class="fig">
+    <div class="scroll"><svg class="wide" viewBox="0 0 1000 330" role="img" aria-label="SURGE 구조: A 관심 그래프 만들기, B 관심 융합 그래프 합성곱, C 관심 추출 그래프 풀링, D 예측층">
+      <g id="archA"></g>
+      <rect x="8" y="34" width="232" height="230" rx="12" class="box"/>
+      <rect x="258" y="34" width="232" height="230" rx="12" class="box"/>
+      <rect x="508" y="34" width="232" height="230" rx="12" class="box"/>
+      <rect x="758" y="34" width="232" height="230" rx="12" class="box"/>
+      <text x="124" y="24" text-anchor="middle" font-size="14" font-weight="700">A. 관심 그래프 만들기</text>
+      <text x="374" y="24" text-anchor="middle" font-size="14" font-weight="700">B. 관심 융합</text>
+      <text x="624" y="24" text-anchor="middle" font-size="14" font-weight="700">C. 관심 추출 (풀링)</text>
+      <text x="874" y="24" text-anchor="middle" font-size="14" font-weight="700">D. 예측</text>
+      <g id="archMini"></g>
+      <path d="M240 150 L256 150" class="ln-a" marker-end="url(#aha)"/>
+      <path d="M490 150 L506 150" class="ln-a" marker-end="url(#aha)"/>
+      <path d="M740 150 L756 150" class="ln-a" marker-end="url(#aha)"/>
+      <text x="124" y="288" text-anchor="middle" font-size="12" class="tx-m">학습형 유사도 + 상위 ε 엣지만</text>
+      <text x="124" y="306" text-anchor="middle" font-size="12" class="tx-m">식 (1)–(3)</text>
+      <text x="374" y="288" text-anchor="middle" font-size="12" class="tx-m">군집 인식 α + 질의 인식 β 어텐션</text>
+      <text x="374" y="306" text-anchor="middle" font-size="12" class="tx-m">식 (4)–(8)</text>
+      <text x="624" y="288" text-anchor="middle" font-size="12" class="tx-m">소프트 배정 S + 정규화 3개</text>
+      <text x="624" y="306" text-anchor="middle" font-size="12" class="tx-m">식 (9)–(15)</text>
+      <text x="874" y="288" text-anchor="middle" font-size="12" class="tx-m">AUGRU + MLP → 클릭 확률</text>
+      <text x="874" y="306" text-anchor="middle" font-size="12" class="tx-m">식 (16)–(18)</text>
+    </svg></div>
+    <figcaption class="cap"><b>그림 2.</b> 사용자 한 명마다 이 과정을 거쳐요. 그래프는 전체 아이템이 아니라 <b>그 사용자의 기록만으로</b> 매번 새로 만들어요. A→B→C에서 "느슨한 시퀀스(n개)"가 "촘촘한 관심 시퀀스(m개, m &lt; n)"로 바뀌고, D는 이 짧은 시퀀스로 예측해요.</figcaption>
+  </figure>
+  <div class="tbl"><table>
+    <tr><th>단계</th><th>입력 → 출력</th><th>하는 일 (한 문장)</th><th>해결하려는 문제</th></tr>
+    <tr><td>A</td><td>아이템 임베딩 n개 → 인접 행렬 A</td><td>비슷한 아이템끼리 엣지를 잇되, 전체에서 상위 ε 비율만 남겨요</td><td>시간상 흩어진 같은 관심을 이웃으로 만들기</td></tr>
+    <tr><td>B</td><td>A, 노드 벡터 → 고쳐진 노드 벡터 h′</td><td>군집 중심 노드와 후보 아이템 관련 노드의 정보를 더 많이 퍼뜨려요</td><td>약한 신호를 강한 신호로 모으고 잡음을 약하게</td></tr>
+    <tr><td>C</td><td>h′ n개 → 군집 벡터 h* m개</td><td>노드를 m개 군집으로 소프트하게 묶고, 시간 순서를 유지해요</td><td>지금 켜진 핵심 관심만 남기기</td></tr>
+    <tr><td>D</td><td>h* m개, 후보 h<sub>t</sub> → ŷ</td><td>관심 시퀀스의 변화를 AUGRU로 모델링하고 MLP로 점수를 내요</td><td>관심의 시간적 진화 반영</td></tr>
+  </table></div>
+
+  <!-- ============================================================ 5 -->
+  <h2 id="s5"><span class="no">5</span>A. 관심 그래프 만들기 <span class="small muted">(3.1절)</span></h2>
+
+  <h3>5-1. 노드와 엣지</h3>
+  <p>사용자 기록의 아이템 하나가 노드 하나예요(노드 수 <span class="m"><i>n</i></span> = 기록 길이). 각 노드는 아이템 임베딩 <span class="m"><b class="vec">h</b><sub><i>i</i></sub> ∈ ℝ<sup><i>d</i></sup></span>를 가져요. 무방향 그래프의 인접 행렬 <span class="m"><i>A</i> ∈ ℝ<sup><i>n</i>×<i>n</i></sup></span>를 <b>학습</b>하는 것이 목표예요. 그래서 그래프 만들기 문제를 "노드 유사도를 재는 함수를 학습하는 문제(metric learning)"로 바꿔요. 이 함수는 추천 손실과 <b>함께</b> 학습돼요.</p>
+
+  <h3>5-2. 학습형 유사도: 가중 코사인 + 멀티헤드</h3>
+  <div class="eq"><span><i>M<sub>ij</sub></i> = cos( <b class="vec">w</b> ⊙ <b class="vec">h</b><sub><i>i</i></sub> , <b class="vec">w</b> ⊙ <b class="vec">h</b><sub><i>j</i></sub> )</span><span class="n">(1)</span></div>
+  <div class="eq"><span><i>M</i><sup>δ</sup><sub><i>ij</i></sub> = cos( <b class="vec">w</b><sub>δ</sub> ⊙ <b class="vec">h</b><sub><i>i</i></sub> , <b class="vec">w</b><sub>δ</sub> ⊙ <b class="vec">h</b><sub><i>j</i></sub> ),&nbsp;&nbsp; <i>M<sub>ij</sub></i> = (1/φ) Σ<sub>δ=1</sub><sup>φ</sup> <i>M</i><sup>δ</sup><sub><i>ij</i></sub></span><span class="n">(2)</span></div>
+  <ul>
+    <li><span class="m"><b class="vec">w</b></span>는 학습되는 가중치 벡터예요. 임베딩의 차원마다 "이 차원을 유사도에서 얼마나 중요하게 볼지"를 정해요. <span class="m">⊙</span>는 원소별 곱이에요.</li>
+    <li>헤드 φ개가 서로 다른 <span class="m"><b class="vec">w</b><sub>δ</sub></span>로 각자 유사도 행렬을 만들고 평균을 내요. 헤드마다 다른 관점(예: 가격대, 용도)을 볼 수 있고 학습이 안정돼요.</li>
+    <li>커널 방식(코사인·유클리드·마할라노비스)과 어텐션 방식 가운데, 표현력과 계산량의 균형 때문에 가중 코사인을 골랐다고 해요.</li>
+    <li>임베딩이 학습되면서 그래프 구조도 계속 바뀌어요. 처음 보는 아이템에도 바로 그래프를 만들 수 있어요(귀납적 학습 가능).</li>
+  </ul>
+
+  <h3>5-3. 희소화: 전체 그래프 기준 상대 순위 (ε-sparseness)</h3>
+  <p>코사인 값은 [−1, 1]이라 그대로 쓰면 모든 노드가 연결된 완전 그래프가 돼요. 계산이 비싸고, 중요하지 않은 엣지가 잡음이 돼요. 그래서 <b>가장 강한 연결만</b> 남겨요.</p>
+  <div class="eq"><span><i>A<sub>ij</sub></i> = 1 &nbsp;if&nbsp; <i>M<sub>ij</sub></i> ≥ Rank<sub>ε<i>n</i>²</sub>(<i>M</i>), &nbsp;&nbsp;otherwise 0</span><span class="n">(3)</span></div>
+  <p><span class="m">Rank<sub>ε<i>n</i>²</sub>(<i>M</i>)</span>는 행렬 <span class="m"><i>M</i></span>의 원소 <span class="m"><i>n</i>²</span>개 중 <span class="m">ε<i>n</i>²</span>번째로 큰 값이에요. 즉 <b>전체 원소 중 상위 ε 비율만 1로</b> 만들어요. 아래에서 ε를 직접 바꿔 보세요.</p>
+
+  <figure class="fig">
+    <div class="controls">
+      <label for="eps">ε (남길 비율)</label>
+      <input type="range" id="eps" min="0.10" max="0.60" step="0.02" value="0.30">
+      <span class="readout" id="epsOut"></span>
+    </div>
+    <div class="legend"><span><i class="dot d0"></i>신발</span><span><i class="dot d1"></i>전자기기</span><span><i class="dot d2"></i>캠핑</span><span><i class="dot dn"></i>잡음(우산)</span><span>원 크기 = 연결 수(차수)</span></div>
+    <div class="scroll"><svg class="mid" id="epsGraph" viewBox="0 0 580 320" role="img" aria-label="ε 값에 따라 바뀌는 관심 그래프"></svg></div>
+    <figcaption class="cap"><b>그림 3.</b> 그림 1의 10개 아이템으로 계산한 실제 코사인 유사도예요(예시용 4차원 임베딩). <span class="m"><i>n</i>² = 100</span>개 원소에는 대각선(자기 자신, 값 1) 10개도 들어 있어서, ε = 0.10이면 대각선만 남고 엣지가 하나도 없어요. ε = 0.30에서 세 관심이 정확히 덩어리로 갈라지고, 신발(4개)은 차수가 높은 <b>핵심 관심</b>, 우산은 <b>외톨이</b>가 돼요. ε를 더 키우면 관심 사이에도 엣지가 생겨요.</figcaption>
+  </figure>
+
+  <h3>5-4. 왜 "전체 상대 순위"인가: 세 가지 희소화 전략 비교</h3>
+  <p>논문은 다른 두 방식을 명시적으로 비교하고 기각해요. 아래 세 그림은 같은 10개 아이템에 각 방식을 적용한 결과예요.</p>
+  <figure class="fig">
+    <div class="scroll"><svg class="wide" id="stratSvg" viewBox="0 0 1000 300" role="img" aria-label="절대 임계값, 노드별 상위 k, 전체 상대 순위 세 방식 비교"></svg></div>
+    <figcaption class="cap"><b>그림 4.</b> 빨간 점선은 서로 다른 관심 사이의 엣지예요. <b>(가) 절대 임계값</b>: 학습 초기처럼 유사도 분포가 위로 쏠리면 완전 그래프가 되고, 반대로 쏠리면 빈 그래프가 돼요. <b>(나) 노드별 상위 k</b>: 모든 노드의 차수가 거의 같아져서, 우산 같은 잡음도 억지로 이웃 2개를 갖고 캠핑 노드는 다른 관심과 이어져요. <b>(다) 전체 상대 순위</b>: 비율만 정하므로 분포가 움직여도 그래프 밀도가 일정하고, 촘촘한 곳과 성긴 곳의 차이가 그대로 남아요.</figcaption>
+  </figure>
+  <div class="tbl"><table>
+    <tr><th>전략</th><th>예</th><th>논문이 든 문제</th></tr>
+    <tr><td>(가) 전체 절대 임계값</td><td>IDGL [5]</td><td>임베딩이 학습되며 유사도 분포가 바뀌어요. 임계값을 잘못 잡으면 그래프가 아예 안 생기거나 완전 그래프가 돼요.</td></tr>
+    <tr><td>(나) 노드별 상대 순위 (kNN)</td><td>[4], [19]</td><td>모든 노드 차수가 같아져요. 균일한 희소 분포를 강요해서, 뒤의 GCN이 "어디가 촘촘하고 어디가 성긴지"라는 구조 정보를 못 써요.</td></tr>
+    <tr><td><b>(다) 전체 상대 순위 (SURGE)</b></td><td>식 (3)</td><td>하이퍼파라미터 ε에 덜 민감하고, 그래프의 희소 분포를 망가뜨리지 않아요.</td></tr>
+  </table></div>
+  <div class="note review"><p><span class="tag t-rev">리뷰어 메모</span> 식 (3)은 0/1 값만 내는 계단 함수라 미분이 0이에요. 그런데 본문은 <span class="m"><b class="vec">w</b></span>가 추천 손실과 함께 학습된다고 해요. 그래디언트가 <span class="m"><b class="vec">w</b></span>까지 어떻게 가는지(예: 마스크 위치의 <span class="m"><i>M<sub>ij</sub></i></span> 값을 가중치로 쓰는지)는 본문에 없어요. 재현할 때는 공식 코드를 확인해야 해요.</p></div>
+
+  <!-- ============================================================ 6 -->
+  <h2 id="s6"><span class="no">6</span>B. 관심 융합 그래프 합성곱 <span class="small muted">(3.2절)</span></h2>
+  <p>그래프가 생기면 이웃 정보를 모아 각 노드 벡터를 고쳐요. 목표는 <b>약한 신호를 강한 신호로 모으는 것</b>이에요. 같은 관심의 클릭 여러 개가 서로 정보를 주고받으면 그 관심이 또렷해지고, 외톨이 잡음은 받는 정보가 적어 묻혀요.</p>
+
+  <h3>6-1. 업데이트 식</h3>
+  <div class="eq"><span><b class="vec">h</b>′<sub><i>i</i></sub> = σ( <i>W<sub>a</sub></i> · Aggregate( <i>E<sub>ij</sub></i> · <b class="vec">h</b><sub><i>j</i></sub> | <i>j</i> ∈ <i>N<sub>i</sub></i> ) + <b class="vec">h</b><sub><i>i</i></sub> )</span><span class="n">(4)</span></div>
+  <div class="eq"><span><b class="vec">h</b>′<sub><i>i</i></sub> = ∥<sub>δ=1</sub><sup>φ</sup> σ( <i>W</i><sub><i>a</i></sub><sup>δ</sup> · Aggregate( <i>E</i><sup>δ</sup><sub><i>ij</i></sub> · <b class="vec">h</b><sub><i>j</i></sub> | <i>j</i> ∈ <i>N<sub>i</sub></i> ) + <b class="vec">h</b><sub><i>i</i></sub> )</span><span class="n">(5)</span></div>
+  <ul>
+    <li><span class="m"><i>N<sub>i</sub></i></span>는 노드 <span class="m"><i>i</i></span>의 이웃이고 <b>자기 자신도 포함</b>해요(self-loop). Aggregate는 합(sum)을 썼어요.</li>
+    <li><span class="m">+ <b class="vec">h</b><sub><i>i</i></sub></span>는 잔차 연결이에요. 식 (5)는 GAT처럼 φ개 헤드 결과를 이어 붙여요(∥). 그래서 출력 차원은 <span class="m">φ<i>d</i>′</span>이에요.</li>
+    <li>핵심은 이웃 가중치 <span class="m"><i>E<sub>ij</sub></i></span>를 어떻게 정하느냐예요. 두 가지 점수를 더해요.</li>
+  </ul>
+
+  <h3>6-2. 두 가지 어텐션</h3>
+  <figure class="fig">
+    <div class="scroll"><svg class="wide" viewBox="0 0 1000 320" role="img" aria-label="군집 인식 어텐션과 질의 인식 어텐션 비교">
+      <text x="240" y="26" text-anchor="middle" font-size="14" font-weight="700">(a) 군집 인식 점수 α<tspan baseline-shift="sub" font-size="10">i</tspan></text>
+      <text x="240" y="46" text-anchor="middle" font-size="12" class="tx-m">타깃 노드 i가 군집의 중심(medoid)인가?</text>
+      <circle cx="200" cy="170" r="96" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="6 5"/>
+      <text x="200" y="285" text-anchor="middle" font-size="12" class="tx-a">k-hop 이웃 = 군집의 수용 영역</text>
+      <g class="edge"><line x1="200" y1="170" x2="140" y2="110"/><line x1="200" y1="170" x2="260" y2="110"/><line x1="200" y1="170" x2="130" y2="200"/><line x1="200" y1="170" x2="270" y2="215"/><line x1="140" y1="110" x2="130" y2="200"/><line x1="260" y1="110" x2="270" y2="215"/></g>
+      <circle cx="140" cy="110" r="13" class="g0 ring"/><circle cx="260" cy="110" r="13" class="g0 ring"/><circle cx="130" cy="200" r="13" class="g0 ring"/><circle cx="270" cy="215" r="13" class="g0 ring"/>
+      <circle cx="200" cy="170" r="20" class="g0 ring"/>
+      <text x="200" y="175" text-anchor="middle" font-size="13" font-weight="700" style="fill:#fff">i</text>
+      <line x1="385" y1="250" x2="430" y2="250" class="edge"/>
+      <circle cx="385" cy="250" r="11" class="gn ring"/><circle cx="430" cy="250" r="11" class="gn ring"/>
+      <text x="408" y="226" text-anchor="middle" font-size="12" class="tx-m">주변부 노드: α 낮음</text>
+      <text x="345" y="110" font-size="12">h<tspan baseline-shift="sub" font-size="9">i</tspan><tspan baseline-shift="super" font-size="9">c</tspan> = 영역 안 노드 평균</text>
+      <text x="345" y="132" font-size="12">h<tspan baseline-shift="sub" font-size="9">i</tspan> ≈ h<tspan baseline-shift="sub" font-size="9">i</tspan><tspan baseline-shift="super" font-size="9">c</tspan> 이면 중심 → α 높음</text>
+
+      <line x1="500" y1="20" x2="500" y2="300" class="ln dash"/>
+
+      <text x="760" y="26" text-anchor="middle" font-size="14" font-weight="700">(b) 질의 인식 점수 β<tspan baseline-shift="sub" font-size="10">j</tspan></text>
+      <text x="760" y="46" text-anchor="middle" font-size="12" class="tx-m">소스 노드 j가 지금 평가할 후보 아이템과 관련 있는가?</text>
+      <rect x="868" y="140" width="116" height="56" rx="10" class="box-a"/>
+      <text x="926" y="163" text-anchor="middle" font-size="12.5" font-weight="700" class="tx-a">후보 h<tspan baseline-shift="sub" font-size="9">t</tspan></text>
+      <text x="926" y="182" text-anchor="middle" font-size="11.5">캠핑 랜턴</text>
+      <circle cx="590" cy="100" r="15" class="g2 ring"/><text x="618" y="105" font-size="12">텐트 (t6)</text>
+      <circle cx="590" cy="170" r="15" class="g2 ring"/><text x="618" y="175" font-size="12">캠핑 의자 (t10)</text>
+      <circle cx="590" cy="240" r="15" class="g1 ring"/><text x="618" y="245" font-size="12">노트북 (t3)</text>
+      <path d="M720 105 Q800 110 864 158" class="ln-a" stroke-width="5" marker-end="url(#aha)"/>
+      <path d="M740 172 L864 170" class="ln-a" stroke-width="4" marker-end="url(#aha)"/>
+      <path d="M708 242 Q800 236 864 186" class="ln" stroke-width="1.2" marker-end="url(#ah)"/>
+      <text x="790" y="96" font-size="12" class="tx-a">β 높음</text>
+      <text x="790" y="258" font-size="12" class="tx-m">β 낮음</text>
+    </svg></div>
+    <figcaption class="cap"><b>그림 5.</b> α는 "받는 쪽(타깃 노드 i)"의 점수, β는 "보내는 쪽(소스 노드 j)"의 점수예요. 같은 사용자라도 후보 아이템이 바뀌면 β가 바뀌어서, 그래프에서 강조되는 관심이 달라져요.</figcaption>
+  </figure>
+
+  <div class="eq"><span>α<sub><i>i</i></sub> = Attention<sub><i>c</i></sub>( <i>W<sub>c</sub></i><b class="vec">h</b><sub><i>i</i></sub> ∥ <b class="vec">h</b><sub><i>i</i></sub><sup><i>c</i></sup> ∥ <i>W<sub>c</sub></i><b class="vec">h</b><sub><i>i</i></sub> ⊙ <b class="vec">h</b><sub><i>i</i></sub><sup><i>c</i></sup> )</span><span class="n">(6)</span></div>
+  <div class="eq"><span>β<sub><i>j</i></sub> = Attention<sub><i>q</i></sub>( <i>W<sub>q</sub></i><b class="vec">h</b><sub><i>j</i></sub> ∥ <b class="vec">h</b><sub><i>t</i></sub> ∥ <i>W<sub>q</sub></i><b class="vec">h</b><sub><i>j</i></sub> ⊙ <b class="vec">h</b><sub><i>t</i></sub> )</span><span class="n">(7)</span></div>
+  <div class="eq"><span><i>E<sub>ij</sub></i> = softmax<sub><i>j</i></sub>( α<sub><i>i</i></sub> + β<sub><i>j</i></sub> ) = exp(α<sub><i>i</i></sub> + β<sub><i>j</i></sub>) / Σ<sub><i>k</i>∈<i>N<sub>i</sub></i></sub> exp(α<sub><i>i</i></sub> + β<sub><i>k</i></sub>)</span><span class="n">(8)</span></div>
+  <ul>
+    <li><b>군집 인식 α<sub>i</sub></b>: 타깃 노드 <span class="m"><i>i</i></span>의 k-hop 이웃을 하나의 군집으로 보고, 그 평균 <span class="m"><b class="vec">h</b><sub><i>i</i></sub><sup><i>c</i></sup></span>와 <span class="m"><b class="vec">h</b><sub><i>i</i></sub></span>를 비교해요. 입력은 "자기 ∥ 군집 평균 ∥ 둘의 원소곱"이고, 2층 피드포워드망(LeakyReLU)이 점수를 내요.</li>
+    <li><b>질의 인식 β<sub>j</sub></b>: 같은 구조로 소스 노드 <span class="m"><b class="vec">h</b><sub><i>j</i></sub></span>와 후보 아이템 <span class="m"><b class="vec">h</b><sub><i>t</i></sub></span>를 비교해요. 관련 있는 행동만 예측에 쓰이도록, 관련 없는 정보는 모으는 과정에서 버려요. DIN의 "후보 기준 어텐션"을 그래프로 옮긴 셈이에요.</li>
+    <li>두 점수를 <b>더한 뒤</b>(additive attention) 이웃에 대해 softmax를 해요. 논문 설명으로는 self-loop에서 α가 "타깃이 얼마나 받을지", β가 "소스가 얼마나 보낼지"를 조절해요.</li>
+    <li>β에 softmax를 한 값 <span class="m">γ<sub><i>i</i></sub></span>는 "노드 <span class="m"><i>i</i></span>의 중요도"로 C단계(풀링·readout)에서 다시 쓰여요.</li>
+  </ul>
+
+  <h3>6-3. 숫자로 확인하기</h3>
+  <p>노드 <span class="m"><i>i</i></span>의 이웃이 자기 자신 포함 4개이고 β = (0.2, 1.5, −0.8, 1.2)라고 해 볼게요.</p>
+  <div class="tbl"><table>
+    <tr><th>α<sub>i</sub> 값</th><th class="n">j = i (자기)</th><th class="n">j₁ 텐트</th><th class="n">j₂ 노트북</th><th class="n">j₃ 캠핑 의자</th></tr>
+    <tr><td>α<sub>i</sub> = 0</td><td class="n">0.129</td><td class="n">0.473</td><td class="n">0.047</td><td class="n">0.351</td></tr>
+    <tr><td>α<sub>i</sub> = 0.9</td><td class="n">0.129</td><td class="n">0.473</td><td class="n">0.047</td><td class="n">0.351</td></tr>
+    <tr><td>α<sub>i</sub> = −2.0</td><td class="n">0.129</td><td class="n">0.473</td><td class="n">0.047</td><td class="n">0.351</td></tr>
+  </table></div>
+  <div class="note review"><p><span class="tag t-rev">리뷰어 메모</span> 식 (8)을 쓰인 그대로 계산하면 <b>α<sub>i</sub>는 결과에 영향이 없어요.</b> softmax는 <span class="m"><i>j</i></span>에 대해 정규화하는데, α<sub>i</sub>는 모든 <span class="m"><i>j</i></span>에 같은 값으로 더해지므로 분자와 분모에서 <span class="m">exp(α<sub><i>i</i></sub>)</span>가 약분돼요(위 표). 그런데 Table 4에서는 군집 인식을 빼면 성능이 떨어져요(Taobao AUC 0.8906 → 0.8764). 그러니 실제 구현은 식 (8)과 다를 가능성이 커요. 예를 들어 노드 전체에 대해 정규화하거나, α를 다른 곳에 곱해 쓸 수 있어요. 이 구조를 재사용하려면 공식 코드를 꼭 확인해야 해요.</p></div>
+
+  <!-- ============================================================ 7 -->
+  <h2 id="s7"><span class="no">7</span>C. 관심 추출 그래프 풀링 <span class="small muted">(3.3절)</span></h2>
+  <p>B단계로 관심이 또렷해졌지만 노드는 여전히 <span class="m"><i>n</i></span>개예요. C단계는 CNN의 다운샘플링처럼 그래프를 <span class="m"><i>m</i></span>개 군집 노드로 <b>줄여요</b>(<span class="m"><i>m</i> &lt; <i>n</i></span>). 느슨한 관심이 촘촘한 관심으로 바뀌고, 관심의 분포는 유지돼요.</p>
+
+  <h3>7-1. 소프트 군집 배정과 풀링</h3>
+  <div class="eq"><span><i>S</i><sub><i>i</i>:</sub> = softmax( <i>W<sub>p</sub></i> · Aggregate( <i>A<sub>ij</sub></i> · <b class="vec">h</b>′<sub><i>j</i></sub> | <i>j</i> ∈ <i>N<sub>i</sub></i> ) )</span><span class="n">(11)</span></div>
+  <div class="eq"><span>{ <b class="vec">h</b><sup>*</sup><sub>1</sub>, …, <b class="vec">h</b><sup>*</sup><sub><i>m</i></sub> } = <i>S</i><sup>T</sup> { <b class="vec">h</b>′<sub>1</sub>, …, <b class="vec">h</b>′<sub><i>n</i></sub> },&nbsp;&nbsp; { γ<sup>*</sup><sub>1</sub>, …, γ<sup>*</sup><sub><i>m</i></sub> } = <i>S</i><sup>T</sup> { γ<sub>1</sub>, …, γ<sub><i>n</i></sub> },&nbsp;&nbsp; <i>A</i><sup>*</sup> = <i>S</i><sup>T</sup><i>AS</i></span><span class="n">(9)(10)</span></div>
+  <ul>
+    <li><span class="m"><i>S</i> ∈ ℝ<sup><i>n</i>×<i>m</i></sup></span>의 행 하나는 "노드 하나가 각 군집에 속할 확률"이에요(행 합 1). DiffPool처럼 GNN 한 층으로 만들어요. <span class="m"><i>W<sub>p</sub></i></span>의 출력 차원이 군집 수 <span class="m"><i>m</i></span>이에요.</li>
+    <li>군집 벡터 <span class="m"><b class="vec">h</b><sup>*</sup></span>는 소속 확률로 가중합한 노드 벡터이고, 군집 점수 <span class="m">γ<sup>*</sup></span>도 같은 방식으로 모아요.</li>
+    <li><span class="m"><i>A</i><sup>*</sup> = <i>S</i><sup>T</sup><i>AS</i></span>는 줄어든 그래프의 인접 행렬로, 군집 사이의 연결을 보존해요. 같은 연산을 반복하면 여러 층으로 계층적인 압축도 할 수 있어요.</li>
+  </ul>
+
+  <h3>7-2. 정규화 세 가지: 왜 필요한가</h3>
+  <p>논문은 <span class="m"><i>S</i></span>를 추천 손실의 그래디언트만으로 학습하기 어렵다고 봐요. 비볼록 문제라 학습 초기에 나쁜 국소해에 빠지기 쉽고, 풀링 뒤에는 군집의 <b>시간 순서</b>가 보장되지 않아요. 그래서 정규화 항 세 개를 손실에 더해요.</p>
+  <div class="eq"><span><i>L<sub>M</sub></i> = ‖ <i>A</i>, <i>SS</i><sup>T</sup> ‖<sub><i>F</i></sub></span><span class="n">(12) 같은 군집 정규화</span></div>
+  <div class="eq"><span><i>L<sub>A</sub></i> = (1/<i>n</i>) Σ<sub><i>i</i>=1</sub><sup><i>n</i></sup> <i>H</i>( <i>S</i><sub><i>i</i>:</sub> )</span><span class="n">(13) 단일 소속 정규화</span></div>
+  <div class="eq"><span><i>L<sub>P</sub></i> = ‖ <i>P<sub>n</sub> S</i>, <i>P<sub>m</sub></i> ‖<sub>2</sub>,&nbsp;&nbsp; <i>P<sub>n</sub></i> = (1, 2, …, <i>n</i>),&nbsp; <i>P<sub>m</sub></i> = (1, 2, …, <i>m</i>)</span><span class="n">(14) 상대 위치 정규화</span></div>
+  <div class="tbl"><table>
+    <tr><th>정규화</th><th>뜻</th><th>직관</th></tr>
+    <tr><td><b>같은 군집 (L<sub>M</sub>)</b></td><td><span class="m">(<i>SS</i><sup>T</sup>)<sub><i>ij</i></sub> = Σ<sub><i>k</i></sub> <i>S<sub>ik</sub>S<sub>jk</sub></i></span>는 "노드 i와 j가 같은 군집에 들어갈 확률"이에요. 이것을 인접 행렬 A에 맞춰요.</td><td>강하게 연결된 두 노드는 같은 군집으로, 연결 없는 노드는 다른 군집으로</td></tr>
+    <tr><td><b>단일 소속 (L<sub>A</sub>)</b></td><td>각 행 <span class="m"><i>S</i><sub><i>i</i>:</sub></span>의 엔트로피를 줄여요. 최적은 한 군집에만 1인 원-핫(엔트로피 0)이에요.</td><td>노드마다 소속 군집이 분명해져서 군집의 의미가 또렷해짐</td></tr>
+    <tr><td><b>상대 위치 (L<sub>P</sub>)</b></td><td><span class="m"><i>S</i></span>의 큰 값들이 주대각선 근처에 오게 해요. 군집 순서를 바꾸는 인덱스 교환은 미분할 수 없으니 정규화로 대신해요.</td><td>시퀀스 앞쪽 노드는 앞쪽 군집으로 → 풀링 뒤에도 관심의 시간 순서 유지</td></tr>
+  </table></div>
+
+  <h3>7-3. 직접 보기: 정규화가 S를 어떻게 바꾸나</h3>
+  <p>그림 3의 그래프(ε = 0.30, self-loop 포함)를 A로 두고, 10개 노드를 <span class="m"><i>m</i> = 3</span>개 군집으로 묶는 S의 네 단계를 비교해요. S 값은 설명을 위해 만든 예시예요. 오른쪽 수치는 이 페이지가 실제로 계산해요.</p>
+  <figure class="fig">
+    <div class="controls">
+      <span>단계</span>
+      <div class="seg" role="group" aria-label="정규화 단계" id="stageSeg">
+        <button type="button" data-st="0" aria-pressed="false">① 학습 초기</button>
+        <button type="button" data-st="1" aria-pressed="false">② + L<sub>M</sub></button>
+        <button type="button" data-st="2" aria-pressed="false">③ + L<sub>A</sub></button>
+        <button type="button" data-st="3" aria-pressed="true">④ + L<sub>P</sub></button>
+      </div>
+    </div>
+    <div class="pool-grid">
+      <div class="scroll"><table class="heat" id="sHeat" aria-label="소프트 배정 행렬 S"></table></div>
+      <div id="poolInfo"></div>
+    </div>
+    <figcaption class="cap"><b>그림 6.</b> 칸이 진할수록 소속 확률이 높아요. ①은 거의 균등해서 군집이 의미가 없어요. ②에서 같은 관심끼리 같은 열로 모이지만 아직 흐릿하고, 군집 순서가 시간과 어긋나요(신발이 3번 군집). ③에서 원-핫에 가까워져요. ④에서 군집 순서가 시간 순서(신발 → 전자기기 → 캠핑)와 맞아요. 잡음인 우산은 연결이 없어 어느 군집에 넣어도 L<sub>M</sub>에 조금씩 손해가 생겨요.</figcaption>
+  </figure>
+  <div class="note review"><p><span class="tag t-rev">리뷰어 메모</span> 식 (14)를 문자 그대로 계산하면 <span class="m">(<i>P<sub>n</sub>S</i>)<sub><i>k</i></sub> = Σ<sub><i>i</i></sub> <i>i</i>·<i>S<sub>ik</sub></i></span>는 위치의 <b>합</b>이라, 1…m 범위인 <span class="m"><i>P<sub>m</sub></i></span>와 척도가 달라요. 열 정규화(평균 위치)나 n→m 척도 변환을 했는지는 본문에 없어요. 그래서 그림 6에서는 L<sub>P</sub> 대신 "군집별 평균 시점"과 그 순서를 보여 줘요.</p></div>
+
+  <h3>7-4. 그래프 readout</h3>
+  <div class="eq"><span><b class="vec">h</b><sub><i>g</i></sub> = Readout( { γ<sub><i>i</i></sub> · <b class="vec">h</b>′<sub><i>i</i></sub> , <i>i</i> ∈ <i>G</i> } )&nbsp;&nbsp; (Readout = sum)</span><span class="n">(15)</span></div>
+  <p>풀링과 별개로, 풀링 <b>전</b> 그래프의 모든 노드를 중요도 γ로 가중합해 그래프 전체 표현 <span class="m"><b class="vec">h</b><sub><i>g</i></sub></span>를 만들어요. 순서에 무관한 합을 써서 순열 불변성을 지켜요. 이 벡터는 예측층에 같이 들어가, 풀링 층이 각 군집 정보를 더 잘 뽑도록 도와요. Table 4에서 readout을 빼면 Taobao AUC가 0.8906 → 0.8578로 꽤 떨어져요.</p>
+
+  <!-- ============================================================ 8 -->
+  <h2 id="s8"><span class="no">8</span>D. 예측층과 손실 함수 <span class="small muted">(3.4절)</span></h2>
+  <p>상대 위치 정규화 덕분에 군집 벡터 <span class="m"><b class="vec">h</b><sup>*</sup><sub>1</sub>, …, <b class="vec">h</b><sup>*</sup><sub><i>m</i></sub></span>는 시간 순서를 가진 <b>짧은 관심 시퀀스</b>로 볼 수 있어요("pooled graph를 flatten"). 여기에는 어떤 순차 모델이든 쓸 수 있는데, 논문은 AUGRU를 골랐어요.</p>
+
+  <figure class="fig">
+    <div class="scroll"><svg class="wide" viewBox="0 0 1000 300" role="img" aria-label="예측층: 군집 시퀀스가 AUGRU를 거쳐 h_s가 되고, h_g, h_t와 이어 붙여 MLP로 클릭 확률을 낸다">
+      <g id="predChain"></g>
+      <rect x="560" y="196" width="150" height="52" rx="10" class="box"/>
+      <text x="635" y="218" text-anchor="middle" font-size="12.5" font-weight="700">readout h<tspan baseline-shift="sub" font-size="9">g</tspan></text>
+      <text x="635" y="236" text-anchor="middle" font-size="11.5" class="tx-m">Σ γ<tspan baseline-shift="sub" font-size="8">i</tspan> h′<tspan baseline-shift="sub" font-size="8">i</tspan> (식 15)</text>
+      <rect x="560" y="10" width="150" height="46" rx="10" class="box-a"/>
+      <text x="635" y="30" text-anchor="middle" font-size="12.5" font-weight="700" class="tx-a">후보 아이템 h<tspan baseline-shift="sub" font-size="9">t</tspan></text>
+      <text x="635" y="47" text-anchor="middle" font-size="11.5" class="tx-m">캠핑 랜턴</text>
+      <rect x="740" y="92" width="120" height="96" rx="10" class="box"/>
+      <text x="800" y="114" text-anchor="middle" font-size="12" font-weight="700">이어 붙이기</text>
+      <text x="800" y="134" text-anchor="middle" font-size="11.5">h<tspan baseline-shift="sub" font-size="8">s</tspan> ∥ h<tspan baseline-shift="sub" font-size="8">g</tspan> ∥ h<tspan baseline-shift="sub" font-size="8">t</tspan></text>
+      <text x="800" y="152" text-anchor="middle" font-size="11.5">∥ h<tspan baseline-shift="sub" font-size="8">g</tspan> ⊙ h<tspan baseline-shift="sub" font-size="8">t</tspan></text>
+      <text x="800" y="172" text-anchor="middle" font-size="11" class="tx-m">(식 17)</text>
+      <rect x="882" y="104" width="108" height="72" rx="10" class="box-a"/>
+      <text x="936" y="128" text-anchor="middle" font-size="12" font-weight="700" class="tx-a">MLP</text>
+      <text x="936" y="145" text-anchor="middle" font-size="11">[100, 64]</text>
+      <text x="936" y="164" text-anchor="middle" font-size="12.5" font-weight="700">→ ŷ</text>
+      <path d="M710 33 Q760 40 790 90" class="ln" marker-end="url(#ah)"/>
+      <path d="M710 222 Q760 215 790 190" class="ln" marker-end="url(#ah)"/>
+      <path d="M860 140 L880 140" class="ln" marker-end="url(#ah)"/>
+    </svg></div>
+    <figcaption class="cap"><b>그림 7.</b> AUGRU의 각 단계는 군집 점수 γ*로 업데이트 게이트를 줄여요. 관련 없는 관심(γ* 작음)은 은닉 상태를 거의 못 바꿔서, 관심이 갑자기 바뀌는 영향(interest drifting)을 덜 받아요. 시퀀스 길이가 n이 아니라 m이라 순환 단계 수도 줄어요.</figcaption>
+  </figure>
+
+  <div class="eq"><span><b class="vec">h</b><sub><i>s</i></sub> = AUGRU( { <b class="vec">h</b><sup>*</sup><sub>1</sub>, …, <b class="vec">h</b><sup>*</sup><sub><i>m</i></sub> } )</span><span class="n">(16)</span></div>
+  <p class="small muted">AUGRU (DIEN 논문의 정의): <span class="m"><b class="vec">u</b><sub><i>t</i></sub> = σ(<i>W<sub>u</sub></i><b class="vec">h</b><sup>*</sup><sub><i>t</i></sub> + <i>U<sub>u</sub></i><b class="vec">s</b><sub><i>t</i>−1</sub> + <b class="vec">b</b><sub><i>u</i></sub>)</span>, &nbsp;<span class="m"><b class="vec">ũ</b><sub><i>t</i></sub> = γ<sup>*</sup><sub><i>t</i></sub> · <b class="vec">u</b><sub><i>t</i></sub></span>, &nbsp;<span class="m"><b class="vec">s</b><sub><i>t</i></sub> = (1 − <b class="vec">ũ</b><sub><i>t</i></sub>) ⊙ <b class="vec">s</b><sub><i>t</i>−1</sub> + <b class="vec">ũ</b><sub><i>t</i></sub> ⊙ <b class="vec">s̃</b><sub><i>t</i></sub></span>. 여기서 <b class="vec">s</b>는 GRU 은닉 상태, <b class="vec">s̃</b>는 후보 상태예요.</p>
+  <div class="eq"><span><i>ŷ</i> = Predict( <b class="vec">h</b><sub><i>s</i></sub> ∥ <b class="vec">h</b><sub><i>g</i></sub> ∥ <b class="vec">h</b><sub><i>t</i></sub> ∥ <b class="vec">h</b><sub><i>g</i></sub> ⊙ <b class="vec">h</b><sub><i>t</i></sub> )</span><span class="n">(17)</span></div>
+  <div class="eq"><span><i>L</i> = −(1/|<i>O</i>|) Σ<sub><i>o</i>∈<i>O</i></sub> ( <i>y<sub>o</sub></i> log <i>ŷ<sub>o</sub></i> + (1 − <i>y<sub>o</sub></i>) log(1 − <i>ŷ<sub>o</sub></i>) ) + λ‖Θ‖² &nbsp;&nbsp;+ λ<sub>M</sub><i>L<sub>M</sub></i> + λ<sub>A</sub><i>L<sub>A</sub></i> + λ<sub>P</sub><i>L<sub>P</sub></i></span><span class="n">(18) + 3.3.2절</span></div>
+  <ul>
+    <li>Predict는 은닉층 [100, 64]의 2층 피드포워드망이에요. <b>모든 비교 모델이 같은 예측망을 공유</b>해서 공정하게 비교했어요.</li>
+    <li>손실은 CTR 예측의 표준인 음의 로그우도(이진 교차 엔트로피)에 L2 정규화를 더한 것이에요. 3.3.2절의 정규화 세 개도 최종 목적 함수에 더해요. 계수는 {1e−7, 1e−5, 1e−3} 중에서 골랐어요.</li>
+  </ul>
+
+  <!-- ============================================================ 9 -->
+  <h2 id="s9"><span class="no">9</span>텐서 모양 따라가기</h2>
+  <p>Taobao 설정(임베딩 <span class="m"><i>d</i> = 40</span>, 최대 길이 50)으로 사용자 한 명의 데이터가 어떤 모양으로 바뀌는지 따라가 볼게요. 헤드 수 φ와 출력 차원 <span class="m"><i>d</i>′</span>, 군집 수 <span class="m"><i>m</i></span>의 최종값은 논문에 적혀 있지 않아요.</p>
+  <div class="tbl"><table class="shape">
+    <tr><th>단계</th><th>텐서</th><th>모양</th><th>메모</th></tr>
+    <tr><td>입력</td><td>클릭 아이템 임베딩 <span class="m"><i>H</i></span></td><td class="n">n × d = 50 × 40</td><td>기록 길이 n (최대 50)</td></tr>
+    <tr><td>A (1)(2)</td><td>유사도 <span class="m"><i>M</i></span></td><td class="n">n × n = 50 × 50</td><td>헤드 φ개 평균</td></tr>
+    <tr><td>A (3)</td><td>인접 행렬 <span class="m"><i>A</i></span></td><td class="n">50 × 50 (0/1)</td><td>원소 2,500개 중 상위 ε 비율만 1</td></tr>
+    <tr><td>B (6)(7)</td><td>α, β, γ</td><td class="n">n = 50</td><td>노드마다 스칼라 하나</td></tr>
+    <tr><td>B (5)</td><td>고쳐진 노드 <span class="m"><i>H</i>′</span></td><td class="n">n × φd′</td><td>헤드 이어 붙이기</td></tr>
+    <tr><td>C (11)</td><td>배정 행렬 <span class="m"><i>S</i></span></td><td class="n">n × m</td><td>m은 {10, …, 50}에서 탐색</td></tr>
+    <tr><td>C (9)</td><td>군집 벡터 <span class="m"><i>H</i><sup>*</sup></span></td><td class="n">m × φd′</td><td><span class="m"><i>S</i><sup>T</sup><i>H</i>′</span></td></tr>
+    <tr><td>C (15)</td><td><span class="m"><b class="vec">h</b><sub><i>g</i></sub></span></td><td class="n">φd′</td><td>풀링 전 그래프 전체 요약</td></tr>
+    <tr><td>D (16)</td><td><span class="m"><b class="vec">h</b><sub><i>s</i></sub></span></td><td class="n">GRU 은닉 크기</td><td>m단계 AUGRU의 마지막 상태</td></tr>
+    <tr><td>D (17)</td><td><span class="m"><i>ŷ</i></span></td><td class="n">1</td><td>MLP [100, 64] → 확률</td></tr>
+  </table></div>
+  <p class="small muted">계산량: 사용자마다 <span class="m"><i>n</i>²</span> 크기의 유사도 행렬을 만들므로 길이에 제곱으로 비례해요. n = 250(Kuaishou)이면 62,500개 원소라 문제없지만, 수천 단위 기록에는 그대로 쓰기 어려워요.</p>
+
+  <!-- ============================================================ 10 -->
+  <h2 id="s10"><span class="no">10</span>실험 설정 <span class="small muted">(4.1절)</span></h2>
+  <p>실험이 답하려는 질문은 세 가지예요. <b>RQ1</b> 최신 순차 추천보다 좋은가? <b>RQ2</b> 다양한 길이의 시퀀스를 효과적이고 효율적으로 다루는가? <b>RQ3</b> 각 구성 요소는 얼마나 기여하는가?</p>
+  <div class="tbl"><table>
+    <tr><th>데이터셋</th><th class="n">사용자</th><th class="n">아이템</th><th class="n">인스턴스</th><th class="n">평균 길이</th><th>기간 · 분할</th></tr>
+    <tr><td>Taobao (공개, 이커머스 클릭)</td><td class="n">36,915</td><td class="n">64,138</td><td class="n">1,471,155</td><td class="n">39.85</td><td>2017-11-25 ~ 12-03. 상호작용 10개 미만 사용자 제외. 앞 7일 학습, 8일째 검증, 마지막 날 테스트</td></tr>
+    <tr><td>Kuaishou (산업, 숏폼 영상 클릭)</td><td class="n">60,813</td><td class="n">292,286</td><td class="n">14,952,659</td><td class="n">245.88</td><td>2020-10-22 ~ 28 다운샘플. 10-core 필터. 앞 6일 학습, 마지막 날 정오 전 검증, 정오 후 테스트</td></tr>
+  </table></div>
+  <div class="cards">
+    <div class="card"><h4>지표</h4><p><b>AUC</b>: 양성 점수가 음성보다 높을 확률. <b>GAUC</b>: 사용자별 AUC를 클릭 수로 가중 평균. <b>MRR</b>: 첫 정답 순위의 역수 평균. <b>NDCG@2</b>: 상위 2개 안의 순위 가중 적중.</p></div>
+    <div class="card"><h4>비교 모델 7개</h4><p><b>비순차</b>: NCF, DIN, LightGCN. <b>순차</b>: Caser(CNN), GRU4REC(GRU), DIEN(2층 GRU + AUGRU), SLi-Rec(장·단기 + 시간 인식 LSTM).</p></div>
+    <div class="card"><h4>하이퍼파라미터</h4><p>Microsoft Recommenders(TensorFlow) 위에 구현. Adam, 학습률 0.001, 배치 500, 임베딩 40, Xavier 초기화. 최대 길이 50(Taobao) / 250(Kuaishou). 풀링 길이는 [10…50] / [50…250]에서 탐색.</p></div>
+  </div>
+
+  <!-- ============================================================ 11 -->
+  <h2 id="s11"><span class="no">11</span>실험 결과 <span class="small muted">(4.2–4.4절)</span></h2>
+
+  <h3>11-1. 전체 성능 (RQ1, Table 2)</h3>
+  <figure class="fig">
+    <div class="controls">
+      <div class="seg" role="group" aria-label="데이터셋" id="dsSeg">
+        <button type="button" data-ds="taobao" aria-pressed="true">Taobao</button>
+        <button type="button" data-ds="kuaishou" aria-pressed="false">Kuaishou</button>
+      </div>
+      <div class="seg" role="group" aria-label="지표" id="mtSeg">
+        <button type="button" data-mt="AUC" aria-pressed="true">AUC</button>
+        <button type="button" data-mt="GAUC" aria-pressed="false">GAUC</button>
+        <button type="button" data-mt="MRR" aria-pressed="false">MRR</button>
+        <button type="button" data-mt="NDCG@2" aria-pressed="false">NDCG@2</button>
+        <button type="button" data-mt="TIME" aria-pressed="false">학습 시간</button>
+      </div>
+    </div>
+    <div class="chart-wrap" id="chartWrap">
+      <svg class="chart-svg" id="resChart" viewBox="0 0 640 300" role="img" aria-label="모델별 성능 막대 차트"></svg>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+    <figcaption class="cap"><b>그림 8.</b> 파란 막대가 SURGE예요. 막대는 0에서 시작해요. 학습 시간(Table 3)은 짧을수록 좋고, NCF와 LightGCN은 논문에 학습 시간이 없어요. 막대에 마우스를 올리면 SURGE와의 차이가 보여요.</figcaption>
+  </figure>
+
+  <div class="tbl"><table>
+    <tr><th rowspan="2">모델</th><th colspan="4">Taobao</th><th colspan="4">Kuaishou</th></tr>
+    <tr><th class="n">AUC</th><th class="n">GAUC</th><th class="n">MRR</th><th class="n">NDCG@2</th><th class="n">AUC</th><th class="n">GAUC</th><th class="n">MRR</th><th class="n">NDCG@2</th></tr>
+    <tr><td>NCF</td><td class="n">0.7128</td><td class="n">0.7221</td><td class="n">0.1446</td><td class="n">0.0829</td><td class="n">0.5559</td><td class="n">0.5531</td><td class="n">0.7734</td><td class="n">0.8327</td></tr>
+    <tr><td>DIN</td><td class="n">0.7637</td><td class="n">0.8524</td><td class="n">0.3091</td><td class="n">0.2352</td><td class="n">0.6160</td><td class="n">0.7483</td><td class="n">0.8863</td><td class="n">0.9160</td></tr>
+    <tr><td>LightGCN</td><td class="n">0.7483</td><td class="n">0.7513</td><td class="n">0.1669</td><td class="n">0.1012</td><td class="n">0.6403</td><td class="n">0.6407</td><td class="n">0.8175</td><td class="n">0.8653</td></tr>
+    <tr><td>Caser</td><td class="n">0.8312</td><td class="n">0.8499</td><td class="n">0.3508</td><td class="n">0.2890</td><td class="n">0.7795</td><td class="n">0.8097</td><td class="n">0.9100</td><td class="n">0.9336</td></tr>
+    <tr><td>GRU4REC</td><td class="n">0.8635</td><td class="n">0.8680</td><td class="n">0.3993</td><td class="n">0.3422</td><td class="n">0.8156</td><td class="n">0.8333</td><td class="n">0.9174</td><td class="n">0.9391</td></tr>
+    <tr><td>DIEN</td><td class="n">0.8477</td><td class="n">0.8745</td><td class="n">0.4011</td><td class="n">0.3404</td><td class="n">0.7037</td><td class="n">0.7800</td><td class="n">0.9030</td><td class="n">0.9284</td></tr>
+    <tr><td>SLi-Rec</td><td class="n">0.8664</td><td class="n">0.8669</td><td class="n">0.3617</td><td class="n">0.2971</td><td class="n">0.7978</td><td class="n">0.8128</td><td class="n">0.9075</td><td class="n">0.9318</td></tr>
+    <tr class="hl"><td>SURGE</td><td class="n">0.8906</td><td class="n">0.8888</td><td class="n">0.4228</td><td class="n">0.3625</td><td class="n">0.8525</td><td class="n">0.8610</td><td class="n">0.9316</td><td class="n">0.9495</td></tr>
+  </table></div>
+  <p class="small muted">논문 표기: Taobao GAUC를 뺀 모든 SURGE 값이 유의(p &lt; 0.05 이상). Taobao GAUC 0.8888은 유의 표시가 없어요.</p>
+  <p>논문의 해석 세 가지:</p>
+  <ol>
+    <li><b>SURGE가 일관되게 가장 좋아요.</b> 기록이 긴 Kuaishou에서 개선 폭이 더 커요. 긴 시퀀스를 잘 다룬다는 근거예요.</li>
+    <li><b>순차 모델은 유효하지만 단기 병목이 있어요.</b> 순차 모델(Caser, GRU4REC, DIEN)이 비순차 모델(NCF, DIN, LightGCN)보다 좋아요. 하지만 긴 Kuaishou에서는 RNN이 오래된 관심을 잊어서 CNN(Caser)과 비슷해지고, DIEN은 잡음에 흔들려 불안정해요.</li>
+    <li><b>장·단기를 합친다고 늘 좋아지지는 않아요.</b> SLi-Rec은 Taobao AUC에서는 최고 기준 모델이지만 순위 지표는 약하고, Kuaishou에서는 GRU4REC보다 모든 지표에서 낮아요. SURGE는 타임스탬프를 따로 모델링하지 않고도 이겨요.</li>
+  </ol>
+
+  <h3>11-2. 시퀀스 길이별 성능 (RQ2, Figure 2)</h3>
+  <p>사용자를 기록 길이로 다섯 그룹(Taobao 0–10, …, 40–50 / Kuaishou 0–50, …, 200–250)으로 나눠 GAUC를 비교했어요.</p>
+  <ul>
+    <li>짧은 그룹은 데이터가 적어 모든 모델이 어려워요. 길이가 늘면 성능이 오르다 정점을 찍고, 더 길어지면 잡음 때문에 대부분 다시 떨어져요. DIN과 DIEN이 가장 크게 떨어져요.</li>
+    <li>GRU4REC는 최근 기록만 보니 길이와 상관없이 비교적 평평해요.</li>
+    <li><b>SURGE와 다른 모델의 격차는 길이가 길수록 커져요.</b> 가장 긴 그룹에서도 GAUC 0.8919(Taobao), 0.8502(Kuaishou)를 유지해요.</li>
+  </ul>
+
+  <h3>11-3. 효율 (RQ2, Table 3 · Figure 3)</h3>
+  <div class="tbl"><table>
+    <tr><th>데이터셋</th><th class="n">DIN</th><th class="n">Caser</th><th class="n">GRU4REC</th><th class="n">DIEN</th><th class="n">SLi-Rec</th><th class="n">SURGE</th></tr>
+    <tr><td>Taobao (분)</td><td class="n">22.65</td><td class="n">23.66</td><td class="n">26.78</td><td class="n">18.74</td><td class="n">27.82</td><td class="n"><b>14.96</b></td></tr>
+    <tr><td>Kuaishou (분)</td><td class="n"><b>20.59</b></td><td class="n">120.26</td><td class="n">73.35</td><td class="n">28.47</td><td class="n">28.84</td><td class="n">22.86</td></tr>
+  </table></div>
+  <p>검증 GAUC가 5 epoch 동안 오르지 않으면 멈추는 기준으로 수렴까지 걸린 시간이에요. 풀링으로 순환 단계 수가 크게 줄고, 잡음이 걸러진 핵심 관심만 남아 수렴도 빨라요. Kuaishou에서는 비순차 모델인 DIN을 빼면 모든 기준 모델보다 빨랐어요. 논문은 "20% 이상" 빠르다고 했지만, DIEN 대비는 계산하면 19.7%예요.</p>
+
+  <h3>11-4. 제거 실험 (RQ3, Table 4)</h3>
+  <div class="tbl"><table>
+    <tr><th>구분</th><th>모델</th><th class="n">Taobao AUC</th><th class="n">Taobao MRR</th><th class="n">Kuaishou AUC</th><th class="n">Kuaishou MRR</th><th class="n">ΔAUC (Taobao)</th></tr>
+    <tr><td rowspan="4">관심 융합 (B)</td><td>융합 없음</td><td class="n">0.8307</td><td class="n flag">0.0317</td><td class="n">0.7149</td><td class="n">0.9076</td><td class="n neg">−0.0599</td></tr>
+    <tr><td>질의 인식 없음</td><td class="n">0.8720</td><td class="n">0.3929</td><td class="n">0.7641</td><td class="n">0.9069</td><td class="n neg">−0.0186</td></tr>
+    <tr><td>군집 인식 없음</td><td class="n">0.8764</td><td class="n">0.3973</td><td class="n">0.8213</td><td class="n">0.9186</td><td class="n neg">−0.0142</td></tr>
+    <tr class="hl"><td>전체</td><td class="n">0.8906</td><td class="n">0.4228</td><td class="n">0.8525</td><td class="n">0.9316</td><td class="n">—</td></tr>
+    <tr><td rowspan="4">관심 추출 (C)</td><td>풀링 없음</td><td class="n">0.8513</td><td class="n">0.3605</td><td class="n">0.8240</td><td class="n">0.9182</td><td class="n neg">−0.0393</td></tr>
+    <tr><td>readout 없음</td><td class="n">0.8578</td><td class="n">0.3720</td><td class="n">0.8422</td><td class="n">0.9257</td><td class="n neg">−0.0328</td></tr>
+    <tr><td>정규화 없음</td><td class="n">0.8815</td><td class="n flag">0.0343</td><td class="n">0.8487</td><td class="n">0.9291</td><td class="n neg">−0.0091</td></tr>
+    <tr class="hl"><td>전체</td><td class="n">0.8906</td><td class="n">0.4228</td><td class="n">0.8525</td><td class="n">0.9316</td><td class="n">—</td></tr>
+  </table></div>
+  <ul>
+    <li>그래프 합성곱(융합)이 가장 크게 기여해요. 질의 인식과 군집 인식은 각각 추가 이득을 줘요. Kuaishou에서는 질의 인식을 빼면 AUC가 0.8525 → 0.7641로 크게 떨어져요.</li>
+    <li>풀링과 readout도 크게 기여해요. 정규화 세 개는 AUC 기준으로는 기여가 가장 작아요.</li>
+    <li><b>Figure 4</b>: 풀링된 시퀀스 위에 다른 순차 모델(DIN 어텐션, GRU, AUGRU, Time4LSTM)을 올려도 <b>모두 원래보다 좋아졌어요.</b> DIN을 뺀 순차 모델끼리는 차이가 작고, 군집 점수를 쓰는 AUGRU가 약간 더 좋았어요. 즉 이득의 주된 원천은 예측층이 아니라 <b>그래프 구성과 풀링</b>이에요.</li>
+  </ul>
+  <div class="note review"><p><span class="tag t-rev">리뷰어 메모</span> 빨간 숫자 두 개(Taobao MRR 0.0317, 0.0343)는 이상해요. AUC는 0.83–0.88로 멀쩡한데 MRR만 가장 약한 기준 모델(NCF 0.1446)보다 열 배 이상 낮아요. 오타이거나 평가 오류일 가능성이 있어요. 그대로 인용하지 않는 게 안전해요.</p></div>
+
+  <!-- ============================================================ 12 -->
+  <h2 id="s12"><span class="no">12</span>피어리뷰: 장점과 한계</h2>
+  <h3>방법론의 장점</h3>
+  <ul class="review-list">
+    <li><span class="tag t-ok">장점</span> <b>시퀀스를 그래프로 다시 읽는 관점.</b> 시간상 떨어진 같은 관심을 바로 연결해서 RNN의 단기 병목을 구조적으로 피해요. 길이가 길수록 이득이 커지는 결과(Figure 2)가 이 주장과 맞아요.</li>
+    <li><span class="tag t-ok">장점</span> <b>희소화 설계의 근거가 분명해요.</b> 절대 임계값과 노드별 kNN의 실패 방식을 짚고 전체 상대 순위를 골랐어요. 학습 중 유사도 분포가 움직이는 상황에서도 그래프 밀도가 안정돼요.</li>
+    <li><span class="tag t-ok">장점</span> <b>군집에 대한 요구를 미분 가능한 손실로 표현했어요.</b> 같은 군집·단일 소속·시간 순서라는 세 가지 요구를 각각 L<sub>M</sub>, L<sub>A</sub>, L<sub>P</sub>로 만들어 추천 손실과 함께 학습해요. 다른 문제에 떼어 가기 쉬운 부품이에요.</li>
+    <li><span class="tag t-ok">장점</span> <b>정확도와 효율을 같이 잡았어요.</b> 풀링으로 순환 단계가 줄어 학습이 오히려 빨라졌어요(Taobao 14.96분, 최단). 풀링 시퀀스는 어떤 순차 모델에도 붙일 수 있어요(Figure 4).</li>
+    <li><span class="tag t-ok">장점</span> <b>공정한 비교 장치.</b> 모든 모델이 같은 프레임워크, 같은 예측망 [100, 64], 같은 손실을 써요. 산업 데이터(Kuaishou, 1,495만 인스턴스)로도 검증했어요.</li>
+  </ul>
+  <h3>방법론의 한계</h3>
+  <ul class="review-list">
+    <li><span class="tag t-rev">한계</span> <b>식과 구현의 불일치 가능성.</b> 식 (8)에서 α<sub>i</sub>는 softmax에서 약분되는데(6-3절), 제거 실험은 군집 인식이 효과가 있다고 해요. 식 (3)의 0/1 마스크로 <b>w</b>가 어떻게 학습되는지, 식 (14)의 척도도 설명이 없어요. 재현성을 떨어뜨리는 부분이에요.</li>
+    <li><span class="tag t-rev">한계</span> <b>평가 프로토콜이 불충분하게 쓰였어요.</b> 음성 샘플을 몇 개, 어떻게 뽑았는지 적혀 있지 않아요. Kuaishou MRR 0.93, NDCG@2 0.95 같은 높은 값은 후보 목록이 아주 짧다는 뜻이라, 실제 전체 랭킹 성능과는 거리가 있을 수 있어요.</li>
+    <li><span class="tag t-rev">한계</span> <b>기준 모델 구성.</b> 같은 시기의 대표적 셀프 어텐션 순차 모델(SASRec, BERT4Rec)이 빠졌어요. SASRec은 참고문헌 [13]에 있는데도 비교하지 않았어요. 세션 그래프 모델(SR-GNN 등)도 "과제가 다르다"는 이유로 빠졌어요.</li>
+    <li><span class="tag t-rev">한계</span> <b>"동적" 풀링인데 군집 수 m은 고정.</b> m은 데이터셋 단위로 격자 탐색한 하이퍼파라미터이고, 사용자마다 관심 수가 달라도 같은 m을 써요. 최종 선택된 m과 ε 값, ε 민감도 분석도 보고되지 않았어요.</li>
+    <li><span class="tag t-rev">한계</span> <b>통계적 신뢰도.</b> 시드별 반복이나 분산이 없어요. 제거 실험에는 유의성 표시가 없고, MRR 값 두 개가 비정상이에요(11-4절).</li>
+    <li><span class="tag t-rev">한계</span> <b>해석 가능성 주장의 근거 부족.</b> 정규화가 "더 해석 가능한 군집 배정"을 준다고 했지만, 실제 군집이 무엇을 뜻하는지 보여 주는 사례 분석이나 시각화가 없어요.</li>
+    <li><span class="tag t-rev">한계</span> <b>사전 가정의 위험.</b> "촘촘한 부분 그래프 = 핵심 관심"은 가정이에요. 인기 아이템을 반복 노출로 클릭한 경우에도 촘촘한 군집이 생길 수 있어요. 계산량도 사용자마다 O(n²)라 매우 긴 기록에는 그대로 쓰기 어려워요.</li>
+  </ul>
+  <h3>결과의 의미</h3>
+  <p>이 논문의 가장 큰 메시지는 <b>"긴 기록의 잡음 문제는 모델을 더 깊게 쌓기보다 입력을 군집 단위로 압축해서 푸는 편이 낫다"</b>예요. Figure 4가 이를 뒷받침해요. 예측층을 무엇으로 바꿔도 풀링된 시퀀스를 쓰면 좋아졌으니, 성능의 원천은 군집 압축이에요. 또 군집 품질을 추천 손실만으로 학습하기 어렵고 <b>구조적 정규화(같은 군집·단일 소속·순서)가 필요하다</b>는 점도 보여 줘요. 다만 이 정규화의 AUC 기여는 작았어요(−0.0091). 정규화의 진짜 가치는 성능보다 <b>군집의 의미를 고정하는 데</b> 있다고 읽는 편이 맞아요.</p>
+  <p class="small muted">후속 연구로 저자들은 온라인 A/B 테스트와, 클릭·찜 같은 여러 행동 유형을 함께 쓰는 확장을 계획했어요.</p>
+
+  <!-- ============================================================ 13 -->
+  <h2 id="s13"><span class="no">13</span>내 연구(뉴스 SID)에 접목할 아이디어</h2>
+  <p>현재 연구는 EB-NeRD 뉴스 기사를 RQ-VAE로 SID(c1 카테고리 · c2 사건 · c3 세부)로 만들고 Transformer로 추천하는 구조예요. SURGE에서 가져올 수 있는 부품은 세 가지예요.</p>
+  <div class="cards">
+    <div class="card"><h4>① L<sub>M</sub> + L<sub>A</sub>를 c2의 사건 일관성 손실로</h4><p>c2 코드북 128개를 SURGE의 군집 m개로 보면, 잔차 r1과 코드 사이 거리의 softmax가 곧 소프트 배정 S예요. 같은 사건 기사 쌍에 <span class="m"><i>SS</i><sup>T</sup></span> → 1을, 엔트로피로 원-핫을 요구하면 "같은 사건 = 같은 c2"를 학습 중에 직접 강제할 수 있어요. 보류해 둔 B안(사건 일관성 손실)의 정식 형태예요.</p></div>
+    <div class="card"><h4>② 사건 그래프를 전체 상대 순위로</h4><p>지금 사건은 IDF 가중 Jaccard ≥ 0.3이라는 <b>절대 임계값</b>이라, Train 기사의 약 91%가 혼자인 사건이에요. 5-4절의 논리대로, 72시간 창 안에서 Jaccard와 E5 코사인을 섞은 유사도로 상위 ε 비율의 엣지만 남기면 임계값 민감도가 줄고 모든 기사에 이웃이 생겨요.</p></div>
+    <div class="card"><h4>③ Transformer 입력을 (c1, c2) 군집으로 풀링</h4><p>SID 자체가 이미 군집 배정이에요. 사용자 클릭 기록을 같은 (c1, c2)끼리 묶어 관심 노드로 줄이고, 마지막 클릭 시각으로 순서를 유지하고(L<sub>P</sub>의 역할), 후보 기사 기준 어텐션(β의 역할)을 주면 SURGE의 C·D단계를 학습 없이 재현할 수 있어요. c2가 사건을 잘 담는지를 추천 성능으로 확인하는 실험도 돼요.</p></div>
+  </div>
+
+  <!-- ============================================================ 14 -->
+  <h2 id="s14"><span class="no">14</span>식 18개 한 표로</h2>
+  <div class="tbl"><table>
+    <tr><th>식</th><th>이름</th><th>한 줄 뜻</th></tr>
+    <tr><td>(1)</td><td>가중 코사인</td><td>학습 가중치 w로 차원별 중요도를 준 코사인 유사도</td></tr>
+    <tr><td>(2)</td><td>멀티헤드 유사도</td><td>헤드 φ개의 유사도 평균</td></tr>
+    <tr><td>(3)</td><td>ε-희소화</td><td>전체 원소 중 상위 ε 비율만 엣지로</td></tr>
+    <tr><td>(4)</td><td>그래프 합성곱</td><td>어텐션 가중 이웃 합 + 잔차, 비선형</td></tr>
+    <tr><td>(5)</td><td>멀티헤드 합성곱</td><td>헤드 φ개 결과를 이어 붙임 (φd′ 차원)</td></tr>
+    <tr><td>(6)</td><td>군집 인식 α</td><td>타깃 노드와 k-hop 이웃 평균의 비교 → 군집 중심 점수</td></tr>
+    <tr><td>(7)</td><td>질의 인식 β</td><td>소스 노드와 후보 아이템의 비교 → 관련성 점수</td></tr>
+    <tr><td>(8)</td><td>이웃 가중치 E</td><td>softmax<sub>j</sub>(α<sub>i</sub> + β<sub>j</sub>)</td></tr>
+    <tr><td>(9)</td><td>군집 벡터</td><td>h* = Sᵀh′</td></tr>
+    <tr><td>(10)</td><td>군집 점수</td><td>γ* = Sᵀγ, γ = softmax(β)</td></tr>
+    <tr><td>(11)</td><td>소프트 배정 S</td><td>GNN 한 층 + softmax로 노드→군집 확률. A* = SᵀAS</td></tr>
+    <tr><td>(12)</td><td>같은 군집 정규화</td><td>‖A − SSᵀ‖<sub>F</sub>: 연결 강한 쌍은 같은 군집으로</td></tr>
+    <tr><td>(13)</td><td>단일 소속 정규화</td><td>S 행 엔트로피 평균: 소속을 분명하게</td></tr>
+    <tr><td>(14)</td><td>상대 위치 정규화</td><td>‖P<sub>n</sub>S − P<sub>m</sub>‖<sub>2</sub>: 군집 순서 = 시간 순서</td></tr>
+    <tr><td>(15)</td><td>readout</td><td>h<sub>g</sub> = Σ γ<sub>i</sub>h′<sub>i</sub>: 풀링 전 그래프 요약</td></tr>
+    <tr><td>(16)</td><td>관심 진화</td><td>h<sub>s</sub> = AUGRU(h*<sub>1</sub>…h*<sub>m</sub>), 게이트에 γ* 곱함</td></tr>
+    <tr><td>(17)</td><td>예측</td><td>MLP(h<sub>s</sub> ∥ h<sub>g</sub> ∥ h<sub>t</sub> ∥ h<sub>g</sub>⊙h<sub>t</sub>)</td></tr>
+    <tr><td>(18)</td><td>손실</td><td>이진 교차 엔트로피 + L2 (+ 정규화 3개)</td></tr>
+  </table></div>
+
+  <footer>근거: Chang et al., "Sequential Recommendation with Graph Neural Networks", SIGIR '21, pp. 378–387 (업로드된 PDF). 그림 3·4·6의 아이템, 임베딩, S 값은 설명용 예시이고, 표의 수치는 모두 논문 Table 1–4에서 옮겼어요. "리뷰어 메모"는 이 해설의 의견이에요.</footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function txt(parent, x, y, s, attrs) {
+    var a = attrs || {}; a.x = x; a.y = y;
+    var t = el("text", a, parent); t.textContent = s; return t;
+  }
+  function gcls(g) { return g === 3 ? "gn" : "g" + g; }
+
+  // ---------- shared example: 10 items in time order ----------
+  var items = [
+    { t: 1, name: "운동화 A", g: 0, v: [1, 0.1, 0, 0.05], x: 90, y: 90 },
+    { t: 2, name: "러닝 양말", g: 0, v: [0.85, 0, 0.15, 0.1], x: 62, y: 196 },
+    { t: 3, name: "노트북", g: 1, v: [0.05, 1, 0, 0.1], x: 360, y: 58 },
+    { t: 4, name: "운동화 B", g: 0, v: [0.95, 0.05, 0.05, 0], x: 178, y: 142 },
+    { t: 5, name: "마우스", g: 1, v: [0, 0.9, 0.1, 0.2], x: 470, y: 74 },
+    { t: 6, name: "텐트", g: 2, v: [0.1, 0, 1, 0.2], x: 404, y: 252 },
+    { t: 7, name: "키보드", g: 1, v: [0.1, 0.95, 0, 0.15], x: 420, y: 150 },
+    { t: 8, name: "운동화 C", g: 0, v: [1, 0, 0.1, 0.05], x: 150, y: 250 },
+    { t: 9, name: "우산", g: 3, v: [0.2, 0.1, 0.35, 0.9], x: 290, y: 214 },
+    { t: 10, name: "캠핑 의자", g: 2, v: [0.15, 0.05, 0.9, 0.1], x: 516, y: 262 }
+  ];
+  var n = items.length;
+  function cos(a, b) {
+    var d = 0, na = 0, nb = 0;
+    for (var i = 0; i < a.length; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+    return d / Math.sqrt(na * nb);
+  }
+  var M = [];
+  for (var i = 0; i < n; i++) { M.push([]); for (var j = 0; j < n; j++) M[i].push(i === j ? 1 : cos(items[i].v, items[j].v)); }
+  function globalRankEdges(Mx, eps) {
+    var all = [];
+    for (var i = 0; i < n; i++) for (var j = 0; j < n; j++) all.push(Mx[i][j]);
+    all.sort(function (a, b) { return b - a; });
+    var k = Math.max(1, Math.round(eps * n * n));
+    var thr = all[k - 1], E = [];
+    for (var i2 = 0; i2 < n; i2++) for (var j2 = i2 + 1; j2 < n; j2++) if (Mx[i2][j2] >= thr) E.push([i2, j2]);
+    return { edges: E, thr: thr, k: k };
+  }
+
+  // ---------- Figure 1: sequence chips ----------
+  (function () {
+    var g = document.getElementById("seqchips");
+    items.forEach(function (it, idx) {
+      var x = 20 + idx * 88;
+      el("rect", { x: x, y: 88, width: 80, height: 48, rx: 8, "class": "surface", stroke: "var(--line)", "stroke-width": 1.2 }, g);
+      el("rect", { x: x, y: 88, width: 6, height: 48, rx: 2, "class": gcls(it.g) }, g);
+      txt(g, x + 44, 109, it.name, { "text-anchor": "middle", "font-size": 12.5, "font-weight": 650 });
+      txt(g, x + 44, 127, "t" + it.t, { "text-anchor": "middle", "font-size": 11.5, "class": "tx-m" });
+    });
+  })();
+
+  // ---------- Figure 2: architecture minis ----------
+  (function () {
+    var g = document.getElementById("archMini");
+    // A: sequence row -> small graph
+    items.forEach(function (it, idx) { el("rect", { x: 22 + idx * 20.5, y: 52, width: 16, height: 16, rx: 3, "class": gcls(it.g) }, g); });
+    el("path", { d: "M124 76 L124 96", "class": "ln", "marker-end": "url(#ah)" }, g);
+    var res = globalRankEdges(M, 0.30);
+    function mini(ox, oy, sc, edges, sizeFn, extraCls) {
+      edges.forEach(function (e) {
+        var a = items[e[0]], b = items[e[1]];
+        el("line", { x1: ox + a.x * sc, y1: oy + a.y * sc, x2: ox + b.x * sc, y2: oy + b.y * sc, "class": "edge" }, g);
+      });
+      items.forEach(function (it, idx) {
+        el("circle", { cx: ox + it.x * sc, cy: oy + it.y * sc, r: sizeFn ? sizeFn(idx) : 6, "class": gcls(it.g) + " ring" }, g);
+      });
+    }
+    mini(20, 96, 0.36, res.edges);
+    // B: same graph, query-relevant nodes bigger
+    mini(270, 70, 0.36, res.edges, function (i) { return items[i].g === 2 ? 10 : (items[i].g === 3 ? 4 : 6); });
+    el("rect", { x: 404, y: 210, width: 76, height: 28, rx: 6, "class": "box-a" }, g);
+    txt(g, 442, 229, "후보 h_t", { "text-anchor": "middle", "font-size": 11.5, "class": "tx-a", "font-weight": 700 });
+    txt(g, 300, 222, "α·β 가중 전파", { "font-size": 11.5, "class": "tx-m" });
+    // C: 10 small -> 3 big in time order
+    items.forEach(function (it, idx) { el("circle", { cx: 528 + (idx % 5) * 18, cy: 80 + Math.floor(idx / 5) * 18, r: 6, "class": gcls(it.g) + " ring" }, g); });
+    el("path", { d: "M624 116 L624 146", "class": "ln", "marker-end": "url(#ah)" }, g);
+    txt(g, 632, 136, "S (10×3)", { "font-size": 11.5, "class": "tx-m" });
+    [0, 1, 2].forEach(function (k) {
+      el("circle", { cx: 562 + k * 62, cy: 190, r: 20, "class": "g" + k + " ring" }, g);
+      txt(g, 562 + k * 62, 195, "h*" + (k + 1), { "text-anchor": "middle", "font-size": 11.5, "font-weight": 700, style: "fill:#fff" });
+    });
+    el("path", { d: "M540 230 L708 230", "class": "ln", "marker-end": "url(#ah)" }, g);
+    txt(g, 624, 248, "시간 순서 유지", { "text-anchor": "middle", "font-size": 11, "class": "tx-m" });
+    // D: chain -> y
+    [0, 1, 2].forEach(function (k) {
+      el("circle", { cx: 790 + k * 46, cy: 90, r: 12, "class": "g" + k + " ring" }, g);
+      el("path", { d: "M" + (790 + k * 46) + " 104 L" + (790 + k * 46) + " 126", "class": "ln", "marker-end": "url(#ah)" }, g);
+      el("rect", { x: 772 + k * 46, y: 128, width: 36, height: 30, rx: 6, "class": "box-a" }, g);
+      if (k < 2) el("path", { d: "M" + (808 + k * 46) + " 143 L" + (816 + k * 46) + " 143", "class": "ln-a" }, g);
+    });
+    txt(g, 836, 176, "AUGRU", { "text-anchor": "middle", "font-size": 11.5, "class": "tx-a", "font-weight": 700 });
+    el("path", { d: "M902 143 L930 143", "class": "ln", "marker-end": "url(#ah)" }, g);
+    txt(g, 950, 148, "ŷ", { "text-anchor": "middle", "font-size": 16, "font-weight": 700 });
+    txt(g, 874, 222, "+ h_g, h_t → MLP", { "text-anchor": "middle", "font-size": 11.5, "class": "tx-m" });
+  })();
+
+  // ---------- Figure 3: epsilon graph ----------
+  var epsSvg = document.getElementById("epsGraph");
+  var epsIn = document.getElementById("eps");
+  var epsOut = document.getElementById("epsOut");
+  function drawGraph(svg, edges, ox, oy, sc, opts) {
+    opts = opts || {};
+    var deg = new Array(n).fill(0);
+    edges.forEach(function (e) { deg[e[0]]++; deg[e[1]]++; });
+    edges.forEach(function (e) {
+      var a = items[e[0]], b = items[e[1]], cross = a.g !== b.g;
+      el("line", { x1: ox + a.x * sc, y1: oy + a.y * sc, x2: ox + b.x * sc, y2: oy + b.y * sc, "class": cross ? "edge-x" : "edge" }, svg);
+    });
+    items.forEach(function (it, idx) {
+      var r = (opts.base || 11) + (opts.grow || 2.2) * deg[idx];
+      el("circle", { cx: ox + it.x * sc, cy: oy + it.y * sc, r: r, "class": gcls(it.g) + " ring" }, svg);
+      if (opts.labels) {
+        txt(svg, ox + it.x * sc, oy + it.y * sc + 4, "t" + it.t, { "text-anchor": "middle", "font-size": 11, "font-weight": 700, style: "fill:#fff" });
+        txt(svg, ox + it.x * sc, oy + it.y * sc + r + 14, it.name + " · 차수 " + deg[idx], { "text-anchor": "middle", "font-size": 11, "class": "tx-m" });
+      }
+    });
+    return deg;
+  }
+  function renderEps() {
+    var eps = parseFloat(epsIn.value);
+    while (epsSvg.firstChild) epsSvg.removeChild(epsSvg.firstChild);
+    var r = globalRankEdges(M, eps);
+    drawGraph(epsSvg, r.edges, 10, 0, 1, { labels: true, base: 12, grow: 2 });
+    var cross = r.edges.filter(function (e) { return items[e[0]].g !== items[e[1]].g; }).length;
+    epsOut.innerHTML = "ε = <b>" + eps.toFixed(2) + "</b> · 남긴 원소 εn² = <b>" + r.k + "</b>/100 · 임계값 = <b>" + r.thr.toFixed(3) + "</b> · 엣지 <b>" + r.edges.length + "</b>개 (관심 사이 " + cross + "개)";
+  }
+  epsIn.addEventListener("input", renderEps);
+  renderEps();
+
+  // ---------- Figure 4: three strategies ----------
+  (function () {
+    var svg = document.getElementById("stratSvg");
+    var sc = 0.5;
+    // (a) absolute threshold 0.6 on shifted distribution
+    var Ms = M.map(function (row) { return row.map(function (v) { return 0.6 + 0.4 * v; }); });
+    var ea = [];
+    for (var i = 0; i < n; i++) for (var j = i + 1; j < n; j++) if (Ms[i][j] >= 0.6) ea.push([i, j]);
+    // (b) per-node top-2 (symmetrized)
+    var eb = [], seen = {};
+    for (var i3 = 0; i3 < n; i3++) {
+      var order = [];
+      for (var j3 = 0; j3 < n; j3++) if (j3 !== i3) order.push(j3);
+      order.sort(function (a, b) { return M[i3][b] - M[i3][a]; });
+      order.slice(0, 2).forEach(function (j4) {
+        var key = Math.min(i3, j4) + "-" + Math.max(i3, j4);
+        if (!seen[key]) { seen[key] = 1; eb.push([Math.min(i3, j4), Math.max(i3, j4)]); }
+      });
+    }
+    // (c) global relative rank eps = 0.30
+    var ec = globalRankEdges(M, 0.30).edges;
+    var panels = [
+      { t: "(가) 절대 임계값 θ = 0.6", s: "유사도가 위로 쏠린 학습 초기", e: ea },
+      { t: "(나) 노드별 상위 k = 2", s: "모든 노드 차수가 비슷", e: eb },
+      { t: "(다) 전체 상대 순위 ε = 0.30", s: "촘촘함·성김이 그대로", e: ec }
+    ];
+    panels.forEach(function (p, k) {
+      var ox = 20 + k * 330;
+      txt(svg, ox + 150, 22, p.t, { "text-anchor": "middle", "font-size": 13.5, "font-weight": 700 });
+      txt(svg, ox + 150, 40, p.s, { "text-anchor": "middle", "font-size": 11.5, "class": "tx-m" });
+      drawGraph(svg, p.e, ox + 2, 70, sc, { base: 6, grow: 1.1 });
+      var cross = p.e.filter(function (e) { return items[e[0]].g !== items[e[1]].g; }).length;
+      txt(svg, ox + 150, 236, "엣지 " + p.e.length + "개 · 관심 사이 " + cross + "개", { "text-anchor": "middle", "font-size": 12, "font-weight": 650 });
+      if (k < 2) el("line", { x1: ox + 312, y1: 16, x2: ox + 312, y2: 284, "class": "ln dash" }, svg);
+    });
+    txt(svg, 170, 262, "→ 완전 그래프 (분포가 반대로 쏠리면 빈 그래프)", { "text-anchor": "middle", "font-size": 11.5, "class": "tx-m" });
+    txt(svg, 500, 262, "→ 우산도 이웃 2개, 구조 정보 손실", { "text-anchor": "middle", "font-size": 11.5, "class": "tx-m" });
+    txt(svg, 830, 262, "→ 세 관심이 정확히 분리", { "text-anchor": "middle", "font-size": 11.5, "class": "tx-m" });
+  })();
+
+  // ---------- Figure 6: pooling regularization stages ----------
+  (function () {
+    var m = 3;
+    var A = [];
+    var ge = globalRankEdges(M, 0.30).edges;
+    for (var i = 0; i < n; i++) { A.push(new Array(n).fill(0)); A[i][i] = 1; }
+    ge.forEach(function (e) { A[e[0]][e[1]] = 1; A[e[1]][e[0]] = 1; });
+    var gNoiseAs = 2; // noise node goes with camping
+    function row(col, main) {
+      var r = new Array(m).fill((1 - main) / (m - 1)); r[col] = main; return r;
+    }
+    var jitter = [[.37, .33, .30], [.31, .36, .33], [.34, .30, .36], [.36, .31, .33], [.30, .35, .35], [.33, .32, .35], [.35, .34, .31], [.32, .33, .35], [.34, .33, .33], [.31, .34, .35]];
+    var permBad = { 0: 2, 1: 0, 2: 1 }, permGood = { 0: 0, 1: 1, 2: 2 };
+    function build(perm, main) {
+      return items.map(function (it) { var g = it.g === 3 ? gNoiseAs : it.g; return row(perm[g], main); });
+    }
+    var stages = [
+      { S: jitter, name: "학습 초기" },
+      { S: build(permBad, 0.62), name: "+ L_M" },
+      { S: build(permBad, 0.94), name: "+ L_A" },
+      { S: build(permGood, 0.94), name: "+ L_P" }
+    ];
+    var heat = document.getElementById("sHeat");
+    var info = document.getElementById("poolInfo");
+    var groupName = ["신발", "전자기기", "캠핑"];
+    function render(st) {
+      var S = stages[st].S;
+      // heat table
+      var h = "<tr><th class='rowh'>노드 (시간순)</th><th>군집 1</th><th>군집 2</th><th>군집 3</th></tr>";
+      S.forEach(function (r, i) {
+        var it = items[i];
+        h += "<tr><th class='rowh'><span class='dot " + (it.g === 3 ? "dn" : "d" + it.g) + "'></span> t" + it.t + " " + it.name + "</th>";
+        r.forEach(function (v) {
+          var pct = Math.round(v * 100);
+          var fg = v > 0.55 ? "color:#fff;font-weight:700" : "";
+          h += "<td style='background:color-mix(in srgb, var(--accent) " + pct + "%, var(--panel));" + fg + "'>" + v.toFixed(2) + "</td>";
+        });
+        h += "</tr>";
+      });
+      heat.innerHTML = h;
+      // metrics
+      var LM = 0;
+      for (var i = 0; i < n; i++) for (var j = 0; j < n; j++) {
+        var p = 0; for (var k = 0; k < m; k++) p += S[i][k] * S[j][k];
+        LM += (A[i][j] - p) * (A[i][j] - p);
+      }
+      LM = Math.sqrt(LM);
+      var LA = 0;
+      S.forEach(function (r) { r.forEach(function (v) { if (v > 0) LA -= v * Math.log(v); }); });
+      LA /= n;
+      var meanPos = [], dom = [];
+      for (var k2 = 0; k2 < m; k2++) {
+        var num = 0, den = 0, best = -1, bestG = -1, gsum = [0, 0, 0, 0];
+        for (var i2 = 0; i2 < n; i2++) { num += (i2 + 1) * S[i2][k2]; den += S[i2][k2]; gsum[items[i2].g] += S[i2][k2]; }
+        for (var gg = 0; gg < 3; gg++) if (gsum[gg] > best) { best = gsum[gg]; bestG = gg; }
+        meanPos.push(num / den); dom.push(bestG);
+      }
+      var ordered = meanPos[0] <= meanPos[1] && meanPos[1] <= meanPos[2];
+      // A* = S^T A S
+      var As = [];
+      for (var a = 0; a < m; a++) { As.push([]); for (var b = 0; b < m; b++) {
+        var s = 0; for (var i3 = 0; i3 < n; i3++) for (var j3 = 0; j3 < n; j3++) s += S[i3][a] * A[i3][j3] * S[j3][b];
+        As[a].push(s);
+      } }
+      var clear = st >= 1;
+      var out = "<div class='readout' style='line-height:1.9'>";
+      out += "L<sub>M</sub> = ‖A − SSᵀ‖<sub>F</sub> = <b>" + LM.toFixed(2) + "</b><br>";
+      out += "L<sub>A</sub> = 평균 엔트로피 = <b>" + LA.toFixed(3) + "</b> <span class='muted'>(최대 ln 3 = 1.099)</span><br>";
+      out += "군집별 평균 시점 = <b>" + meanPos.map(function (v) { return v.toFixed(2); }).join(" · ") + "</b><br>";
+      out += "시간 순서와 일치: <b>" + (ordered ? "예" : "아니요") + "</b></div>";
+      out += "<p class='small' style='margin:12px 0 6px'><b>풀링 결과: 관심 시퀀스 (군집 1 → 2 → 3)</b></p><div class='chips'>";
+      for (var k3 = 0; k3 < m; k3++) {
+        out += "<span class='chip'><i class='dot " + (clear ? "d" + dom[k3] : "dn") + "'></i>h*" + (k3 + 1) + (clear ? " " + groupName[dom[k3]] : " (혼합)") + "</span>";
+        if (k3 < m - 1) out += "<span class='muted'>→</span>";
+      }
+      out += "</div>";
+      out += "<p class='small' style='margin:12px 0 6px'><b>줄어든 그래프 A* = SᵀAS</b></p><table class='heat'><tr><th></th><th>1</th><th>2</th><th>3</th></tr>";
+      As.forEach(function (r, a) {
+        var mx = Math.max.apply(null, As.map(function (rr) { return Math.max.apply(null, rr); }));
+        out += "<tr><th>" + (a + 1) + "</th>" + r.map(function (v) {
+          var pct = Math.round(v / mx * 100);
+          return "<td style='background:color-mix(in srgb, var(--accent) " + pct + "%, var(--panel));" + (pct > 55 ? "color:#fff;font-weight:700" : "") + "'>" + v.toFixed(1) + "</td>";
+        }).join("") + "</tr>";
+      });
+      out += "</table>";
+      info.innerHTML = out;
+      Array.prototype.forEach.call(document.querySelectorAll("#stageSeg button"), function (b) {
+        b.setAttribute("aria-pressed", b.getAttribute("data-st") === String(st) ? "true" : "false");
+      });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll("#stageSeg button"), function (b) {
+      b.addEventListener("click", function () { render(parseInt(b.getAttribute("data-st"), 10)); });
+    });
+    render(3);
+  })();
+
+  // ---------- Figure 7: prediction chain ----------
+  (function () {
+    var g = document.getElementById("predChain");
+    var names = ["신발", "전자기기", "캠핑"], gam = ["γ*₁ = 0.12", "γ*₂ = 0.08", "γ*₃ = 0.80"];
+    for (var k = 0; k < 3; k++) {
+      var x = 40 + k * 160;
+      el("circle", { cx: x + 40, cy: 70, r: 24, "class": "g" + k + " ring" }, g);
+      txt(g, x + 40, 75, "h*" + (k + 1), { "text-anchor": "middle", "font-size": 12.5, "font-weight": 700, style: "fill:#fff" });
+      txt(g, x + 40, 112, names[k], { "text-anchor": "middle", "font-size": 12, "class": "tx-m" });
+      el("path", { d: "M" + (x + 40) + " 118 L" + (x + 40) + " 138", "class": "ln", "marker-end": "url(#ah)" }, g);
+      el("rect", { x: x, y: 140, width: 80, height: 48, rx: 10, "class": "box-a" }, g);
+      txt(g, x + 40, 162, "AUGRU", { "text-anchor": "middle", "font-size": 12, "font-weight": 700, "class": "tx-a" });
+      txt(g, x + 40, 179, "게이트 × γ*", { "text-anchor": "middle", "font-size": 10.5, "class": "tx-m" });
+      txt(g, x + 40, 212, gam[k], { "text-anchor": "middle", "font-size": 11.5, "font-weight": k === 2 ? 700 : 400 });
+      if (k < 2) el("path", { d: "M" + (x + 80) + " 164 L" + (x + 158) + " 164", "class": "ln-a", "marker-end": "url(#aha)" }, g);
+    }
+    el("path", { d: "M440 164 Q520 164 530 140 Q540 116 736 128", "class": "ln-a", "marker-end": "url(#aha)" }, g);
+    txt(g, 492, 150, "h_s", { "font-size": 12.5, "font-weight": 700, "class": "tx-a" });
+    txt(g, 40, 262, "후보가 캠핑 랜턴이면 캠핑 군집의 γ*가 커서 이 단계가 h_s를 주로 결정해요.", { "font-size": 12, "class": "tx-m" });
+  })();
+
+  // ---------- Figure 8: results chart ----------
+  (function () {
+    var models = ["NCF", "DIN", "LightGCN", "Caser", "GRU4REC", "DIEN", "SLi-Rec", "SURGE"];
+    var D = {
+      taobao: {
+        AUC: [.7128, .7637, .7483, .8312, .8635, .8477, .8664, .8906],
+        GAUC: [.7221, .8524, .7513, .8499, .8680, .8745, .8669, .8888],
+        MRR: [.1446, .3091, .1669, .3508, .3993, .4011, .3617, .4228],
+        "NDCG@2": [.0829, .2352, .1012, .2890, .3422, .3404, .2971, .3625],
+        TIME: [null, 22.65, null, 23.66, 26.78, 18.74, 27.82, 14.96]
+      },
+      kuaishou: {
+        AUC: [.5559, .6160, .6403, .7795, .8156, .7037, .7978, .8525],
+        GAUC: [.5531, .7483, .6407, .8097, .8333, .7800, .8128, .8610],
+        MRR: [.7734, .8863, .8175, .9100, .9174, .9030, .9075, .9316],
+        "NDCG@2": [.8327, .9160, .8653, .9336, .9391, .9284, .9318, .9495],
+        TIME: [null, 20.59, null, 120.26, 73.35, 28.47, 28.84, 22.86]
+      }
+    };
+    var state = { ds: "taobao", mt: "AUC" };
+    var svg = document.getElementById("resChart");
+    var tip = document.getElementById("tip");
+    var wrap = document.getElementById("chartWrap");
+    var L = 92, R = 70, T = 14, rowH = 32, barH = 18, W = 640;
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var vals = D[state.ds][state.mt];
+      var isTime = state.mt === "TIME";
+      var max = isTime ? (state.ds === "kuaishou" ? 125 : 30) : 1;
+      var ticks = isTime ? (state.ds === "kuaishou" ? [0, 25, 50, 75, 100, 125] : [0, 10, 20, 30]) : [0, 0.25, 0.5, 0.75, 1];
+      var H = T + models.length * rowH + 28;
+      svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+      var plotW = W - L - R;
+      function xs(v) { return L + v / max * plotW; }
+      ticks.forEach(function (tv) {
+        el("line", { x1: xs(tv), y1: T - 4, x2: xs(tv), y2: T + models.length * rowH, "class": "gridl" }, svg);
+        txt(svg, xs(tv), T + models.length * rowH + 16, isTime ? tv + "분" : String(tv), { "text-anchor": "middle", "class": "axis" });
+      });
+      var surge = vals[7];
+      models.forEach(function (mName, i) {
+        var y = T + i * rowH, v = vals[i], hi = mName === "SURGE";
+        var g = el("g", { "class": "row" }, svg);
+        txt(g, L - 10, y + rowH / 2 + 4, mName, { "text-anchor": "end", "class": "lab", "font-weight": hi ? 700 : 400 });
+        if (v === null) {
+          txt(g, L + 6, y + rowH / 2 + 4, "논문에 값 없음", { "class": "val" });
+        } else {
+          var w = Math.max(2, xs(v) - L), by = y + (rowH - barH) / 2;
+          // bar with 4px rounded data-end, square at baseline
+          var r = Math.min(4, w / 2);
+          var d = "M" + L + " " + by + " H" + (L + w - r) + " Q" + (L + w) + " " + by + " " + (L + w) + " " + (by + r) +
+                  " V" + (by + barH - r) + " Q" + (L + w) + " " + (by + barH) + " " + (L + w - r) + " " + (by + barH) + " H" + L + " Z";
+          el("path", { d: d, "class": "bar" + (hi ? " hi" : "") }, g);
+          txt(g, L + w + 6, y + rowH / 2 + 4, isTime ? v.toFixed(2) + "분" : v.toFixed(4), { "class": "val" + (hi ? " hi" : "") });
+        }
+        var hit = el("rect", { x: 0, y: y, width: W, height: rowH, "class": "hit" }, g);
+        hit.addEventListener("pointerenter", function () { show(i); });
+        hit.addEventListener("pointermove", function (ev) { move(ev); });
+        hit.addEventListener("pointerleave", function () { tip.hidden = true; });
+      });
+      function show(i) {
+        var v = vals[i];
+        var s = models[i] + " · " + (isTime ? "학습 시간 " : state.mt + " ");
+        if (v === null) s += "값 없음";
+        else {
+          s += isTime ? v.toFixed(2) + "분" : v.toFixed(4);
+          if (i !== 7) { var dlt = v - surge; s += " · SURGE와 차이 " + (dlt >= 0 ? "+" : "−") + (isTime ? Math.abs(dlt).toFixed(2) + "분" : Math.abs(dlt).toFixed(4)); }
+        }
+        tip.textContent = s; tip.hidden = false;
+      }
+      function move(ev) {
+        var r = wrap.getBoundingClientRect();
+        var x = Math.min(Math.max(ev.clientX - r.left, 120), r.width - 120);
+        tip.style.left = x + "px"; tip.style.top = (ev.clientY - r.top - 6) + "px";
+      }
+    }
+    function bind(segId, key, attr) {
+      Array.prototype.forEach.call(document.querySelectorAll("#" + segId + " button"), function (b) {
+        b.addEventListener("click", function () {
+          state[key] = b.getAttribute(attr);
+          Array.prototype.forEach.call(document.querySelectorAll("#" + segId + " button"), function (o) { o.setAttribute("aria-pressed", o === b ? "true" : "false"); });
+          render();
+        });
+      });
+    }
+    bind("dsSeg", "ds", "data-ds");
+    bind("mtSeg", "mt", "data-mt");
+    render();
+  })();
+})();
+</script>
