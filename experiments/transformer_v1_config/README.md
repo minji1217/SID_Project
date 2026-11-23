@@ -33,6 +33,18 @@ python train_transformer.py \
 
 ## V1과 완전히 같지 않은 점
 
-- V1은 AMP(bfloat16)로 학습했다. 여민 코드에는 AMP 설정이 없어 fp32로 학습한다. 수치가 아주 조금 다를 수 있다.
-- 어휘 크기가 "SID 파일 최댓값 + 1"이라 한 번도 안 쓰인 끝 번호가 있으면 V1(25 / 128 / 512)보다 작아질 수 있다. 학습은 되지만 출력층 크기가 달라진다.
-- 엄밀한 비교가 필요하면 V1(기존 SID)도 이 코드와 이 gin으로 다시 돌려 기준을 맞춘다.
+모델·loss·평가 식·split 방식은 V1 코드와 같다. 조건(fp32, num_workers 0)을 맞추면 V1 코드와 epoch마다 loss·Top-1이 비트 단위로 같았다 (2026-11-23, 합성 데이터 CPU 실측). 다른 것은 셋:
+
+- AMP: V1은 bfloat16(autocast)으로 학습·validation 평가. 여민 코드는 fp32만 있다.
+- DataLoader: V1은 `num_workers=4` + persistent workers라 epoch 2부터 섞는 순서가 달라진다. 여민 코드는 이 옵션이 없다.
+- 어휘 크기: "SID 파일 최댓값 + 1"로 자동. V1은 25 / 128 / 512 / 28 고정. 예전 V1 SID 파일은 c4 최댓값이 16이라 c4 어휘가 17이 된다.
+
+그래서 V1(기존 SID)도 이 코드와 이 gin으로 다시 돌려 새 기준으로 쓴다. seed 사이 Top-1 표준편차가 약 0.4%p라 그 정도 차이는 예상한다.
+
+## 실행할 때 주의
+
+- 예측(`predict_sid.py`)에도 **이 gin**을 `--config`로 주고 `--checkpoint <save_dir>/checkpoint_best.pt`를 명시한다. 기본 경로는 학습 저장 위치와 다르고, 다른 gin을 주면 history 길이(50)가 경고 없이 바뀐다.
+- 학습 때 `--sid-path`를 항상 명시한다. 빼면 `train_path` 옆의 `article_semantic_ids.parquet`를 자동으로 골라 다른 SID가 잡힐 수 있다.
+- `split_validation.py`는 입력·출력 폴더가 `datasets/ebnerd/`로 고정이다. 실험(V1 / H / R)마다 폴더를 나눠 덮어쓰지 않게 한다. `save_dir`도 실험마다 새 폴더.
+- 입력 1pos4neg가 후보 순서를 섞은 버전인지 먼저 확인한다 (정답이 첫 자리인 비율 약 0.2). 코드가 검사하지 않아서 섞지 않은 파일이면 Top-1이 부풀어도 경고가 없다.
+- 학습 로그에는 Top-1만 나온다. AUC · MRR · nDCG는 예측 결과로 `evaluate/metrics.py`를 돌려 구한다.
