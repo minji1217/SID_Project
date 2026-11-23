@@ -1,0 +1,1026 @@
+<title>SURGE 예시로 따라가기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one reading column (max 940px), a sticky control bar on top, each step = text then a figure.
+     Palette follows reports/ (blue accent on cool neutrals). Topic colors: 정치 blue, 스포츠 orange, 잡음 gray, 후보 aqua. */
+  :root {
+    --bg: #ffffff; --panel: #f5f7fa; --line: #e1e5eb; --text: #1b2130; --muted: #5d6676;
+    --accent: #2f6fde; --accent-bg: #edf3ff; --bad: #b4410f; --bad-bg: #fff2ea; --good: #17803d; --good-bg: #eaf7ef;
+    --pol: #2a78d6; --spo: #eb6834; --noi: #9aa1ad; --cand: #1baf7a; --grid: #e8ebf0;
+    --ff: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+    --ff-math: "Cambria Math", "STIX Two Math", "Times New Roman", serif;
+    --ff-mono: Consolas, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13161b; --panel: #1b1f26; --line: #2c323c; --text: #e6e9ef; --muted: #9aa3b2;
+      --accent: #7aa7ff; --accent-bg: #1c2a44; --bad: #ff9b6b; --bad-bg: #3a2216; --good: #5fd08a; --good-bg: #15301f;
+      --pol: #3987e5; --spo: #d95926; --noi: #6f7785; --cand: #199e70; --grid: #262b33;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #13161b; --panel: #1b1f26; --line: #2c323c; --text: #e6e9ef; --muted: #9aa3b2;
+    --accent: #7aa7ff; --accent-bg: #1c2a44; --bad: #ff9b6b; --bad-bg: #3a2216; --good: #5fd08a; --good-bg: #15301f;
+    --pol: #3987e5; --spo: #d95926; --noi: #6f7785; --cand: #199e70; --grid: #262b33;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 15.5px; line-height: 1.75; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+  .wrap { max-width: 940px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  header.top { padding-block: 34px 8px; }
+  .eyebrow { font-size: 12.5px; letter-spacing: .06em; color: var(--accent); font-weight: 700; }
+  h1 { font-size: 28px; line-height: 1.3; margin: 6px 0 8px; text-wrap: balance; }
+  h2 { font-size: 21px; margin: 0 0 10px; text-wrap: balance; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  h2 .step { font-size: 13px; font-weight: 700; color: var(--accent); background: var(--accent-bg); border-radius: 999px; padding: 1px 10px; white-space: nowrap; }
+  h3 { font-size: 16px; margin: 24px 0 6px; }
+  p { margin: 8px 0; max-width: 70ch; }
+  ul, ol { margin: 6px 0; padding-left: 22px; max-width: 72ch; }
+  li { margin: 4px 0; }
+  b { font-weight: 650; }
+  code { font-family: var(--ff-mono); font-size: 12.5px; background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13.5px; }
+  section.stepsec { padding-block: 40px 8px; border-top: 1px solid var(--line); margin-top: 32px; scroll-margin-top: 96px; }
+  .lead { font-size: 16.5px; }
+
+  .switch { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .switch .wrap { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding-block: 8px; font-size: 13px; }
+  .switch .grp { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { font: inherit; font-size: 12.5px; border: 0; background: var(--bg); color: var(--text); padding: 4px 10px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); font-weight: 650; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type="range"] { accent-color: var(--accent); width: 180px; max-width: 45vw; }
+
+  .fig { margin: 16px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+  .fig .cap { font-size: 13px; color: var(--muted); padding: 10px 14px; border-top: 1px solid var(--line); }
+  .fig .cap b { color: var(--text); }
+  .scroll { overflow-x: auto; }
+  .fig svg { display: block; width: 100%; height: auto; }
+  .w640 { min-width: 600px; } .w480 { min-width: 440px; }
+  .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0; }
+  .row2 > div { min-width: 0; }
+  .row2 > div + div { border-left: 1px solid var(--line); }
+  @media (max-width: 620px) { .row2 > div + div { border-left: 0; border-top: 1px solid var(--line); } }
+  .panel-t { font-size: 13px; font-weight: 700; padding: 10px 14px 0; }
+  .pad { padding: 12px 14px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+
+  svg text { font-family: var(--ff); fill: var(--text); }
+  svg .tm { fill: var(--muted); }
+  svg .ta { fill: var(--accent); }
+  svg .tw { fill: #fff; }
+  svg .axis { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+  svg .gridl { stroke: var(--grid); stroke-width: 1; }
+  svg .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+  svg .box-a { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 1.4; }
+  svg .ln { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+  svg .ln-a { stroke: var(--accent); stroke-width: 2; fill: none; }
+  svg .ln-bad { stroke: var(--bad); stroke-width: 2; fill: none; stroke-dasharray: 6 4; }
+  svg .fP { fill: var(--pol); } svg .fS { fill: var(--spo); } svg .fN { fill: var(--noi); } svg .fC { fill: var(--cand); } svg .fM { fill: var(--muted); } svg .fA { fill: var(--accent); } svg .fBad { fill: var(--bad); } svg .fG { fill: var(--grid); }
+  svg .sP { stroke: var(--pol); } svg .sS { stroke: var(--spo); } svg .sN { stroke: var(--noi); } svg .sC { stroke: var(--cand); }
+  svg .ring { stroke: var(--bg); stroke-width: 2; }
+  svg .edge { stroke: var(--muted); stroke-width: 2.5; stroke-opacity: .75; }
+  svg .halo { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-size: 13px; background: var(--bg); }
+  .num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 12px; font-weight: 700; flex: none; }
+  .nP { background: var(--pol); } .nS { background: var(--spo); } .nN { background: var(--noi); } .nC { background: var(--cand); }
+  .chip.cand { border: 1.5px dashed var(--cand); }
+
+  .say { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 12px 0; background: var(--panel); }
+  .say .f { font-family: var(--ff-math); font-size: 17px; overflow-x: auto; white-space: nowrap; }
+  .say .k { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .say .k b { color: var(--text); }
+  .note { border-left: 4px solid var(--accent); background: var(--panel); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+  .note > :first-child { margin-top: 0; } .note > :last-child { margin-bottom: 0; }
+  .note.warn { border-left-color: var(--bad); }
+  .note.code { border-left-color: var(--good); }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 650; padding: 0 8px; border-radius: 999px; white-space: nowrap; vertical-align: 1px; }
+  .t-code { color: var(--good); background: var(--good-bg); } .t-bad { color: var(--bad); background: var(--bad-bg); }
+  .tbl { overflow-x: auto; margin: 10px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); font-weight: 650; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.dim { color: var(--muted); background: var(--panel); }
+  .heat { border-collapse: separate; border-spacing: 3px; width: auto; font-size: 12.5px; }
+  .heat th, .heat td { border: 0; padding: 4px 6px; text-align: center; font-variant-numeric: tabular-nums; }
+  .heat th { background: transparent; color: var(--muted); font-weight: 600; }
+  .heat td { border-radius: 5px; min-width: 50px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin: 14px 0; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--panel); min-width: 0; }
+  .card h4 { margin: 0 0 6px; font-size: 14.5px; }
+  .card p { margin: 4px 0; font-size: 14px; }
+  .mini { display: inline-grid; grid-template-columns: repeat(3, 18px); gap: 2px; margin: 6px 0; }
+  .mini i { width: 18px; height: 14px; border-radius: 3px; background: var(--grid); display: block; }
+  .mini i.on { background: var(--accent); }
+  .readout { font-family: var(--ff-mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .readout b { color: var(--text); }
+  .vec { display: flex; flex-wrap: wrap; gap: 3px; }
+  .vec span { display: inline-grid; place-items: center; min-width: 52px; height: 30px; border-radius: 5px; font-size: 12px; font-variant-numeric: tabular-nums; color: #fff; font-weight: 650; padding: 0 6px; }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
+  .toc a { font-size: 13px; color: var(--text); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; }
+  .toc a:hover, .toc a:focus-visible { border-color: var(--accent); color: var(--accent); }
+  footer { margin: 48px 0 80px; font-size: 12.5px; color: var(--muted); }
+  @media (max-width: 520px) { h1 { font-size: 23px; } h2 { font-size: 18.5px; } body { font-size: 15px; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="mP" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fP"/></marker>
+    <marker id="mS" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fS"/></marker>
+    <marker id="mN" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fN"/></marker>
+    <marker id="mC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fC"/></marker>
+    <marker id="mM" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fM"/></marker>
+    <marker id="mA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fA"/></marker>
+    <marker id="mBad" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fBad"/></marker>
+  </defs>
+</svg>
+
+<header class="top wrap">
+  <div class="eyebrow">SURGE 그림 해설 · 한 사용자로 처음부터 끝까지</div>
+  <h1>SURGE 예시로 따라가기</h1>
+  <p class="lead">뉴스 독자 한 명의 클릭 6개로 SURGE가 하는 일을 한 단계씩 따라가요. 기사 하나를 <b>숫자 2개짜리 점</b>으로 놓아서, 모든 단계를 평면 그림으로 직접 볼 수 있게 했어요. 식은 그림 뒤에 "말로 하면"과 함께만 나와요. 논문 식과 공개된 공식 코드가 다른 곳은 <span class="tag t-code">공식 코드</span> 표시로 따로 적었어요.</p>
+  <nav class="toc" aria-label="단계">
+    <a href="#s0">0 예시</a><a href="#gnn">GNN 30초</a><a href="#s1">1 점으로</a><a href="#s2">2 각도</a><a href="#s3">3 선 긋기</a><a href="#s4">4 두 점수</a><a href="#s4m">4 섞기</a><a href="#s5">5 덩어리</a><a href="#s6">6 순서대로</a><a href="#s7">7 점수</a><a href="#s8">8 학습</a><a href="#code">논문 vs 코드</a><a href="#s9">9 우리 모델로</a>
+  </nav>
+</header>
+
+<div class="switch">
+  <div class="wrap">
+    <span class="grp"><b>후보 기사</b>
+      <span class="seg" role="group" aria-label="후보 기사 고르기" id="candSeg">
+        <button type="button" data-c="P" aria-pressed="true"><span class="num nC">★</span>연정 협상 (정치)</button>
+        <button type="button" data-c="S" aria-pressed="false"><span class="num nC">★</span>이적 루머 (스포츠)</button>
+      </span></span>
+    <span class="grp"><b>섞는 방식</b>
+      <span class="seg" role="group" aria-label="두 점수를 합치는 방식" id="varSeg">
+        <button type="button" data-v="paper" aria-pressed="true">논문 식</button>
+        <button type="button" data-v="code" aria-pressed="false">공식 코드</button>
+        <button type="button" data-v="both" aria-pressed="false">둘 다 반영</button>
+      </span></span>
+    <span class="muted">바꾸면 4–7단계가 다시 계산돼요</span>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- 0 -->
+  <section class="stepsec" id="s0">
+    <h2><span class="step">0단계</span>예시 사용자: 클릭 6개와 후보 1개</h2>
+    <p>어떤 독자가 아래 순서로 기사 6개를 클릭했어요. 스포츠(이적) 2개, 정치(총선) 3개, 그리고 관심과 상관없이 눌러 본 날씨 1개가 섞여 있어요. 위에서 고른 <b>후보 기사</b>를 이 독자가 클릭할지 맞히는 게 목표예요.</p>
+    <div class="fig">
+      <div style="padding:14px" class="chips" id="timeline"></div>
+      <div class="cap"><b>그림 0.</b> 번호는 클릭 순서예요. 정치(파랑)는 2·5·6번에, 스포츠(주황)는 1·3번에 흩어져 있어요. 시간 순서로만 읽으면 같은 관심이 끊겨 보이고, 4번 날씨 같은 잡음도 그대로 들어가요. SURGE는 이 문제를 "비슷한 것끼리 다시 묶기"로 풀어요.</div>
+    </div>
+  </section>
+
+  <!-- GNN -->
+  <section class="stepsec" id="gnn">
+    <h2><span class="step">준비</span>GNN을 처음 보는 사람을 위한 30초</h2>
+    <div class="cards">
+      <div class="card"><h4>그래프 = 점 + 선</h4><p>점(노드)은 물건, 선(엣지)은 "이 둘은 관계가 있다"는 표시예요. 여기서는 점 = 클릭한 기사, 선 = "두 기사가 비슷하다"예요.</p></div>
+      <div class="card"><h4>GNN = 이웃 의견 듣기</h4><p>각 점이 <b>선으로 연결된 이웃들의 값을 모아 자기 값을 고치는</b> 신경망이에요. 친구들 의견을 듣고 내 생각을 조금 고치는 것과 같아요. 더 믿는 친구의 말은 더 크게 들어요(어텐션).</p></div>
+      <div class="card"><h4>그림 읽는 법</h4><p>그래프 그림에서는 <b>점의 위치는 의미가 없고 선만 의미가 있어요.</b> 보기 좋게 펼쳐 놓은 거예요. 반대로 평면(좌표) 그림에서는 위치가 곧 값이에요.</p></div>
+    </div>
+    <p>SURGE 전체를 한 줄로 쓰면 이래요. <b>기사를 점으로 놓고 → 비슷한 것끼리 선을 긋고 → 이웃끼리 섞고 → 덩어리로 묶고 → 덩어리를 시간순으로 읽고 → 점수를 내요.</b> 아래 1–7단계가 이 순서예요.</p>
+  </section>
+
+  <!-- 1 -->
+  <section class="stepsec" id="s1">
+    <h2><span class="step">1단계</span>기사를 점(화살표)으로 놓기</h2>
+    <p>모델은 기사를 숫자 묶음(임베딩)으로 봐요. 여기서는 숫자 2개만 써서 <b>가로 = 스포츠 성향, 세로 = 정치 성향</b>인 평면에 놓았어요. 원점에서 그 점까지 화살표를 그리면, 화살표의 <b>방향</b>이 기사의 성격이에요.</p>
+    <div class="fig">
+      <div class="scroll"><svg class="w480" id="fig1" viewBox="0 0 560 330" role="img" aria-label="기사 6개와 후보 기사를 2차원 평면의 화살표로 표시"></svg></div>
+      <div class="cap"><b>그림 1.</b> 정치 기사(2·5·6)는 위쪽, 스포츠 기사(1·3)는 오른쪽을 가리켜요. 날씨(4)는 어느 쪽도 아닌 중간이에요. 초록 점선은 후보 기사예요. 실제 모델에서는 숫자가 40개(SURGE)나 768개(우리가 쓰는 E5)지만, "방향이 성격"이라는 원리는 같아요.</div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="stepsec" id="s2">
+    <h2><span class="step">2단계</span>비슷함 재기: 두 화살표 사이의 각도</h2>
+    <p>두 기사가 얼마나 비슷한지는 <b>화살표 사이의 각도</b>로 재요. 각도가 0°면 같은 방향(완전히 비슷), 90°면 무관해요. 이 각도를 −1~1 사이 숫자로 바꾼 게 <b>코사인 유사도</b>예요.</p>
+    <div class="fig">
+      <div class="row2">
+        <div><div class="panel-t">비슷한 쌍: 2번 총선 토론 · 5번 총선 여론조사</div><svg id="fig2a" viewBox="0 0 330 300" role="img" aria-label="각도가 작은 두 화살표"></svg></div>
+        <div><div class="panel-t">다른 쌍: 2번 총선 토론 · 1번 이적 시장</div><svg id="fig2b" viewBox="0 0 330 300" role="img" aria-label="각도가 큰 두 화살표"></svg></div>
+      </div>
+      <div class="cap"><b>그림 2.</b> 왼쪽은 각도 5.7°라 코사인 0.995, 오른쪽은 각도 75.8°라 코사인 0.246이에요.</div>
+    </div>
+    <div class="say">
+      <div class="f">cos(<b>a</b>, <b>b</b>) = <b>a</b>·<b>b</b> / (|<b>a</b>| |<b>b</b>|)</div>
+      <div class="k"><b>말로 하면:</b> 두 화살표가 같은 쪽을 볼수록 1, 직각이면 0, 반대면 −1. 화살표 길이는 무시하고 방향만 봐요.</div>
+    </div>
+    <p>모든 쌍을 다 재면 6 × 6 표가 나와요. 랜덤으로 두 개를 고르는 게 아니라 <b>모든 쌍</b>을 재요.</p>
+    <div class="fig">
+      <div class="scroll" style="padding:12px 14px"><table class="heat" id="heatM" aria-label="6 by 6 코사인 유사도 표"></table></div>
+      <div class="cap"><b>그림 3.</b> 진할수록 비슷해요. 대각선(자기 자신)은 항상 1이에요. 정치끼리, 스포츠끼리 진한 칸이 모여 있고, 날씨(4)는 모두와 중간 정도예요. 표가 대각선 기준으로 대칭인 것도 보세요(2–5와 5–2는 같은 값).</div>
+    </div>
+
+    <h3>덤: SURGE는 이 "자"를 학습해요 (metric learning)</h3>
+    <p>SURGE는 각도를 재기 전에 각 축에 <b>가중치 w</b>를 곱해요. 축을 늘이거나 줄이는 손잡이라고 생각하면 돼요. 손잡이를 돌리면 화살표 방향이 바뀌어서, 누가 누구와 가까운지도 바뀌어요.</p>
+    <div class="fig">
+      <div class="row2">
+        <div><div class="panel-t">w = [1, 1] (그대로)</div><svg id="fig2c" viewBox="0 0 330 300" role="img" aria-label="가중치 적용 전 평면"></svg></div>
+        <div><div class="panel-t">w = [1, 0.4] (정치 축을 줄임)</div><svg id="fig2d" viewBox="0 0 330 300" role="img" aria-label="정치 축을 줄인 평면"></svg></div>
+      </div>
+      <div class="cap"><b>그림 4.</b> 정치 축을 0.4배로 줄이면 모든 화살표가 오른쪽으로 눕고, 날씨(4)가 스포츠(3)와 훨씬 가까워져요(아래 숫자). 학습은 이 손잡이를 "다음 클릭을 잘 맞히는 쪽"으로 돌리는 과정이에요. 이 예시의 나머지 단계는 w = [1, 1]로 계산해요.</div>
+      <div class="readout" style="padding:0 14px 12px" id="fig2readout"></div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="stepsec" id="s3">
+    <h2><span class="step">3단계</span>선 긋기: 가장 비슷한 쌍만 연결</h2>
+    <p>모든 쌍을 연결하면 의미가 없으니, <b>가장 비슷한 쌍만</b> 선으로 이어요. SURGE는 "유사도 0.9 이상" 같은 고정 기준이 아니라 <b>"상위 몇 %"</b>로 골라요. 아래는 서로 다른 쌍 15개를 유사도 순으로 줄 세운 그림이에요. 슬라이더로 선 개수를 바꿔 보세요. 4단계 이후가 모두 다시 계산돼요.</p>
+    <div class="fig">
+      <div class="controls">
+        <label for="pairs">선으로 이을 쌍 수</label>
+        <input type="range" id="pairs" min="4" max="8" step="1" value="4">
+        <span class="readout" id="pairsOut"></span>
+      </div>
+      <div class="scroll"><svg class="w480" id="fig3a" viewBox="0 0 700 420" role="img" aria-label="15개 쌍의 유사도를 내림차순으로 정렬한 막대"></svg></div>
+      <div class="cap"><b>그림 5.</b> 빨간 점선 위의 쌍만 선으로 남겨요. 기본값 4쌍이면 표 36칸 기준으로 대각선 6칸 + 4쌍 × 2칸 = 상위 14칸, 즉 ε = 14/36 ≈ 0.39예요. 5쌍 이상으로 늘리면 날씨(4)가 다른 기사와 이어지기 시작해요.</div>
+    </div>
+    <div class="fig">
+      <div class="scroll"><svg class="w480" id="fig3b" viewBox="0 0 560 270" role="img" aria-label="선으로 연결된 관심 그래프"></svg></div>
+      <div class="cap"><b>그림 6.</b> 결과 그래프예요(위치는 보기 좋게 펼친 것). 기본값에서 정치 셋은 서로 다 연결된 <b>촘촘한 덩어리</b>, 스포츠 둘은 작은 덩어리, 날씨는 <b>외톨이</b>예요. SURGE는 "촘촘한 덩어리 = 핵심 관심, 외톨이 = 잡음"으로 봐요. 시간상 떨어진 2번과 6번이 바로 연결된 것도 보세요.</div>
+    </div>
+    <div class="say">
+      <div class="f">A<sub>ij</sub> = 1 &nbsp;(M<sub>ij</sub>가 전체 n² 칸 중 상위 ε 안), &nbsp;아니면 0</div>
+      <div class="k"><b>말로 하면:</b> 유사도 표 전체를 한 줄로 세워 위에서 ε 비율만 1(선 있음)로, 나머지는 0으로. 고정 기준이 아니라 비율이라서, 학습 중에 유사도 값들이 전체적으로 오르내려도 선의 개수가 일정해요.</div>
+    </div>
+    <div class="note code"><p><span class="tag t-code">공식 코드</span> 공개된 코드는 유사도를 행마다 0~1로 다시 맞춘(최소-최대 정규화) 뒤, 0이 아닌 칸 중 <b>상위 50%</b>를 남겨요(<code>relative_threshold = 0.5</code>). 남길 비율을 정한다는 발상은 같고, 기준 칸 수가 n²이 아니라 "0이 아닌 칸 수"예요. 유사도 헤드 수는 1개예요.</p></div>
+  </section>
+
+  <!-- 4 -->
+  <section class="stepsec" id="s4">
+    <h2><span class="step">4단계 ①</span>이웃의 말을 얼마나 들을지 정하는 두 점수</h2>
+    <p>이제 GNN이 일해요. 각 기사는 <b>선으로 연결된 이웃(자기 자신 포함)의 값을 가중 평균</b>해서 자기 값을 고쳐요. 이때 "누구 말을 얼마나 들을지" 정하는 점수가 두 가지예요.</p>
+
+    <h3>점수 1. 군집 인식 점수 α: "이 기사가 덩어리의 중심인가?"</h3>
+    <p>α는 <b>기사 자신과, 그 기사의 "동네" 평균</b>을 비교해서 구해요. 여기서 동네는 5단계의 덩어리(최종 군집)와 다른 것이에요. 덩어리를 찾아서 고르는 게 아니라, <b>기사마다 자기를 중심으로 반경을 그려서 그 안을 전부</b> 모아요. 기사가 6개면 동네도 6개이고, 서로 겹쳐도 돼요.</p>
+    <ol>
+      <li><b>내 동네 정하기:</b> 나 자신과, 선을 k번 이내로 건너 닿는 기사를 모두 모아요(k-hop 이웃). 논문은 k 값을 밝히지 않았고, 공식 코드는 k = 2예요.</li>
+      <li><b>동네 평균 h<sup>c</sup> 만들기:</b> 동네에 든 기사들의 값을 한꺼번에 평균 내요. 동네 안에 서로 다른 관심이 섞여 있으면 평균도 섞여요.</li>
+      <li><b>비교해서 점수 내기:</b> 작은 신경망(2층)에 [자기 값, 동네 평균, 둘의 원소별 곱]을 넣어 점수 하나를 받아요. 자기 값이 동네 평균과 비슷하고 이웃이 많을수록, 즉 <b>촘촘한 덩어리의 가운데</b>일수록 점수가 높아지도록 학습돼요.</li>
+    </ol>
+    <div class="fig">
+      <div class="controls">
+        <span>중심 기사</span><div class="seg" role="group" aria-label="동네를 볼 기사 고르기" id="hoodSeg"></div>
+        <span>반경 k</span><div class="seg" role="group" aria-label="반경 k 고르기" id="kSeg"><button type="button" data-k="1" aria-pressed="false">1</button><button type="button" data-k="2" aria-pressed="true">2</button></div>
+      </div>
+      <div class="panel-t">그래프에서 본 내 동네</div>
+      <div class="scroll"><svg class="w480" id="figHoodG" viewBox="0 0 560 280" role="img" aria-label="선택한 기사의 k-hop 동네"></svg></div>
+      <div class="panel-t" style="border-top:1px solid var(--line);padding-top:10px">나와 동네 평균 (평면)</div>
+      <svg id="figHoodP" viewBox="0 0 330 300" style="max-width:420px" role="img" aria-label="선택한 기사와 동네 평균의 방향"></svg>
+      <div class="scroll pad"><table id="hoodTbl" aria-label="기사별 동네와 동네 평균과의 코사인"></table></div>
+      <div class="cap" id="figHoodCap"><b>그림 7a.</b></div>
+    </div>
+    <div class="fig">
+      <div class="controls">
+        <span>α 계산 방식 (설명용)</span>
+        <div class="seg" role="group" aria-label="α 계산 방식" id="alphaSeg">
+          <button type="button" data-a="sum" aria-pressed="true">이웃 유사도 합</button>
+          <button type="button" data-a="avg" aria-pressed="false">동네 평균과 비교</button>
+        </div>
+      </div>
+      <div class="panel-t">그래프에서 본 α (원 크기 = α)</div>
+      <div class="scroll"><svg class="w480" id="fig4al" viewBox="0 0 560 270" role="img" aria-label="α 크기로 그린 그래프"></svg></div>
+      <div class="panel-t" style="border-top:1px solid var(--line);padding-top:10px">기사별 α</div>
+      <svg id="fig4ab" viewBox="0 0 330 250" style="max-width:460px" role="img" aria-label="기사별 α 막대"></svg>
+      <div class="cap" id="fig7bcap"><b>그림 7b.</b></div>
+    </div>
+    <div class="say">
+      <div class="f">α<sub>i</sub> = Attention<sub>c</sub>( W<sub>c</sub>h<sub>i</sub> ‖ h<sub>i</sub><sup>c</sup> ‖ W<sub>c</sub>h<sub>i</sub> ⊙ h<sub>i</sub><sup>c</sup> ),&nbsp;&nbsp; h<sub>i</sub><sup>c</sup> = 내 동네(나 + k-hop 이웃)의 평균</div>
+      <div class="k"><b>말로 하면:</b> 내 값(변환 W<sub>c</sub>를 거친 것)과 동네 평균을 나란히 놓고, 둘의 원소별 곱까지 붙여서 작은 신경망에 넣으면 "중심도" 점수 하나가 나와요. ‖는 이어 붙이기, ⊙는 같은 자리끼리 곱하기예요.</div>
+    </div>
+    <div class="note code"><p><span class="tag t-code">공식 코드</span> 동네 평균 h<sup>c</sup>는 "이웃 수로 나눠 정규화한 인접 행렬을 <b>두 번</b> 곱한 값"(k = 2 전파)이에요. 단순 평균이 아니라, 이웃이 적은 기사 쪽에 조금 더 무게가 가는 가중 평균이에요. 신경망 입력은 [자기, 동네 평균, 자기 − 동네 평균, 자기 ⊙ 동네 평균] 네 조각이고, 점수는 모든 기사에 대해 softmax로 한 번 더 정규화돼요.</p></div>
+    <div class="note warn">
+      <p><b>"동네 평균과 비교"의 한계 두 가지.</b> 그림 7a와 7b에서 직접 확인할 수 있어요.</p>
+      <ul>
+        <li><b>다리 노드가 중심처럼 보여요.</b> 3단계에서 선을 6쌍으로 늘리면 날씨(4)가 스포츠와 정치를 잇는 다리가 돼요. 날씨의 2-hop 동네는 기록 전체라서 평균이 "스포츠와 정치 사이"가 되는데, 날씨도 원래 그 사이에 있어서 평균과 거의 같은 방향이에요(코사인 0.986). 정치 덩어리 가운데인 2번(0.990)과 거의 같아요.</li>
+        <li><b>외톨이도 중심처럼 보여요.</b> 동네에 나 자신도 들어가니까, 이웃이 없는 기사는 동네 평균이 곧 자기 자신이라 코사인이 1이 돼요.</li>
+      </ul>
+      <p>실제 모델은 신경망이 [자기, 동네 평균, 원소별 곱]을 함께 보고 점수를 내니까, 학습으로 이런 경우를 어느 정도 구분할 수는 있어요. 다만 그렇게 된다는 보장이나 분석은 논문에 없어요. 그래서 이 예시의 기본 α는 "이웃 유사도 합"(이웃이 많고 비슷할수록 높고, 외톨이는 0)으로 계산해요.</p>
+    </div>
+
+    <h3>점수 2. 질의 인식 점수 β: "이 기사가 후보와 관련 있나?"</h3>
+    <p>같은 구조의 신경망이 [기사 값, 후보 기사 값, 둘의 원소별 곱]을 보고 점수를 내요. 후보와 방향이 비슷할수록 높아요. 위에서 후보를 바꾸면 순위가 뒤집혀요.</p>
+    <div class="fig">
+      <div class="scroll"><svg class="w480" id="fig4b" viewBox="0 0 600 250" role="img" aria-label="기사별 후보 관련 점수 막대"></svg></div>
+      <div class="cap"><b>그림 8.</b> 이 예시에서는 신경망 대신 "후보와의 코사인 × 3"으로 β를 계산했어요.</div>
+    </div>
+  </section>
+
+  <section class="stepsec" id="s4m">
+    <h2><span class="step">4단계 ②</span>두 점수를 합쳐 이웃과 섞기 (GNN 한 번)</h2>
+    <p>기사 i가 이웃 j의 말을 들을 비율은 두 점수를 더한 값을 이웃들끼리 softmax로 정규화해서 정해요. 여기서 <b>"어느 기사의 점수를 더하느냐"</b>가 중요해요. 위 막대에서 <b>섞는 방식</b>을 바꿔 보세요.</p>
+    <div class="tbl"><table>
+      <tr><th>섞는 방식</th><th>더하는 점수</th><th>결과</th></tr>
+      <tr><td><b>논문 식</b> (식 8)</td><td>α<sub>i</sub> (듣는 기사) + β<sub>j</sub> (이웃)</td><td>α<sub>i</sub>는 모든 이웃에게 똑같이 더해져서 softmax에서 <b>약분돼요</b>. 결국 β만 비율을 정해요.</td></tr>
+      <tr><td><b>공식 코드</b></td><td>α<sub>j</sub> (이웃) + β<sub>i</sub> (듣는 기사)</td><td>이번엔 β<sub>i</sub>가 약분돼요. <b>α가 비율을 정해요.</b> "덩어리 중심인 이웃의 말을 더 크게 듣기"예요.</td></tr>
+      <tr><td><b>둘 다 반영</b> (가정)</td><td>α<sub>j</sub> + β<sub>j</sub> (둘 다 이웃)</td><td>두 점수가 모두 살아요. 논문 본문이 설명한 의도에 가장 가까워서 비교용으로 넣었어요.</td></tr>
+    </table></div>
+    <div class="say">
+      <div class="f">softmax<sub>j</sub>(c + x<sub>j</sub>) = e<sup>c</sup>e<sup>x<sub>j</sub></sup> / Σ<sub>k</sub> e<sup>c</sup>e<sup>x<sub>k</sub></sup> = softmax<sub>j</sub>(x<sub>j</sub>)</div>
+      <div class="k"><b>약분이란:</b> 모든 이웃에 같은 값 c를 더하면, 분자와 분모에 똑같이 e<sup>c</sup>가 곱해져서 사라져요. 모든 학생 점수에 10점씩 더해도 등수가 안 바뀌는 것과 같아요. 그래서 "듣는 기사 자신의 점수"는 비율에 아무 영향을 못 줘요.</div>
+    </div>
+    <div class="fig">
+      <div class="controls"><span>기사 고르기</span><div class="seg" role="group" aria-label="기사 고르기" id="nodeSeg"></div></div>
+      <div class="scroll pad"><table id="logitTbl" aria-label="이웃별 점수와 섞는 비율"></table></div>
+      <div class="row2">
+        <div><div class="panel-t">누구에게 얼마나 듣나 (섞는 비율)</div><svg id="fig4c" viewBox="0 0 330 260" role="img" aria-label="선택한 기사의 이웃별 섞는 비율"></svg></div>
+        <div><div class="panel-t">섞기 전 → 섞은 뒤 (평면)</div><svg id="fig4d" viewBox="0 0 330 300" role="img" aria-label="섞기 전후 위치"></svg></div>
+      </div>
+      <div class="cap" id="fig4cap"><b>그림 9.</b></div>
+    </div>
+    <div class="say">
+      <div class="f">새 값<sub>i</sub> = ( Σ<sub>j∈이웃</sub> 비율<sub>ij</sub> × 값<sub>j</sub> &nbsp;+&nbsp; 값<sub>i</sub> ) / 2</div>
+      <div class="k"><b>말로 하면:</b> 이웃들 값을 비율대로 평균 낸 것과 내 원래 값을 반반 섞어요. 실제 SURGE 식 (4)에는 학습되는 행렬 W와 비선형 함수 σ가 더 붙고, 원래 값은 반반이 아니라 그냥 더해요(잔차). 여기서는 핵심만 남겼어요.</div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="stepsec" id="s5">
+    <h2><span class="step">5단계</span>덩어리로 묶기: 풀링</h2>
+    <p>섞기가 끝난 기사 6개를 <b>덩어리 3개</b>로 줄여요. 순서는 세 단계예요.</p>
+    <ol>
+      <li><b>배정표 S 계산:</b> 기사마다 "이웃들의 새 값 합"에 학습된 행렬 W<sub>p</sub>를 곱해 덩어리별 점수를 내고, softmax로 확률로 바꿔요. 이웃 정보를 보고 정하기 때문에, 연결된 기사끼리 같은 덩어리로 가기 쉬워요.</li>
+      <li><b>덩어리 값 만들기:</b> 덩어리별로 소속 확률만큼 기사 값을 <b>더해요</b>.</li>
+      <li><b>덩어리 사이 연결 만들기:</b> 원래 그래프의 선들을 덩어리 단위로 다시 세요(A*).</li>
+    </ol>
+    <div class="say">
+      <div class="f">S<sub>i</sub> = softmax( W<sub>p</sub> · Σ<sub>j∈이웃</sub> A<sub>ij</sub> 새 값<sub>j</sub> ),&nbsp;&nbsp; 덩어리값 = S<sup>T</sup>H′,&nbsp;&nbsp; A* = S<sup>T</sup>AS</div>
+      <div class="k"><b>말로 하면:</b> 나와 이웃의 새 값을 더한 걸 보고 "어느 덩어리 같은지" 점수를 매겨 확률로 바꿔요(식 11). W<sub>p</sub>는 이 예시에서 [3, −1], [1.2, 1.2], [−1, 3]으로 정했어요. 각 행이 "스포츠 쪽", "중간", "정치 쪽"을 좋아하는 덩어리예요.</div>
+    </div>
+    <div class="fig">
+      <div class="scroll"><svg class="w640" id="fig5a" viewBox="0 0 700 340" role="img" aria-label="기사 6개를 덩어리 3개로 묶는 모습"></svg></div>
+      <div class="cap" id="fig5cap"><b>그림 10.</b></div>
+    </div>
+    <div class="row2 fig">
+      <div class="pad"><div class="panel-t" style="padding:0 0 8px">덩어리 사이 연결 A* = SᵀAS</div><table class="heat" id="aStar" aria-label="줄어든 그래프 인접 행렬"></table>
+        <p class="small muted" style="margin-top:8px">대각선은 덩어리 안쪽의 연결 수(기대값), 나머지는 덩어리 사이의 연결 수예요. 정치 덩어리의 대각선이 가장 커요. 가장 촘촘하다는 뜻이에요.</p></div>
+      <div class="pad"><div class="panel-t" style="padding:0 0 8px">S가 규칙을 얼마나 지키나 (정규화 벌점)</div><div id="regOut" class="readout" style="line-height:2"></div>
+        <p class="small muted" style="margin-top:8px">학습 중에는 이 벌점들을 손실에 더해서 줄여요. 날씨(4)처럼 이웃이 없는 기사는 어느 덩어리에도 확실히 속하지 못해서 ② 벌점을 키워요.</p></div>
+    </div>
+    <h3>S가 지켜야 할 규칙 3가지</h3>
+    <div class="cards">
+      <div class="card"><h4>① 선으로 연결된 기사는 같은 덩어리로</h4><div class="mini"><i class="on"></i><i></i><i></i><i class="on"></i><i></i><i></i></div><p>연결된 2번과 5번은 같은 열로, 연결 안 된 1번과 2번은 다른 열로. 벌점 = ‖A − SSᵀ‖ (SSᵀ = 두 기사가 같은 덩어리에 들어갈 확률).</p></div>
+      <div class="card"><h4>② 한 덩어리에 확실하게</h4><div class="mini"><i class="on"></i><i></i><i></i><i style="opacity:.45" class="on"></i><i style="opacity:.45" class="on"></i><i style="opacity:.45" class="on"></i></div><p>위 행처럼 한 칸에 몰리는 게 좋고, 아래 행처럼 고르게 퍼지면 벌점이에요. 벌점 = 행마다 엔트로피의 평균(최대 ln 3 = 1.10).</p></div>
+      <div class="card"><h4>③ 앞에 본 기사는 앞 덩어리로</h4><div class="mini"><i class="on"></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i class="on"></i></div><p>진한 칸이 왼쪽 위에서 오른쪽 아래로 이어지게 해요. 그래야 덩어리 번호 순서가 곧 시간 순서가 돼요. 위 그림의 "평균 순서"가 1→2→3으로 커지면 지킨 거예요.</p></div>
+    </div>
+    <div class="note code"><p><span class="tag t-code">공식 코드</span> 공개된 코드에는 배정표 S와 정규화 벌점 3개가 없어요. 대신 기사마다 <b>점수(군집 점수 + 후보 점수)</b>를 매겨 <b>상위 몇 개 기사만 남기는</b> 방식(Taobao 30개, Kuaishou 150개)이에요. 남은 기사는 원래 클릭 순서를 그대로 유지해서, 시간 순서 규칙(③)이 필요 없어요. 즉 논문은 "합치는 풀링", 코드는 "고르는 풀링"이에요. 이 경우에는 군집 인식 점수가 "어떤 기사가 살아남을지"까지 정해요.</p></div>
+  </section>
+
+  <!-- 6 -->
+  <section class="stepsec" id="s6">
+    <h2><span class="step">6단계</span>덩어리를 순서대로 읽기: AUGRU</h2>
+    <p>덩어리 3개를 시간 순서대로 하나씩 읽으면서 <b>"이 독자의 지금 관심"</b>이라는 기억(상태)을 갱신해요. 핵심은 <b>문을 얼마나 열지(게이트)</b>예요. 후보와 관련 없는 덩어리는 문을 거의 닫아서 기억이 잘 안 바뀌고, 관련 있는 덩어리는 문을 크게 열어 기억을 많이 바꿔요. 문 열림은 덩어리 중요도 γ*로 정해요. γ*는 기사별 후보 관련 중요도 γ = softmax(β)를 S로 모은 값이에요.</p>
+    <div class="fig">
+      <div class="row2">
+        <div><div class="panel-t">단계별 문 열림 정도 ũ</div><svg id="fig6a" viewBox="0 0 330 260" role="img" aria-label="세 단계의 게이트 열림 정도"></svg></div>
+        <div><div class="panel-t">기억(상태)이 움직이는 길 (평면)</div><svg id="fig6b" viewBox="0 0 330 300" role="img" aria-label="상태 벡터의 이동 경로"></svg></div>
+      </div>
+      <div class="cap" id="fig6cap"><b>그림 11.</b></div>
+    </div>
+    <div class="say">
+      <div class="f">새 기억 = (1 − ũ) × 이전 기억 + ũ × 이번 덩어리,&nbsp;&nbsp; ũ = γ* × 0.9</div>
+      <div class="k"><b>말로 하면:</b> 문을 ũ만큼 열고, 연 만큼만 새 덩어리를 받아들여요. 0.9는 보통 GRU의 업데이트 게이트(실제로는 학습되는 값)를 고정한 것이고, γ*를 곱하는 부분이 AUGRU가 보통 GRU와 다른 점이에요. 실제 GRU는 리셋 게이트와 tanh 변환도 거쳐요.</div>
+    </div>
+    <div class="note code"><p><span class="tag t-code">공식 코드</span> 코드 주석에는 "군집 점수를 AUGRU 어텐션으로 쓴다"고 적혀 있지만, 실제로는 남은 기사들에 대해 <b>후보 기준 어텐션을 새로 계산</b>해서 문 열림에 써요.</p></div>
+  </section>
+
+  <!-- 7 -->
+  <section class="stepsec" id="s7">
+    <h2><span class="step">7단계</span>점수 내기: 클릭할 확률</h2>
+    <p>예측에는 벡터 네 개를 이어 붙인 입력을 써요(식 17).</p>
+    <ul>
+      <li><b>h<sub>s</sub></b>: 6단계의 최종 기억 (관심이 시간에 따라 어떻게 흘러왔나)</li>
+      <li><b>h<sub>g</sub></b>: 그래프 요약 (readout). 풀링 <b>전</b>의 새 값들을 중요도 γ로 가중합한 것으로, 순서와 무관한 전체 요약이에요(식 15).</li>
+      <li><b>h<sub>t</sub></b>: 후보 기사 자체</li>
+      <li><b>h<sub>g</sub> ⊙ h<sub>t</sub></b>: 그래프 요약과 후보의 원소별 곱 (같은 방향인 차원이 클수록 큼)</li>
+    </ul>
+    <div class="fig">
+      <div class="pad" id="concatBox"></div>
+      <div class="scroll"><svg class="w480" id="fig7" viewBox="0 0 600 230" role="img" aria-label="최종 상태와 후보의 각도, 클릭 확률"></svg></div>
+      <div class="cap" id="fig7cap"><b>그림 12.</b></div>
+    </div>
+    <p class="small muted">실제로는 이 8개 숫자(차원 2 × 4개)를 MLP(은닉층 100, 64)에 넣어 확률을 내요. 이 예시에서는 MLP 대신 설명용 함수 sigmoid(3 × cos(h<sub>s</sub>, h<sub>t</sub>) + 3 × cos(h<sub>g</sub>, h<sub>t</sub>) − 3.5)를 썼어요.</p>
+  </section>
+
+  <!-- 8 -->
+  <section class="stepsec" id="s8">
+    <h2><span class="step">8단계</span>학습: 정답을 보고 모든 단계를 한꺼번에 고치기</h2>
+    <p>지금까지는 "이미 학습된 모델"이 예측하는 과정이었어요. 학습할 때는 실제로 클릭했는지(정답 1 또는 0)와 예측 확률을 비교해서, 틀린 만큼 <b>거꾸로</b> 전달하며 모든 단계의 손잡이를 동시에 고쳐요(역전파). 이걸 end-to-end 학습이라고 해요.</p>
+    <div class="fig">
+      <div class="scroll"><svg class="w640" id="fig8" viewBox="0 0 900 250" role="img" aria-label="순방향 계산과 역방향 학습 신호"></svg></div>
+      <div class="cap"><b>그림 13.</b> 위 파란 화살표가 예측 방향, 아래 빨간 점선이 학습 신호의 방향이에요. 상자 아래 글씨가 그 단계에서 고쳐지는 손잡이예요. 따로 정답이 없는 "유사도의 자 w", "α·β 신경망", "묶는 방법 W<sub>p</sub>"도 클릭 예측이 잘 맞는 쪽으로 함께 고쳐져요.</div>
+    </div>
+    <div class="say">
+      <div class="f">손실 = −[ 정답 × log(예측) + (1 − 정답) × log(1 − 예측) ] + λ<sub>M</sub>×① + λ<sub>A</sub>×② + λ<sub>P</sub>×③</div>
+      <div class="k"><b>말로 하면:</b> 실제로 클릭했는데(정답 1) 예측이 0.9면 손실 0.11, 예측이 0.1이면 손실 2.30. 틀린 쪽으로 확신할수록 크게 혼나요. 뒤의 세 항은 5단계 규칙의 벌점이고, λ는 그 비중이에요(논문은 0.001 · 0.00001 · 0.0000001 중에서 골랐어요).</div>
+    </div>
+    <h3>학습 데이터는 어떻게 생기나</h3>
+    <ul>
+      <li><b>한 사용자에게서 여러 문제:</b> 기록 [1, 2, 3]으로 4번을 맞히기, [1, 2, 3, 4]로 5번을 맞히기처럼 앞부분마다 문제가 하나씩 생겨요. 그래프도 문제마다 새로 만들어요.</li>
+      <li><b>정답(1)과 오답(0)을 함께:</b> 실제로 클릭한 기사는 정답 1, 노출됐지만 클릭 안 한 기사나 무작위로 뽑은 기사는 정답 0으로 같이 학습해요. 그래야 "클릭할 것"과 "안 할 것"을 구분하는 법을 배워요.</li>
+      <li><b>배치:</b> 이런 문제 500개(배치 크기)를 한 번에 계산해요. 기록 길이가 다르면 빈칸(패딩)을 채우고, 빈칸은 계산에서 가려요.</li>
+    </ul>
+  </section>
+
+  <!-- code vs paper -->
+  <section class="stepsec" id="code">
+    <h2><span class="step">정리</span>논문과 공개된 공식 코드의 차이</h2>
+    <p>저자들이 공개한 저장소(tsinghua-fib-lab/SIGIR21-SURGE)의 SURGE 모델 코드를 읽고 논문과 비교했어요. 큰 흐름은 같지만, 4·5단계의 구체적인 방식이 꽤 달라요.</p>
+    <div class="tbl"><table>
+      <tr><th>단계</th><th>논문</th><th>공식 코드</th></tr>
+      <tr><td>유사도 헤드 수</td><td>φ개 (값은 밝히지 않음)</td><td>1개</td></tr>
+      <tr><td>유사도 후처리</td><td>코사인 그대로</td><td>행마다 최소-최대 정규화 (0~1)</td></tr>
+      <tr><td>선 긋기</td><td>전체 n²칸 중 상위 ε</td><td>0이 아닌 칸 중 상위 50%</td></tr>
+      <tr><td>동네 평균 h<sup>c</sup></td><td>나와 k-hop 이웃의 평균 (k 값은 밝히지 않음)</td><td>정규화한 인접 행렬로 2번 전파 (2-hop)</td></tr>
+      <tr><td>섞는 비율</td><td>softmax<sub>j</sub>(α<sub>i</sub> + β<sub>j</sub>) → α 약분</td><td>softmax<sub>j</sub>(α<sub>j</sub> + β<sub>i</sub>) → β 약분, α가 결정</td></tr>
+      <tr><td>풀링</td><td>소프트 배정 S로 합치기 + 정규화 벌점 3개</td><td>S·벌점 없음. 점수 상위 기사만 남기기 (30개 / 150개), 원래 순서 유지</td></tr>
+      <tr><td>기사 중요도</td><td>γ = softmax(β)</td><td>군집 점수 + 후보 점수의 softmax</td></tr>
+      <tr><td>readout h<sub>g</sub></td><td>γ 가중합</td><td>같은 방식 (남은 기사만)</td></tr>
+      <tr><td>AUGRU 문 열림</td><td>덩어리 중요도 γ*</td><td>후보 기준 어텐션을 새로 계산</td></tr>
+      <tr><td>예측 입력</td><td colspan="2">같음: h<sub>s</sub> ‖ h<sub>g</sub> ‖ h<sub>t</sub> ‖ h<sub>g</sub> ⊙ h<sub>t</sub></td></tr>
+    </table></div>
+    <p class="small muted">확인한 범위: SURGE 모델 파일과 순차 모델 기본 클래스 파일이에요. 손실을 정의하는 상위 클래스 파일은 읽지 않아서, 정규화 벌점이 그쪽에 따로 있는지는 확인하지 못했어요. 공개 코드가 논문 실험에 쓴 버전과 같은지도 알 수 없어요.</p>
+    <div class="note"><p><b>그래서 군집 인식 점수는 어디서 효과가 있나.</b> 논문 식대로면 섞는 비율에서 약분돼 효과가 없어요. 공식 코드에서는 두 곳에서 실제로 쓰여요. ① 이웃의 말을 들을 비율(덩어리 중심인 이웃의 말을 더 크게), ② 풀링에서 살아남을 기사 고르기(중심인 기사가 남음). 논문 Table 4에서 군집 인식을 빼면 성능이 떨어진 것(Taobao AUC 0.8906 → 0.8764)은 코드 방식으로 보면 설명이 돼요.</p></div>
+  </section>
+
+  <!-- 9 -->
+  <section class="stepsec" id="s9">
+    <h2><span class="step">9단계</span>우리 뉴스 모델로 옮기면</h2>
+    <p>지금까지 본 단계들이 우리 파이프라인의 어디와 닿는지 정리했어요. GNN을 꼭 넣지 않아도 쓸 수 있는 부분이 많아요.</p>
+    <div class="tbl"><table>
+      <tr><th>SURGE 단계</th><th>우리 파이프라인에서 비슷한 것</th><th>다른 점</th></tr>
+      <tr><td>1. 기사를 점으로</td><td>E5 임베딩 (768차원)</td><td>SURGE는 아이템 ID 임베딩을 학습, 우리는 기사 내용으로 만든 임베딩</td></tr>
+      <tr><td>2·3. 비슷한 것끼리 선 긋기</td><td>전처리의 사건 만들기 (개체 Jaccard ≥ 0.3, 72시간)</td><td>우리는 전체 Train 기사 10,419개로 한 번, SURGE는 사용자 기록마다 매번. 우리는 고정 기준, SURGE는 상위 비율</td></tr>
+      <tr><td>4. 군집 인식 점수</td><td>(없음)</td><td>사건 안에서 "대표 기사"를 고르는 데 쓸 수 있어요. 예: 사건 평균 z(E)를 단순 평균 대신 중심도 가중 평균으로</td></tr>
+      <tr><td>5. 덩어리로 묶기</td><td>RQ-VAE의 c1(카테고리), c2(사건) 코드</td><td>우리 덩어리는 모든 사용자가 공유하는 고정값, SURGE 덩어리는 사용자·후보마다 달라짐</td></tr>
+      <tr><td>6·7. 순서대로 읽고 점수</td><td>Transformer(T5 방식)</td><td>SURGE는 후보의 클릭 확률, 우리는 다음 클릭의 SID를 생성</td></tr>
+    </table></div>
+    <div class="cards">
+      <div class="card"><h4>수준 1 · GNN 없이 입력만 바꾸기</h4>
+        <div class="chips" style="margin:6px 0"><span class="num nS">1</span><span class="num nP">2</span><span class="num nS">3</span><span class="num nN">4</span><span class="num nP">5</span><span class="num nP">6</span></div>
+        <div class="muted small">↓ 같은 (c1, c2)끼리 묶기</div>
+        <div class="chips" style="margin:6px 0"><span class="chip"><span class="num nS">S</span>×2</span><span class="chip"><span class="num nN">N</span>×1</span><span class="chip"><span class="num nP">P</span>×3</span></div>
+        <p>SID가 이미 덩어리 번호라서 5단계를 SID로 대신해요. 시퀀스 만들기 단계만 바꾸면 돼요. 공식 코드처럼 "고르는 풀링"(관련 큰 기사만 남기기)도 같은 자리에서 시험할 수 있어요.</p></div>
+      <div class="card"><h4>수준 2 · 사건 그래프의 선 긋기 규칙 바꾸기</h4><p>3단계의 "상위 비율" 방식을 전처리 사건 만들기에 적용해요. 지금 고정 기준 때문에 Train 기사의 약 91%가 기사 1개짜리 사건이에요. 모델은 그대로 두고 전처리만 바꿔요.</p></div>
+      <div class="card"><h4>수준 3 · SURGE 전체를 Transformer 안에</h4><p>1–6단계를 모델 안에 넣는 방식이에요. Transformer 구조를 크게 바꿔야 하고 목적(클릭 확률 vs SID 생성)도 달라서, 1·2의 결과를 본 뒤에 판단하는 게 좋아요.</p></div>
+    </div>
+  </section>
+
+  <div class="note warn">
+    <p><b>이 예시에서 단순화한 것.</b> 임베딩을 2차원으로 줄였어요. α는 "이웃들과의 유사도 합", β는 "후보와의 코사인 × 3", W<sub>p</sub>와 게이트 0.9, 최종 점수 함수는 설명용 값이에요. 학습 행렬 W·W<sub>c</sub>·W<sub>q</sub>, 비선형 함수 σ, 멀티헤드는 뺐어요. 숫자 흐름과 각 단계의 역할은 실제와 같고, 정확한 식은 본편 해설(SURGE 논문 해설)에 있어요.</p>
+  </div>
+
+  <footer>근거: Chang et al., "Sequential Recommendation with Graph Neural Networks", SIGIR '21. 공식 코드: tsinghua-fib-lab/SIGIR21-SURGE의 SURGE 모델 구현. 예시 기사, 숫자, 점수 함수는 설명용으로 만든 것이에요.</footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent) { var e = document.createElementNS(NS, tag); for (var k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+  function txt(parent, x, y, s, attrs) { var a = attrs || {}; a.x = x; a.y = y; var t = el("text", a, parent); t.textContent = s; return t; }
+  function clear(svg) { while (svg.firstChild) svg.removeChild(svg.firstChild); }
+  function dot(a, b) { return a[0] * b[0] + a[1] * b[1]; }
+  function norm(a) { return Math.sqrt(dot(a, a)); }
+  function cos(a, b) { return dot(a, b) / (norm(a) * norm(b)); }
+  function deg(a) { return Math.atan2(a[1], a[0]) * 180 / Math.PI; }
+  function softmax(xs) { var m = Math.max.apply(null, xs), e = xs.map(function (x) { return Math.exp(x - m); }), s = e.reduce(function (a, b) { return a + b; }, 0); return e.map(function (x) { return x / s; }); }
+  function sig(x) { return 1 / (1 + Math.exp(-x)); }
+
+  var items = [
+    { n: 1, name: "이적 시장 개막", g: "S", v: [1.0, 0.10] },
+    { n: 2, name: "총선 후보 토론", g: "P", v: [0.15, 1.0] },
+    { n: 3, name: "이적 확정", g: "S", v: [0.95, 0.25] },
+    { n: 4, name: "주말 날씨", g: "N", v: [0.6, 0.55] },
+    { n: 5, name: "총선 여론조사", g: "P", v: [0.05, 1.0] },
+    { n: 6, name: "총선 개표 결과", g: "P", v: [0.25, 0.95] }
+  ];
+  var cands = { P: { name: "연정 협상 시작", v: [0.1, 1.0] }, S: { name: "이적 루머", v: [1.0, 0.15] } };
+  var varName = { paper: "논문 식", code: "공식 코드", both: "둘 다 반영" };
+  var Wp = [[3, -1], [1.2, 1.2], [-1, 3]];
+  var n = items.length;
+  var state = { c: "P", v: "paper", node: 6, pairs: 4, k: 2, am: "sum", hood: 3 };
+
+  var M = items.map(function (a) { return items.map(function (b) { return cos(a.v, b.v); }); });
+  var pairList = [];
+  for (var i0 = 0; i0 < n; i0++) for (var j0 = i0 + 1; j0 < n; j0++) pairList.push({ i: i0, j: j0, v: M[i0][j0] });
+  pairList.sort(function (a, b) { return b.v - a.v; });
+
+  function buildA(k) {
+    var A = []; for (var i = 0; i < n; i++) { A.push(new Array(n).fill(0)); A[i][i] = 1; }
+    pairList.slice(0, k).forEach(function (p) { A[p.i][p.j] = 1; A[p.j][p.i] = 1; });
+    return A;
+  }
+  function neighbors(A, i, self) { var r = []; for (var j = 0; j < n; j++) if (A[i][j] && (self || j !== i)) r.push(j); return r; }
+  // k-hop region including self: returns array of hop distance (or -1)
+  function region(A, i, k) {
+    var d = new Array(n).fill(-1), front = [i]; d[i] = 0;
+    for (var h = 1; h <= k; h++) {
+      var nx = [];
+      front.forEach(function (u) { neighbors(A, u, false).forEach(function (w) { if (d[w] < 0) { d[w] = h; nx.push(w); } }); });
+      front = nx;
+    }
+    return d;
+  }
+  function regionMean(A, i, k) {
+    var d = region(A, i, k), s = [0, 0], c = 0;
+    for (var j = 0; j < n; j++) if (d[j] >= 0) { s[0] += items[j].v[0]; s[1] += items[j].v[1]; c++; }
+    return { d: d, mean: [s[0] / c, s[1] / c] };
+  }
+
+  function compute() {
+    var cv = cands[state.c].v, A = buildA(state.pairs);
+    var alpha = items.map(function (it, j) {
+      if (state.am === "avg") return 3 * cos(it.v, regionMean(A, j, state.k).mean);
+      return neighbors(A, j, false).reduce(function (s, k) { return s + M[j][k]; }, 0);
+    });
+    var beta = items.map(function (it) { return 3 * cos(it.v, cv); });
+    var E = [], Hn = [], logits = [];
+    for (var i = 0; i < n; i++) {
+      var nb = neighbors(A, i, true);
+      var lg = nb.map(function (j) {
+        if (state.v === "paper") return alpha[i] + beta[j];
+        if (state.v === "code") return alpha[j] + beta[i];
+        return alpha[j] + beta[j];
+      });
+      var w = softmax(lg), row = new Array(n).fill(0), agg = [0, 0];
+      nb.forEach(function (j, k) { row[j] = w[k]; agg[0] += w[k] * items[j].v[0]; agg[1] += w[k] * items[j].v[1]; });
+      E.push(row); logits.push({ nb: nb, lg: lg });
+      Hn.push([(agg[0] + items[i].v[0]) / 2, (agg[1] + items[i].v[1]) / 2]);
+    }
+    var S = [];
+    for (var a = 0; a < n; a++) {
+      var sm = [0, 0]; neighbors(A, a, true).forEach(function (j) { sm[0] += Hn[j][0]; sm[1] += Hn[j][1]; });
+      S.push(softmax(Wp.map(function (w) { return w[0] * sm[0] + w[1] * sm[1]; })));
+    }
+    var gamma = softmax(beta);
+    var K = [0, 1, 2];
+    var Hs = K.map(function (k) { var s = [0, 0]; for (var i = 0; i < n; i++) { s[0] += S[i][k] * Hn[i][0]; s[1] += S[i][k] * Hn[i][1]; } return s; });
+    var gs = K.map(function (k) { var s = 0; for (var i = 0; i < n; i++) s += S[i][k] * gamma[i]; return s; });
+    var mp = K.map(function (k) { var x = 0, y = 0; for (var i = 0; i < n; i++) { x += (i + 1) * S[i][k]; y += S[i][k]; } return x / y; });
+    var dom = K.map(function (k) { var gsum = { S: 0, P: 0, N: 0 }; for (var i = 0; i < n; i++) gsum[items[i].g] += S[i][k]; var best = "S"; ["S", "P", "N"].forEach(function (g) { if (gsum[g] > gsum[best]) best = g; }); return best; });
+    var As = K.map(function (p) { return K.map(function (q) { var s = 0; for (var i = 0; i < n; i++) for (var j = 0; j < n; j++) s += S[i][p] * A[i][j] * S[j][q]; return s; }); });
+    var LM = 0; for (var x = 0; x < n; x++) for (var y = 0; y < n; y++) { var pr = 0; for (var k2 = 0; k2 < 3; k2++) pr += S[x][k2] * S[y][k2]; LM += (A[x][y] - pr) * (A[x][y] - pr); }
+    LM = Math.sqrt(LM);
+    var LA = S.reduce(function (s, r) { return s - r.reduce(function (t, v) { return t + (v > 0 ? v * Math.log(v) : 0); }, 0); }, 0) / n;
+    var st = [[0, 0]], ut = [];
+    for (var k = 0; k < 3; k++) { var u = gs[k] * 0.9, p = st[k]; ut.push(u); st.push([(1 - u) * p[0] + u * Hs[k][0], (1 - u) * p[1] + u * Hs[k][1]]); }
+    var hg = [0, 0]; for (var r = 0; r < n; r++) { hg[0] += gamma[r] * Hn[r][0]; hg[1] += gamma[r] * Hn[r][1]; }
+    var cs = cos(st[3], cv), cg = cos(hg, cv), score = sig(3 * cs + 3 * cg - 3.5);
+    return { A: A, alpha: alpha, beta: beta, E: E, logits: logits, Hn: Hn, S: S, gamma: gamma, Hs: Hs, gs: gs, mp: mp, dom: dom, As: As, LM: LM, LA: LA, st: st, ut: ut, hg: hg, cs: cs, cg: cg, score: score, cv: cv };
+  }
+
+  // ---------- drawing helpers ----------
+  function plane(svg, o) {
+    o = o || {};
+    var ox = o.ox || 46, oy = o.oy || 262, u = o.u || 220, mx = o.max || 1.15;
+    var P = function (v) { return [ox + v[0] * u, oy - v[1] * u]; };
+    var ticks = mx > 2 ? [1, 2] : [0.5, 1];
+    ticks.forEach(function (t) {
+      if (t > mx) return;
+      el("line", { x1: ox + t * u, y1: oy, x2: ox + t * u, y2: oy - mx * u, "class": "gridl" }, svg);
+      el("line", { x1: ox, y1: oy - t * u, x2: ox + mx * u, y2: oy - t * u, "class": "gridl" }, svg);
+      txt(svg, ox + t * u, oy + 15, String(t), { "text-anchor": "middle", "font-size": 10.5, "class": "tm" });
+      txt(svg, ox - 6, oy - t * u + 4, String(t), { "text-anchor": "end", "font-size": 10.5, "class": "tm" });
+    });
+    el("line", { x1: ox, y1: oy, x2: ox + mx * u + 6, y2: oy, "class": "axis", "marker-end": "url(#mM)" }, svg);
+    el("line", { x1: ox, y1: oy, x2: ox, y2: oy - mx * u - 6, "class": "axis", "marker-end": "url(#mM)" }, svg);
+    txt(svg, ox + mx * u, oy + 30, "스포츠 성향 →", { "text-anchor": "end", "font-size": 11.5, "class": "tm" });
+    txt(svg, ox + 8, oy - mx * u + 12, "↑ 정치 성향", { "font-size": 11.5, "class": "tm" });
+    return P;
+  }
+  function arrow(svg, P, v, g, opts) {
+    opts = opts || {};
+    var a = P([0, 0]), b = P(v);
+    var e = el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], "class": "s" + g, "stroke-width": opts.w || 2.4, "marker-end": "url(#m" + g + ")" }, svg);
+    if (opts.dash) e.setAttribute("stroke-dasharray", "6 4");
+    if (opts.op) e.setAttribute("opacity", opts.op);
+    return b;
+  }
+  function badge(svg, x, y, label, g, r) {
+    el("circle", { cx: x, cy: y, r: r || 10, "class": "f" + g + " ring" }, svg);
+    txt(svg, x, y + 4, label, { "text-anchor": "middle", "font-size": 11, "font-weight": 700, "class": "tw" });
+  }
+  function tipBadge(svg, P, v, label, g, ext) {
+    var L = norm(v), f = (L + (ext || 0.09)) / L, p = P([v[0] * f, v[1] * f]);
+    badge(svg, p[0], p[1], label, g);
+  }
+  function heatCell(v, max) { var p = Math.round(Math.max(0, Math.min(1, v / max)) * 100); return "<td style='background:color-mix(in srgb, var(--accent) " + p + "%, var(--panel));" + (p > 60 ? "color:#fff;font-weight:700" : "") + "'>"; }
+
+  var layout = { 1: [150, 80], 3: [160, 190], 4: [290, 200], 2: [410, 64], 5: [470, 160], 6: [380, 180] };
+  var labelPos = { 1: ["end", -24, 5], 3: ["end", -24, 5], 2: ["middle", 0, -26], 4: ["middle", 0, 36], 5: ["middle", 0, 36], 6: ["middle", 0, 36] };
+  function drawGraph(svg, A, sizeFn, labelFn) {
+    for (var i = 0; i < n; i++) for (var j = i + 1; j < n; j++) if (A[i][j]) {
+      var a = layout[i + 1], b = layout[j + 1];
+      el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], "class": "edge" }, svg);
+    }
+    items.forEach(function (it, i) {
+      var p = layout[it.n], r = sizeFn ? sizeFn(i) : 16, lp = labelPos[it.n];
+      badge(svg, p[0], p[1], String(it.n), it.g, r);
+      txt(svg, p[0] + lp[1] * (lp[0] === "middle" ? 1 : 1), p[1] + (lp[0] === "middle" ? (lp[2] > 0 ? r + 16 : -r - 8) : lp[2]), labelFn(i), { "text-anchor": lp[0], "font-size": 11.5, "class": "tm" });
+    });
+  }
+
+  // ---------- static figures ----------
+  function renderTimeline() {
+    var h = "";
+    items.forEach(function (it) { h += "<span class='chip'><span class='num n" + it.g + "'>" + it.n + "</span>" + it.name + "</span>"; });
+    h += "<span class='muted'>→</span><span class='chip cand'><span class='num nC'>★</span>후보: " + cands[state.c].name + "</span>";
+    document.getElementById("timeline").innerHTML = h;
+  }
+  function renderFig1() {
+    var svg = document.getElementById("fig1"); clear(svg);
+    var P = plane(svg, { ox: 46, oy: 290, u: 200, max: 1.2 });
+    items.forEach(function (it) { arrow(svg, P, it.v, it.g); });
+    var cv = cands[state.c].v, cl = 1.1 / norm(cv);
+    arrow(svg, P, [cv[0] * cl, cv[1] * cl], "C", { dash: true });
+    items.forEach(function (it) { tipBadge(svg, P, it.v, String(it.n), it.g, it.g === "P" ? 0.0 : 0.08); });
+    var ct = P([cv[0] * cl * 1.06, cv[1] * cl * 1.06]); badge(svg, ct[0], ct[1], "★", "C");
+    var lx = 340, ly = 40;
+    txt(svg, lx, ly, "클릭한 기사", { "font-size": 12.5, "font-weight": 700 });
+    items.forEach(function (it, k) {
+      badge(svg, lx + 10, ly + 22 + k * 26, String(it.n), it.g, 9);
+      txt(svg, lx + 26, ly + 26 + k * 26, it.name + "  [" + it.v[0].toFixed(2) + ", " + it.v[1].toFixed(2) + "]", { "font-size": 12 });
+    });
+    badge(svg, lx + 10, ly + 22 + 6 * 26 + 8, "★", "C", 9);
+    txt(svg, lx + 26, ly + 26 + 6 * 26 + 8, "후보: " + cands[state.c].name, { "font-size": 12, "font-weight": 700 });
+  }
+  function anglePanel(svgId, i, j) {
+    var svg = document.getElementById(svgId); clear(svg);
+    var P = plane(svg, { ox: 40, oy: 250, u: 210, max: 1.15 });
+    var a = items[i], b = items[j];
+    arrow(svg, P, a.v, a.g); arrow(svg, P, b.v, b.g);
+    tipBadge(svg, P, a.v, String(a.n), a.g, 0.07); tipBadge(svg, P, b.v, String(b.n), b.g, 0.07);
+    var r = 60, d1 = deg(a.v) * Math.PI / 180, d2 = deg(b.v) * Math.PI / 180, o = P([0, 0]);
+    var x1 = o[0] + r * Math.cos(d1), y1 = o[1] - r * Math.sin(d1), x2 = o[0] + r * Math.cos(d2), y2 = o[1] - r * Math.sin(d2);
+    el("path", { d: "M" + x1 + " " + y1 + " A" + r + " " + r + " 0 0 " + (d1 > d2 ? 1 : 0) + " " + x2 + " " + y2, "class": "ln-a" }, svg);
+    var ang = Math.abs(deg(a.v) - deg(b.v)), mid = (d1 + d2) / 2, rr = ang < 15 ? r + 40 : r + 26;
+    txt(svg, o[0] + rr * Math.cos(mid) + (ang < 15 ? 14 : 0), o[1] - rr * Math.sin(mid) + 4, ang.toFixed(1) + "°", { "text-anchor": "middle", "font-size": 12.5, "font-weight": 700, "class": "ta" });
+    txt(svg, 320, 24, "코사인 = " + cos(a.v, b.v).toFixed(3), { "text-anchor": "end", "font-size": 13, "font-weight": 700 });
+  }
+  function renderHeat() {
+    var h = "<tr><th></th>" + items.map(function (it) { return "<th><span class='num n" + it.g + "'>" + it.n + "</span></th>"; }).join("") + "</tr>";
+    items.forEach(function (it, i) {
+      h += "<tr><th style='text-align:left;white-space:nowrap'><span class='num n" + it.g + "'>" + it.n + "</span> " + it.name + "</th>";
+      M[i].forEach(function (v) { h += heatCell(v, 1) + v.toFixed(2) + "</td>"; });
+      h += "</tr>";
+    });
+    document.getElementById("heatM").innerHTML = h;
+  }
+  function stretchPanel(svgId, w) {
+    var svg = document.getElementById(svgId); clear(svg);
+    var P = plane(svg, { ox: 40, oy: 250, u: 210, max: 1.15 });
+    items.forEach(function (it) { var v = [it.v[0] * w[0], it.v[1] * w[1]]; arrow(svg, P, v, it.g, { op: it.n === 3 || it.n === 4 || it.n === 6 ? 1 : 0.35 }); });
+    [3, 4, 6].forEach(function (k) { var it = items[k - 1], v = [it.v[0] * w[0], it.v[1] * w[1]]; tipBadge(svg, P, v, String(it.n), it.g, 0.08); });
+  }
+  function renderFig2() {
+    anglePanel("fig2a", 1, 4); anglePanel("fig2b", 1, 0); renderHeat();
+    stretchPanel("fig2c", [1, 1]); stretchPanel("fig2d", [1, 0.4]);
+    function wc(a, b, w) { return cos([a[0] * w[0], a[1] * w[1]], [b[0] * w[0], b[1] * w[1]]); }
+    var v3 = items[2].v, v4 = items[3].v, v6 = items[5].v;
+    document.getElementById("fig2readout").innerHTML = "날씨(4)–이적 확정(3): <b>" + wc(v4, v3, [1, 1]).toFixed(3) + "</b> → <b>" + wc(v4, v3, [1, 0.4]).toFixed(3) + "</b> &nbsp;·&nbsp; 날씨(4)–개표 결과(6): <b>" + wc(v4, v6, [1, 1]).toFixed(3) + "</b> → <b>" + wc(v4, v6, [1, 0.4]).toFixed(3) + "</b>";
+  }
+
+  // ---------- step 3 ----------
+  function renderFig3(R) {
+    var svg = document.getElementById("fig3a"); clear(svg);
+    var L = 190, W = 330, rh = 25, top = 22, kk = state.pairs;
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (t) {
+      el("line", { x1: L + t * W, y1: top - 6, x2: L + t * W, y2: top + pairList.length * rh, "class": "gridl" }, svg);
+      txt(svg, L + t * W, top + pairList.length * rh + 16, String(t), { "text-anchor": "middle", "font-size": 11, "class": "tm" });
+    });
+    pairList.forEach(function (p, k) {
+      var y = top + k * rh, a = items[p.i], b = items[p.j], kept = k < kk;
+      badge(svg, 16, y + rh / 2, String(a.n), a.g, 9); badge(svg, 38, y + rh / 2, String(b.n), b.g, 9);
+      txt(svg, 54, y + rh / 2 + 4, a.name.slice(0, 5) + "–" + b.name.slice(0, 5), { "font-size": 11.5, "class": kept ? null : "tm" });
+      var w = Math.max(2, p.v * W);
+      el("rect", { x: L, y: y + 5, width: w, height: rh - 10, rx: 3, "class": kept ? "fA" : "fM", opacity: kept ? 1 : 0.35 }, svg);
+      txt(svg, L + w + 6, y + rh / 2 + 4, p.v.toFixed(3), { "font-size": 11.5, "font-weight": kept ? 700 : 400, "class": kept ? null : "tm" });
+      if (k === kk - 1) {
+        el("line", { x1: 8, y1: y + rh + 0.5, x2: 690, y2: y + rh + 0.5, "class": "ln-bad" }, svg);
+        txt(svg, 690, y + rh - 4, "↑ 위 " + kk + "쌍만 선 긋기", { "text-anchor": "end", "font-size": 12, "font-weight": 700, style: "fill:var(--bad)" });
+      }
+    });
+    var cells = n + 2 * kk;
+    document.getElementById("pairsOut").innerHTML = "<b>" + kk + "</b>쌍 · 상위 <b>" + cells + "</b>/36칸 · ε ≈ <b>" + (cells / 36).toFixed(2) + "</b>";
+    var g = document.getElementById("fig3b"); clear(g);
+    drawGraph(g, R.A, null, function (i) { return items[i].name + " · 이웃 " + (neighbors(R.A, i, false).length); });
+  }
+
+  // ---------- step 4 ----------
+  function renderAlpha(R) {
+    var g = document.getElementById("fig4al"); clear(g);
+    var mxA = Math.max.apply(null, R.alpha.concat([1]));
+    drawGraph(g, R.A, function (i) { return 9 + 13 * R.alpha[i] / mxA; }, function (i) { return "α " + R.alpha[i].toFixed(2); });
+    var b = document.getElementById("fig4ab"); clear(b);
+    var L = 140, W = 140, rh = 34, top = 16, mx = Math.max(3, Math.ceil(mxA));
+    for (var t = 0; t <= mx; t++) {
+      el("line", { x1: L + t / mx * W, y1: top - 4, x2: L + t / mx * W, y2: top + n * rh, "class": "gridl" }, b);
+      txt(b, L + t / mx * W, top + n * rh + 15, String(t), { "text-anchor": "middle", "font-size": 11, "class": "tm" });
+    }
+    items.forEach(function (it, i) {
+      var y = top + i * rh, v = R.alpha[i], w = Math.max(2, v / mx * W);
+      badge(b, 14, y + rh / 2, String(it.n), it.g, 9);
+      txt(b, 28, y + rh / 2 + 4, it.name, { "font-size": 11.5 });
+      el("rect", { x: L, y: y + 8, width: w, height: rh - 16, rx: 3, "class": "f" + it.g }, b);
+      txt(b, L + w + 5, y + rh / 2 + 4, v.toFixed(2), { "font-size": 11, "class": "tm" });
+    });
+  }
+  function renderAlphaCap(R) {
+    var m = state.am === "sum"
+      ? "이 방식에서 α는 <b>이웃들과의 유사도 합</b>이에요. 이웃이 많고 그 이웃들과 비슷할수록 커지고, 외톨이는 0이에요. 3단계에서 선을 늘려 날씨에 이웃이 생겨도, 이웃들과 덜 비슷해서 정치 기사보다 낮아요."
+      : "이 방식에서 α는 <b>3 × cos(나, 동네 평균)</b>이에요(반경 k = " + state.k + "). 외톨이도 동네 평균이 자기 자신이라 최고점(3)을 받고, 선을 6쌍으로 늘리면 다리인 날씨도 높게 나와요. 아래 경고 상자의 한계를 숫자로 보여 주는 설정이에요.";
+    document.getElementById("fig7bcap").innerHTML = "<b>그림 7b.</b> " + m + " 실제 SURGE는 이 자리에 학습된 신경망이 들어가요. 4단계 ②의 \"공식 코드\"·\"둘 다 반영\" 방식은 이 α를 그대로 써서 섞는 비율을 정해요.";
+  }
+  function renderHood(R) {
+    var seg = document.getElementById("hoodSeg");
+    if (!seg.childElementCount) {
+      items.forEach(function (it) {
+        var bt = document.createElement("button"); bt.type = "button"; bt.setAttribute("data-n", it.n);
+        bt.innerHTML = "<span class='num n" + it.g + "'>" + it.n + "</span>"; bt.setAttribute("aria-label", it.name);
+        bt.addEventListener("click", function () { state.hood = it.n; renderAll(); });
+        seg.appendChild(bt);
+      });
+    }
+    Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute("aria-pressed", String(+b.getAttribute("data-n") === state.hood)); });
+    Array.prototype.forEach.call(document.querySelectorAll("#kSeg button"), function (b) { b.setAttribute("aria-pressed", String(+b.getAttribute("data-k") === state.k)); });
+    var A = R.A, c = state.hood - 1, rm = regionMean(A, c, state.k), d = rm.d;
+    var g = document.getElementById("figHoodG"); clear(g);
+    var hopName = ["중심", "1번 건너", "2번 건너"];
+    for (var i = 0; i < n; i++) for (var j = i + 1; j < n; j++) if (A[i][j]) {
+      var a = layout[i + 1], b = layout[j + 1], inside = d[i] >= 0 && d[j] >= 0;
+      el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], "class": "edge", opacity: inside ? 1 : 0.2 }, g);
+    }
+    items.forEach(function (it, i) {
+      var p = layout[it.n], lp = labelPos[it.n], inside = d[i] >= 0;
+      if (inside) {
+        var hc = el("circle", { cx: p[0], cy: p[1], r: d[i] === 0 ? 25 : 23, "class": "halo" }, g);
+        if (d[i] === 0) { hc.setAttribute("stroke-dasharray", "none"); hc.setAttribute("stroke-width", 3); }
+        if (d[i] === 2) hc.setAttribute("stroke-dasharray", "2 4");
+      }
+      var gr = el("g", { opacity: inside ? 1 : 0.25 }, g);
+      badge(gr, p[0], p[1], String(it.n), it.g, 16);
+      var ly = p[1] + (lp[0] === "middle" ? (lp[2] > 0 ? 44 : -34) : lp[2]);
+      txt(gr, p[0] + (lp[0] === "middle" ? 0 : lp[1] - 8), ly, inside ? hopName[d[i]] : "동네 밖", { "text-anchor": lp[0], "font-size": 11.5, "font-weight": inside ? 700 : 400, "class": inside ? "ta" : "tm" });
+    });
+    var s = document.getElementById("figHoodP"); clear(s);
+    var P = plane(s, { ox: 40, oy: 250, u: 210, max: 1.15 });
+    items.forEach(function (it, i) { if (d[i] > 0) arrow(s, P, it.v, it.g, { op: 0.35 }); });
+    var me = items[c];
+    arrow(s, P, me.v, me.g, { w: 3 });
+    tipBadge(s, P, me.v, String(me.n), me.g, 0.08);
+    var mean = rm.mean, o = P([0, 0]), q = P(mean);
+    el("line", { x1: o[0], y1: o[1], x2: q[0], y2: q[1], "class": "ln-a", "stroke-width": 3, "stroke-dasharray": "6 4", "marker-end": "url(#mA)" }, s);
+    txt(s, q[0] + 8, q[1] + 14, "동네 평균", { "font-size": 11.5, "font-weight": 700, "class": "ta" });
+    var cv = cos(me.v, mean);
+    txt(s, 320, 24, "cos(나, 동네 평균) = " + cv.toFixed(3), { "text-anchor": "end", "font-size": 12.5, "font-weight": 700 });
+    var groups = {}; for (var j2 = 0; j2 < n; j2++) if (d[j2] >= 0) groups[items[j2].g] = 1;
+    var gn = { S: "스포츠", P: "정치", N: "날씨" }, gl = Object.keys(groups).map(function (k) { return gn[k]; });
+    var h = "<tr><th>중심 기사</th><th>반경 " + state.k + " 동네</th><th>섞인 관심</th><th class='n'>cos(나, 동네 평균)</th></tr>";
+    items.forEach(function (it, i) {
+      var r2 = regionMean(A, i, state.k), mem = [], gs = {};
+      for (var j = 0; j < n; j++) if (r2.d[j] >= 0) { mem.push(items[j].n); gs[gn[items[j].g]] = 1; }
+      h += "<tr" + (i === c ? " style='font-weight:700'" : "") + "><td><span class='num n" + it.g + "'>" + it.n + "</span> " + it.name + "</td><td>" + mem.join(", ") + (mem.length === 1 ? " (나뿐)" : "") + "</td><td>" + Object.keys(gs).join(" + ") + "</td><td class='n'>" + cos(it.v, r2.mean).toFixed(3) + "</td></tr>";
+    });
+    document.getElementById("hoodTbl").innerHTML = h;
+    var mix = gl.length > 1 ? " 동네에 <b>" + gl.join("·") + "</b>이(가) 섞여 있어서 평균이 그 사이로 끌려가요." : (Object.keys(groups).length === 1 && d.filter(function (x) { return x >= 0; }).length === 1 ? " 이웃이 없어서 동네가 <b>나 하나뿐</b>이고, 평균이 곧 나예요." : " 동네가 한 관심으로만 이뤄져 있어요.");
+    document.getElementById("figHoodCap").innerHTML = "<b>그림 7a.</b> " + me.n + "번 " + me.name + "의 반경 " + state.k + " 동네예요. 진한 실선 원이 중심, 파란 원이 1번 건너, 점선 원이 2번 건너 닿는 기사예요." + mix + " 3단계에서 선이 4쌍이면 관심끼리 선이 없어서 k를 키워도 자기 관심 밖으로 못 나가요. 6쌍으로 늘리면 날씨(4)가 다리가 되어, 3번의 2-hop 동네에 정치 기사(6번)가 들어와요.";
+  }
+  function renderBeta(R) {
+    var svg = document.getElementById("fig4b"); clear(svg);
+    var L = 160, W = 300, rh = 32, top = 16, mx = 3;
+    [0, 1, 2, 3].forEach(function (t) {
+      el("line", { x1: L + t / mx * W, y1: top - 4, x2: L + t / mx * W, y2: top + n * rh, "class": "gridl" }, svg);
+      txt(svg, L + t / mx * W, top + n * rh + 15, String(t), { "text-anchor": "middle", "font-size": 11, "class": "tm" });
+    });
+    items.forEach(function (it, i) {
+      var y = top + i * rh, v = R.beta[i], w = Math.max(2, v / mx * W);
+      badge(svg, 16, y + rh / 2, String(it.n), it.g, 9);
+      txt(svg, 32, y + rh / 2 + 4, it.name, { "font-size": 12 });
+      el("rect", { x: L, y: y + 7, width: w, height: rh - 14, rx: 3, "class": "f" + it.g }, svg);
+      txt(svg, L + w + 6, y + rh / 2 + 4, "β = " + v.toFixed(2), { "font-size": 11.5, "class": "tm" });
+    });
+    txt(svg, 590, 236, "후보: " + cands[state.c].name, { "text-anchor": "end", "font-size": 12, "font-weight": 700, style: "fill:var(--cand)" });
+  }
+  function renderMix(R) {
+    var seg = document.getElementById("nodeSeg");
+    if (!seg.childElementCount) {
+      items.forEach(function (it) {
+        var bt = document.createElement("button"); bt.type = "button"; bt.setAttribute("data-n", it.n);
+        bt.innerHTML = "<span class='num n" + it.g + "'>" + it.n + "</span>"; bt.setAttribute("aria-label", it.name);
+        bt.addEventListener("click", function () { state.node = it.n; renderAll(); });
+        seg.appendChild(bt);
+      });
+    }
+    Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute("aria-pressed", String(+b.getAttribute("data-n") === state.node)); });
+    var i0 = state.node - 1, me = items[i0], lg = R.logits[i0], row = R.E[i0];
+    // logit table
+    var colI = state.v === "paper" ? "α (듣는 기사 " + me.n + ")" : (state.v === "code" ? "β (듣는 기사 " + me.n + ")" : null);
+    var h = "<tr><th>이웃 j</th>";
+    if (state.v === "paper") h += "<th class='n'>α<sub>i</sub> (" + me.n + "번 자신)</th><th class='n'>β<sub>j</sub></th>";
+    else if (state.v === "code") h += "<th class='n'>α<sub>j</sub></th><th class='n'>β<sub>i</sub> (" + me.n + "번 자신)</th>";
+    else h += "<th class='n'>α<sub>j</sub></th><th class='n'>β<sub>j</sub></th>";
+    h += "<th class='n'>합</th><th class='n'>섞는 비율</th></tr>";
+    lg.nb.forEach(function (j, k) {
+      var a, b2, aDim = false, bDim = false;
+      if (state.v === "paper") { a = R.alpha[i0]; b2 = R.beta[j]; aDim = true; }
+      else if (state.v === "code") { a = R.alpha[j]; b2 = R.beta[i0]; bDim = true; }
+      else { a = R.alpha[j]; b2 = R.beta[j]; }
+      h += "<tr><td><span class='num n" + items[j].g + "'>" + items[j].n + "</span> " + items[j].name + (j === i0 ? " (자기)" : "") + "</td>";
+      h += "<td class='n" + (aDim ? " dim" : "") + "'>" + a.toFixed(2) + "</td><td class='n" + (bDim ? " dim" : "") + "'>" + b2.toFixed(2) + "</td>";
+      h += "<td class='n'>" + lg.lg[k].toFixed(2) + "</td><td class='n'><b>" + (row[j] * 100).toFixed(1) + "%</b></td></tr>";
+    });
+    document.getElementById("logitTbl").innerHTML = h;
+
+    var s2 = document.getElementById("fig4c"); clear(s2);
+    var x = 20, BW = 290, y = 40, nbs = lg.nb;
+    txt(s2, 20, 28, "이웃 값 섞는 비율 (합 = 1)", { "font-size": 12, "class": "tm" });
+    nbs.forEach(function (j) {
+      var w = row[j] * BW;
+      el("rect", { x: x, y: y, width: Math.max(1, w - 2), height: 34, rx: 4, "class": "f" + items[j].g, opacity: j === i0 ? 0.55 : 1 }, s2);
+      if (w > 34) txt(s2, x + w / 2, y + 22, (row[j] * 100).toFixed(0) + "%", { "text-anchor": "middle", "font-size": 12, "font-weight": 700, "class": "tw" });
+      x += w;
+    });
+    nbs.forEach(function (j, k) {
+      var yy = 110 + k * 30;
+      badge(s2, 30, yy, String(items[j].n), items[j].g, 10);
+      txt(s2, 48, yy + 4, items[j].name + (j === i0 ? " (자기 자신)" : "") + " · " + (row[j] * 100).toFixed(1) + "%", { "font-size": 12 });
+    });
+    if (nbs.length === 1) txt(s2, 20, 150, "이웃이 없어서 자기 말만 들어요.", { "font-size": 12.5, "font-weight": 700, style: "fill:var(--bad)" });
+
+    var s3 = document.getElementById("fig4d"); clear(s3);
+    var P = plane(s3, { ox: 40, oy: 250, u: 210, max: 1.15 });
+    items.forEach(function (it, i) { if (i !== i0) arrow(s3, P, it.v, it.g, { op: 0.18 }); });
+    arrow(s3, P, me.v, me.g, { op: 0.45, dash: true });
+    arrow(s3, P, R.Hn[i0], me.g, { w: 3 });
+    tipBadge(s3, P, R.Hn[i0], String(me.n), me.g, 0.08);
+    txt(s3, 320, 24, "방향 " + deg(me.v).toFixed(1) + "° → " + deg(R.Hn[i0]).toFixed(1) + "°", { "text-anchor": "end", "font-size": 12.5, "font-weight": 700 });
+    txt(s3, 320, 42, "점선 = 섞기 전, 실선 = 섞은 뒤", { "text-anchor": "end", "font-size": 11, "class": "tm" });
+
+    var cancel = state.v === "paper" ? "α 열이 회색인 이유는 모든 이웃에게 같은 값이라 약분되기 때문이에요. 비율은 β만으로 정해져요." :
+      (state.v === "code" ? "β 열이 회색인 이유는 모든 이웃에게 같은 값이라 약분되기 때문이에요. 비율은 α(이웃의 중심도)만으로 정해져요." : "두 열 모두 이웃마다 다른 값이라, 두 점수가 함께 비율을 정해요.");
+    document.getElementById("fig4cap").innerHTML = "<b>그림 9.</b> <b>" + varName[state.v] + "</b> 방식으로 " + me.n + "번 " + me.name + "이(가) 이웃의 말을 듣는 모습이에요. " + cancel + " 4번 날씨는 이웃이 없으면 자기 말만 들어서 그대로 남아요. 3단계에서 선을 6쌍 이상으로 늘리고 6번을 고르면, 날씨가 이웃으로 들어왔을 때 방식마다 날씨의 말을 얼마나 듣는지 비교할 수 있어요.";
+  }
+
+  // ---------- step 5 ----------
+  var clusterLabel = { S: "스포츠", P: "정치", N: "날씨" };
+  function renderFig5(R) {
+    var svg = document.getElementById("fig5a"); clear(svg);
+    var x0 = 150, cw = 52, rh = 34, y0 = 44;
+    [0, 1, 2].forEach(function (k) {
+      txt(svg, x0 + k * cw + cw / 2, 22, "덩어리" + (k + 1), { "text-anchor": "middle", "font-size": 11.5, "class": "tm" });
+      txt(svg, x0 + k * cw + cw / 2, 36, clusterLabel[R.dom[k]] + " 쪽", { "text-anchor": "middle", "font-size": 11.5, "font-weight": 700 });
+    });
+    items.forEach(function (it, i) {
+      var y = y0 + i * rh;
+      badge(svg, 16, y + rh / 2, String(it.n), it.g, 9);
+      txt(svg, 32, y + rh / 2 + 4, it.name, { "font-size": 12 });
+      R.S[i].forEach(function (v, k) {
+        var hi = v > 0.5;
+        el("rect", { x: x0 + k * cw + 2, y: y + 3, width: cw - 4, height: rh - 6, rx: 5, "class": hi ? "f" + R.dom[k] : "fG" }, svg);
+        if (!hi && v > 0.2) el("rect", { x: x0 + k * cw + 2, y: y + 3, width: cw - 4, height: rh - 6, rx: 5, "class": "f" + R.dom[k], opacity: v }, svg);
+        txt(svg, x0 + k * cw + cw / 2, y + rh / 2 + 4, v.toFixed(2), { "text-anchor": "middle", "font-size": 11.5, "font-weight": hi ? 700 : 400, "class": hi ? "tw" : "tm" });
+      });
+    });
+    el("path", { d: "M318 150 L352 150", "class": "ln", "stroke-width": 2, "marker-end": "url(#mM)" }, svg);
+    txt(svg, 335, 140, "Sᵀ", { "text-anchor": "middle", "font-size": 12, "class": "tm" });
+    [0, 1, 2].forEach(function (k) {
+      var cx = 410 + k * 100, cy = 120, mag = norm(R.Hs[k]), r = 12 + mag * 9;
+      el("circle", { cx: cx, cy: cy, r: r, "class": "f" + R.dom[k] + " ring" }, svg);
+      txt(svg, cx, cy + 4, clusterLabel[R.dom[k]], { "text-anchor": "middle", "font-size": 11.5, "font-weight": 700, "class": r > 18 ? "tw" : null });
+      txt(svg, cx, cy + Math.max(r, 16) + 16, "평균 순서 " + R.mp[k].toFixed(1), { "text-anchor": "middle", "font-size": 11, "class": "tm" });
+      txt(svg, cx, cy + Math.max(r, 16) + 30, "크기 " + mag.toFixed(2), { "text-anchor": "middle", "font-size": 11, "class": "tm" });
+      if (k < 2) el("path", { d: "M" + (cx + 34) + " 58 L" + (cx + 66) + " 58", "class": "ln", "marker-end": "url(#mM)" }, svg);
+    });
+    txt(svg, 510, 46, "시간 순서 →", { "text-anchor": "middle", "font-size": 11.5, "class": "tm" });
+    var gx = 360, gy = 240, GW = 280;
+    txt(svg, gx, gy - 8, "덩어리 중요도 γ* (후보: " + cands[state.c].name + ")", { "font-size": 12, "font-weight": 700 });
+    [0, 1, 2].forEach(function (k) {
+      var y = gy + k * 28, w = Math.max(2, R.gs[k] * GW);
+      txt(svg, gx, y + 16, clusterLabel[R.dom[k]], { "font-size": 12 });
+      el("rect", { x: gx + 56, y: y + 4, width: w, height: 16, rx: 3, "class": "f" + R.dom[k] }, svg);
+      txt(svg, gx + 62 + w, y + 16, R.gs[k].toFixed(2), { "font-size": 11.5, "class": "tm" });
+    });
+    var w4 = R.S[3];
+    document.getElementById("fig5cap").innerHTML = "<b>그림 10.</b> 왼쪽 표가 계산된 배정표 S예요(행 = 기사, 열 = 덩어리, 행 합 1). 스포츠·정치 기사는 한 덩어리에 0.9 이상 확실하게 들어가요. 반면 날씨(4)는 [" + w4.map(function (v) { return v.toFixed(2); }).join(", ") + "]로 <b>어디에도 확실히 속하지 못해요</b>. 원 크기는 덩어리 값의 크기로, 기사가 많이 모인 정치 덩어리가 가장 커요(평균이 아니라 합이라서). 덩어리 번호 순서와 평균 클릭 순서가 같은 방향이라 시간 순서 규칙(③)도 지켜져요.";
+    var h = "<tr><th></th>" + [0, 1, 2].map(function (k) { return "<th>" + clusterLabel[R.dom[k]] + "</th>"; }).join("") + "</tr>";
+    var mx = Math.max.apply(null, R.As.map(function (r) { return Math.max.apply(null, r); }));
+    R.As.forEach(function (r, a) { h += "<tr><th>" + clusterLabel[R.dom[a]] + "</th>" + r.map(function (v) { return heatCell(v, mx) + v.toFixed(2) + "</td>"; }).join("") + "</tr>"; });
+    document.getElementById("aStar").innerHTML = h;
+    var ordered = R.mp[0] < R.mp[1] && R.mp[1] < R.mp[2];
+    document.getElementById("regOut").innerHTML = "① 같은 덩어리 벌점 ‖A − SSᵀ‖ = <b>" + R.LM.toFixed(2) + "</b><br>② 소속 애매함 벌점 (엔트로피 평균) = <b>" + R.LA.toFixed(3) + "</b> <span class='muted'>/ 최대 1.099</span><br>③ 덩어리 평균 순서 = <b>" + R.mp.map(function (v) { return v.toFixed(2); }).join(" → ") + "</b> " + (ordered ? "(시간 순서와 일치)" : "(어긋남)");
+  }
+
+  // ---------- step 6 ----------
+  function renderFig6(R) {
+    var svg = document.getElementById("fig6a"); clear(svg);
+    var bx = 40, bw = 70, base = 210, H = 170;
+    el("line", { x1: 20, y1: base, x2: 320, y2: base, "class": "axis" }, svg);
+    [0, 1, 2].forEach(function (k) {
+      var x = bx + k * 95, u = R.ut[k], h = Math.max(2, u * H);
+      el("rect", { x: x, y: base - H, width: bw, height: H, rx: 6, "class": "fG" }, svg);
+      el("rect", { x: x, y: base - h, width: bw, height: h, rx: 6, "class": "f" + R.dom[k] }, svg);
+      txt(svg, x + bw / 2, base - h - 8, u.toFixed(2), { "text-anchor": "middle", "font-size": 13, "font-weight": 700 });
+      txt(svg, x + bw / 2, base + 18, (k + 1) + ". " + clusterLabel[R.dom[k]], { "text-anchor": "middle", "font-size": 12 });
+      txt(svg, x + bw / 2, base + 34, "γ* " + R.gs[k].toFixed(2), { "text-anchor": "middle", "font-size": 11, "class": "tm" });
+    });
+    txt(svg, 20, 24, "1이면 활짝 열림, 0이면 닫힘", { "font-size": 11.5, "class": "tm" });
+    var s2 = document.getElementById("fig6b"); clear(s2);
+    var maxv = Math.max.apply(null, R.st.map(function (p) { return Math.max(p[0], p[1]); }).concat([1]));
+    var mxp = Math.max(1.15, maxv * 1.1), u = 205 / mxp;
+    var P = plane(s2, { ox: 40, oy: 250, u: u, max: mxp });
+    for (var k = 1; k <= 3; k++) {
+      var a = P(R.st[k - 1]), b = P(R.st[k]);
+      el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], "class": "s" + R.dom[k - 1], "stroke-width": 2.4, "marker-end": "url(#m" + R.dom[k - 1] + ")" }, s2);
+    }
+    R.st.forEach(function (p, k) {
+      var q = P(p);
+      el("circle", { cx: q[0], cy: q[1], r: k === 3 ? 7 : 5, "class": k === 3 ? "fA ring" : "fM ring" }, s2);
+      if (k === 0) txt(s2, q[0] + 8, q[1] + 16, "시작", { "font-size": 11 });
+      else if (k === 3) txt(s2, q[0] + 10, q[1] + 4, "최종 기억", { "font-size": 11.5, "font-weight": 700 });
+      else txt(s2, q[0] + 8, q[1] + (k === 1 ? 16 : -6), String(k), { "font-size": 11, "class": "tm" });
+    });
+    var big = R.ut.indexOf(Math.max.apply(null, R.ut));
+    document.getElementById("fig6cap").innerHTML = "<b>그림 11.</b> 후보가 <b>" + cands[state.c].name + "</b>일 때 문이 가장 크게 열리는 건 <b>" + clusterLabel[R.dom[big]] + "</b> 덩어리(ũ = " + R.ut[big].toFixed(2) + ")예요. 나머지 덩어리에서는 문이 거의 닫혀서 기억이 조금만 움직여요. 그래서 최종 기억은 " + clusterLabel[R.dom[big]] + " 쪽을 가리켜요. 후보를 바꾸면 같은 기록인데도 최종 기억이 다른 쪽으로 가요.";
+  }
+
+  // ---------- step 7 ----------
+  function renderFig7(R) {
+    var cv = R.cv, parts = [["h_s", R.st[3], "var(--accent)"], ["h_g", R.hg, "var(--muted)"], ["h_t", cv, "var(--cand)"], ["h_g⊙h_t", [R.hg[0] * cv[0], R.hg[1] * cv[1]], "var(--text)"]];
+    var h = "<div class='small' style='margin-bottom:6px'><b>MLP에 들어가는 입력 (숫자 8개)</b></div><div class='vec'>";
+    parts.forEach(function (p) { p[1].forEach(function (v, d) { h += "<span style='background:" + p[2] + "' title='" + p[0] + " " + (d ? "정치" : "스포츠") + "'>" + v.toFixed(2) + "</span>"; }); });
+    h += "</div><div class='vec small muted' style='margin-top:4px'>";
+    parts.forEach(function (p) { h += "<span style='color:var(--muted);min-width:107px'>" + p[0] + "</span>"; });
+    h += "</div>";
+    document.getElementById("concatBox").innerHTML = h;
+    var svg = document.getElementById("fig7"); clear(svg);
+    var P = plane(svg, { ox: 36, oy: 200, u: 150, max: 1.15 });
+    function unit(v) { var l = norm(v); return [v[0] / l, v[1] / l]; }
+    var a = P([0, 0]), b = P(unit(R.st[3])), c = P(unit(cv)), d = P(unit(R.hg));
+    el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], "class": "ln-a", "stroke-width": 3, "marker-end": "url(#mA)" }, svg);
+    el("line", { x1: a[0], y1: a[1], x2: d[0], y2: d[1], "class": "ln", "stroke-width": 2.4, "marker-end": "url(#mM)" }, svg);
+    el("line", { x1: a[0], y1: a[1], x2: c[0], y2: c[1], "class": "sC", "stroke-width": 2.4, "stroke-dasharray": "6 4", "marker-end": "url(#mC)" }, svg);
+    txt(svg, 262, 170, "파랑 = h_s(최종 기억)", { "font-size": 11, "class": "ta" });
+    txt(svg, 262, 186, "회색 = h_g(그래프 요약)", { "font-size": 11, "class": "tm" });
+    txt(svg, 262, 202, "초록 점선 = 후보", { "font-size": 11, style: "fill:var(--cand)" });
+    el("rect", { x: 260, y: 64, width: 130, height: 76, rx: 10, "class": "box" }, svg);
+    txt(svg, 325, 88, "후보와 비교", { "text-anchor": "middle", "font-size": 12.5, "font-weight": 700 });
+    txt(svg, 325, 108, "cos(h_s, 후보) " + R.cs.toFixed(3), { "text-anchor": "middle", "font-size": 11.5, "class": "tm" });
+    txt(svg, 325, 126, "cos(h_g, 후보) " + R.cg.toFixed(3), { "text-anchor": "middle", "font-size": 11.5, "class": "tm" });
+    el("path", { d: "M240 102 L256 102", "class": "ln", "marker-end": "url(#mM)" }, svg);
+    el("path", { d: "M390 102 L406 102", "class": "ln", "marker-end": "url(#mM)" }, svg);
+    el("rect", { x: 410, y: 54, width: 170, height: 96, rx: 12, "class": "box-a" }, svg);
+    txt(svg, 495, 82, "클릭 확률", { "text-anchor": "middle", "font-size": 12.5, "font-weight": 700, "class": "ta" });
+    txt(svg, 495, 122, R.score.toFixed(2), { "text-anchor": "middle", "font-size": 34, "font-weight": 800 });
+    var other = state.c === "P" ? "S" : "P", ov = cands[other].v;
+    var fscore = sig(3 * cos(R.st[3], ov) + 3 * cos(R.hg, ov) - 3.5);
+    document.getElementById("fig7cap").innerHTML = "<b>그림 12.</b> 후보가 <b>" + cands[state.c].name + "</b>일 때 클릭 확률은 <b>" + R.score.toFixed(2) + "</b>예요. h_g는 후보와 관련 큰 기사에 무게를 두므로, 후보를 바꾸면 방향이 바뀌어요. 참고로 지금 계산된 기억과 요약을 그대로 두고 다른 후보(" + cands[other].name + ")만 비교하면 확률이 " + fscore.toFixed(2) + "예요. SURGE는 후보가 바뀌면 4–6단계를 다시 계산해서 기억 자체를 바꿔요.";
+  }
+
+  // ---------- step 8 ----------
+  function renderFig8() {
+    var svg = document.getElementById("fig8"); clear(svg);
+    var boxes = [["유사도 재기", "w (자의 손잡이)"], ["선 긋기", "학습 없음 (비율은 미리 정함)"], ["이웃과 섞기", "α·β 신경망, W"], ["덩어리로 묶기", "W_p"], ["순서대로 읽기", "GRU 게이트"], ["점수 내기", "MLP"]];
+    boxes.forEach(function (b, k) {
+      var x = 12 + k * 148;
+      el("rect", { x: x, y: 50, width: 128, height: 54, rx: 10, "class": k === 1 ? "box" : "box-a" }, svg);
+      txt(svg, x + 64, 82, b[0], { "text-anchor": "middle", "font-size": 13, "font-weight": 700 });
+      txt(svg, x + 64, 128, b[1], { "text-anchor": "middle", "font-size": 11, "class": "tm" });
+      if (k < 5) el("path", { d: "M" + (x + 130) + " 77 L" + (x + 146) + " 77", "class": "ln-a", "marker-end": "url(#mA)" }, svg);
+    });
+    txt(svg, 12, 30, "예측 방향 →", { "font-size": 12, "font-weight": 700, "class": "ta" });
+    el("path", { d: "M880 170 L20 170", "class": "ln-bad", "marker-end": "url(#mBad)" }, svg);
+    txt(svg, 880, 196, "← 정답과 틀린 만큼 거꾸로 전달 (역전파): 모든 손잡이가 동시에 고쳐짐", { "text-anchor": "end", "font-size": 12, "font-weight": 700, style: "fill:var(--bad)" });
+    el("rect", { x: 456, y: 212, width: 128, height: 30, rx: 8, "class": "box" }, svg);
+    txt(svg, 520, 232, "+ S 규칙 벌점 3개", { "text-anchor": "middle", "font-size": 11.5 });
+  }
+
+  function renderAll() {
+    var R = compute();
+    renderTimeline(); renderFig1(); renderFig3(R); renderHood(R); renderAlpha(R); renderAlphaCap(R); renderBeta(R); renderMix(R); renderFig5(R); renderFig6(R); renderFig7(R);
+    Array.prototype.forEach.call(document.querySelectorAll("#alphaSeg button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-a") === state.am)); });
+    Array.prototype.forEach.call(document.querySelectorAll("#candSeg button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-c") === state.c)); });
+    Array.prototype.forEach.call(document.querySelectorAll("#varSeg button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-v") === state.v)); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("#candSeg button"), function (b) { b.addEventListener("click", function () { state.c = b.getAttribute("data-c"); renderAll(); }); });
+  Array.prototype.forEach.call(document.querySelectorAll("#varSeg button"), function (b) { b.addEventListener("click", function () { state.v = b.getAttribute("data-v"); renderAll(); }); });
+  Array.prototype.forEach.call(document.querySelectorAll("#alphaSeg button"), function (b) { b.addEventListener("click", function () { state.am = b.getAttribute("data-a"); renderAll(); }); });
+  Array.prototype.forEach.call(document.querySelectorAll("#kSeg button"), function (b) { b.addEventListener("click", function () { state.k = +b.getAttribute("data-k"); renderAll(); }); });
+  var pr = document.getElementById("pairs");
+  pr.addEventListener("input", function () { state.pairs = parseInt(pr.value, 10); renderAll(); });
+  state.pairs = parseInt(pr.value, 10) || 4;
+  renderFig2(); renderFig8(); renderAll();
+})();
+</script>

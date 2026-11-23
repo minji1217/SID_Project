@@ -496,7 +496,7 @@
     <tr><td>α<sub>i</sub> = 0.9</td><td class="n">0.129</td><td class="n">0.473</td><td class="n">0.047</td><td class="n">0.351</td></tr>
     <tr><td>α<sub>i</sub> = −2.0</td><td class="n">0.129</td><td class="n">0.473</td><td class="n">0.047</td><td class="n">0.351</td></tr>
   </table></div>
-  <div class="note review"><p><span class="tag t-rev">리뷰어 메모</span> 식 (8)을 쓰인 그대로 계산하면 <b>α<sub>i</sub>는 결과에 영향이 없어요.</b> softmax는 <span class="m"><i>j</i></span>에 대해 정규화하는데, α<sub>i</sub>는 모든 <span class="m"><i>j</i></span>에 같은 값으로 더해지므로 분자와 분모에서 <span class="m">exp(α<sub><i>i</i></sub>)</span>가 약분돼요(위 표). 그런데 Table 4에서는 군집 인식을 빼면 성능이 떨어져요(Taobao AUC 0.8906 → 0.8764). 그러니 실제 구현은 식 (8)과 다를 가능성이 커요. 예를 들어 노드 전체에 대해 정규화하거나, α를 다른 곳에 곱해 쓸 수 있어요. 이 구조를 재사용하려면 공식 코드를 꼭 확인해야 해요.</p></div>
+  <div class="note review"><p><span class="tag t-rev">리뷰어 메모</span> 식 (8)을 쓰인 그대로 계산하면 <b>α<sub>i</sub>는 결과에 영향이 없어요.</b> softmax는 <span class="m"><i>j</i></span>에 대해 정규화하는데, α<sub>i</sub>는 모든 <span class="m"><i>j</i></span>에 같은 값으로 더해지므로 분자와 분모에서 <span class="m">exp(α<sub><i>i</i></sub>)</span>가 약분돼요(위 표). 그런데 Table 4에서는 군집 인식을 빼면 성능이 떨어져요(Taobao AUC 0.8906 → 0.8764). 그러니 실제 구현은 식 (8)과 다를 가능성이 커요. 예를 들어 노드 전체에 대해 정규화하거나, α를 다른 곳에 곱해 쓸 수 있어요. 이 구조를 재사용하려면 공식 코드를 꼭 확인해야 해요.</p><p><b>공개 코드 확인 결과 (tsinghua-fib-lab/SIGIR21-SURGE):</b> 코드는 군집 점수를 <b>이웃(보내는 쪽) j</b>에, 질의 점수를 타깃 i에 붙여서 softmax<sub>j</sub>(α<sub>j</sub> + β<sub>i</sub>)로 계산해요. 그래서 코드에서는 반대로 <b>β가 약분되고 α가 비율을 정해요</b>. 또 코드의 풀링은 소프트 배정 S와 정규화 3개 대신 "점수 상위 노드만 남기기"이고, 희소화도 "0이 아닌 칸 중 상위 50%"예요. 자세한 비교는 그림 해설(SURGE 예시로 따라가기)의 "논문과 공개된 공식 코드의 차이" 표에 있어요.</p></div>
 
   <div class="deep">
     <div class="deep-h"><span class="tag t-acc">더 깊이</span> B단계에 쓰인 기법들</div>
