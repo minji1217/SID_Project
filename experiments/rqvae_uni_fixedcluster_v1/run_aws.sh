@@ -20,6 +20,8 @@
 #   SMOKE=1     1 epoch 만 돌려 입력/코드 연결만 확인 (OUT 이름에 _smoke)
 #   ALLOW_CPU=1 GPU 없이도 실행 (스모크 테스트용)
 #   A_CKPT      기존 UNI checkpoint_best_rec.pt 경로. 주면 그 안의 gin_config 와 하이퍼파라미터를 비교해서 다르면 멈춤 (권장)
+#   VARIANT     h (기본, 실험 H = 지금 ver2) | r1 (실험 R: Q2 K-means 초기화를 사건별 r1(a)=h(a)-Q1[c1] 평균으로. 나머지 같음)
+#               r1 이면 OUT 기본 이름에 _r1 이 붙고 train_rqvae_r1.py 로 학습한다.
 set -euo pipefail
 CODE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$CODE/../.." && pwd)"
@@ -28,8 +30,14 @@ INPUT="$(realpath -m "${INPUT_DIR:-$REPO_ROOT/data/output/exports/rqvae_inputs}"
 UNI_REF="${UNI_REF:-127ae7e}"
 UNI_DIR="$(realpath -m "${UNI_DIR:-$HOME/minji/rqvae_uni_code_$UNI_REF}")"
 PYTHON="${PYTHON:-python}"
+VARIANT="${VARIANT:-h}"
+case "$VARIANT" in
+    h)  VTAG="" ;;
+    r1) VTAG="_r1" ;;
+    *)  echo "VARIANT 는 h 또는 r1 ($VARIANT)"; exit 1 ;;
+esac
 SUFFIX=""; [[ "${SMOKE:-0}" == "1" ]] && SUFFIX="_smoke"
-OUT="$(realpath -m "${OUT_DIR:-$REPO_ROOT/data/output/rqvae/uni_fixedcluster_lu0.05_m0.5_s${SEED}${SUFFIX}}")"
+OUT="$(realpath -m "${OUT_DIR:-$REPO_ROOT/data/output/rqvae/uni_fixedcluster_lu0.05_m0.5${VTAG}_s${SEED}${SUFFIX}}")"
 export PYTHONUNBUFFERED=1
 
 echo "== 0. 설정"
@@ -37,7 +45,7 @@ echo "   repo    $REPO_ROOT ($(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD) 
 echo "   input   $INPUT"
 echo "   code    $UNI_DIR (uniqueness-loss-experiment @ $UNI_REF)"
 echo "   out     $OUT"
-echo "   seed    $SEED   smoke ${SMOKE:-0}"
+echo "   seed    $SEED   smoke ${SMOKE:-0}   variant $VARIANT"
 
 echo "== 1. 입력 확인"
 for f in article_master.parquet validation_article_master.parquet article_embeddings.npy event_master.parquet manifest.json; do
@@ -98,6 +106,7 @@ fi
     echo "train_code      $WANT (uniqueness-loss-experiment)"
     echo "input_dir       $INPUT"
     echo "seed            $SEED"
+    echo "variant         $VARIANT (h: Q2 초기화 = 사건별 h 평균 / r1: 사건별 r1 = h - Q1[c1] 평균)"
     date -u +"started_utc     %Y-%m-%dT%H:%M:%SZ"
 } > "$OUT/provenance.txt"
 (cd "$INPUT" && sha256sum article_master.parquet validation_article_master.parquet article_embeddings.npy event_master.parquet) > "$OUT/inputs.sha256"
@@ -113,7 +122,16 @@ fi
 echo "== 4. 학습 (로그: $OUT/train.log · 진행 중 지표 표: python $CODE/parse_log.py $OUT)"
 cd "$UNI_DIR/RQVAE"
 STATUS=0
-"$PYTHON" train_rqvae.py "$OUT/rqvae_uni.gin" > "$OUT/train.log" 2>&1 || STATUS=$?
+if [[ "$VARIANT" == "r1" ]]; then
+    cp "$CODE/train_rqvae_r1.py" "$OUT/train_rqvae_r1.py"
+    "$PYTHON" "$OUT/train_rqvae_r1.py" "$OUT/rqvae_uni.gin" > "$OUT/train.log" 2>&1 || STATUS=$?
+    if ! grep -q "^\[R\] Q2 K-means 입력" "$OUT/train.log"; then
+        echo "r1 초기화 로그가 없습니다"
+        [[ $STATUS -ne 0 ]] || STATUS=1
+    fi
+else
+    "$PYTHON" train_rqvae.py "$OUT/rqvae_uni.gin" > "$OUT/train.log" 2>&1 || STATUS=$?
+fi
 date -u +"finished_utc    %Y-%m-%dT%H:%M:%SZ (exit $STATUS)" >> "$OUT/provenance.txt"
 
 echo "== 5. 지표 CSV (metrics_train / metrics_validation / early_stopping / summary.json)"
