@@ -53,6 +53,13 @@ C2_USE = [("H s42", "H", 128), ("H s123", "H", 128), ("H s2026", "H", 128), ("R 
 COS_BINS = ["< 0.25", "0.25~0.35", "0.35~0.45", "≥ 0.45"]
 COS_TOP1 = {"H": [4.42, 19.76, 27.37, 31.92], "R": [1.36, 23.38, 26.77, 34.85]}
 COS_N = {"H": [679, 18557, 57857, 42847], "R": [1320, 31762, 53346, 33433]}
+# 인기·나이 함께 학습 (transformer_feat/<run>_seed42_flr0, 가중치 5 · −1 고정): test (top1, auc, mrr, ndcg), validation best
+JOINT = {"V1": (42.50, 0.7342, 0.6485, 0.7368, 42.66), "H": (42.92, 0.7366, 0.6513, 0.7389, 42.68), "R": (43.07, 0.7363, 0.6519, 0.7392, 42.59)}
+JOINT_H_LEARN = [41.96, 41.21, 41.10]   # H, 가중치도 학습: 학습 전 / epoch 1 / epoch 2 validation (가중치 5 → 0.78, −1 → −0.09)
+JOINT_H_FIXED = [41.96, 42.68, 42.24, 42.20, 42.07, 41.68, 41.67]   # H, 가중치 고정: 학습 전, epoch 1~6 validation
+# 공개 TIGER 재현 구현 (tiger/<run>_seed42): test (top1, mrr, ndcg, auc), c1 만으로 채점한 Top-1, 정답·오답 평균 log P
+TIGER = {"V1": (16.69, 0.4332, 0.5720, 0.4784, 23.12, -17.05, -16.66), "H": (17.30, 0.4378, 0.5754, 0.4829, 22.05, -17.12, -16.82),
+         "R": (17.77, 0.4371, 0.5746, 0.4750, 22.43, -15.81, -15.53)}
 
 
 # ---------------- 그림 함수 ----------------
@@ -153,6 +160,10 @@ fig_main = bars(["모델만 (SID)", "인기만", "결합 + 나이"],
                 50, ref=20, ref_label="무작위 20%")
 fig_model = bars(["seed 42", "seed 123", "seed 2026", "평균"],
                  [(n, [TEST_S[n][s][0] for s in SEEDS] + [TEST[n][0]]) for n in RUNS], 30, h=240)
+fig_joint = bars(["인기만", "함께 학습 (고정)", "나중에 더하기"],
+                 [(n, [FUSION_S[n][42][1], JOINT[n][0], FUSION_S[n][42][3]]) for n in RUNS], 50, ref=20, ref_label="무작위 20%")
+fig_tiger = bars(["공개 TIGER (생성 학습)", "우리 Transformer (후보 고르기)", "+ 인기·나이"],
+                 [(n, [TIGER[n][0], TEST_S[n][42][0], FUSION_S[n][42][3]]) for n in RUNS], 50, ref=20, ref_label="무작위 20%")
 fig_gain = bars(["seed 42", "seed 123", "seed 2026", "평균"],
                 [(n, GAIN[n] + [mean(GAIN[n])]) for n in RUNS], 1.6, unit="%p", h=240)
 fig_c2 = hbars(C2_USE, 128)
@@ -206,6 +217,8 @@ tr.hl td {{ background:var(--hl); font-weight:600; }}
 <li><b>H와 R은 Transformer 성능이 같다고 봐야 해요.</b> 평균 차이 0.16%p로 흔들림 안이고, seed마다 앞서는 쪽이 바뀌어요. 다만 R은 Q2 코드를 128개 중 59~93개만 써요(H는 128개 모두).</li>
 <li><b>병목은 두 곳이에요.</b> ① test에서 맞혀야 할 정답의 98%가 validation-only 기사인데, SID 생성 때 비슷하지 않은 사건에 억지로 붙은 기사는 거의 못 맞혀요. ② 인기 정보가 없어요. 직전 24시간 클릭 수만으로 42.9%를 맞혀요.</li>
 <li><b>재학습 없이 인기·나이를 점수에 더하면 44.2%</b>(H·R, seed 3개 평균). SID가 인기 위에 보태는 몫은 H +{mean(GAIN["H"]):.2f}%p · R +{mean(GAIN["R"]):.2f}%p로 예전 SID(+{mean(GAIN["V1"]):.2f}%p)의 약 1.8배이고, seed 3개 모두 H·R이 V1보다 커요(범위가 겹치지 않음).</li>
+<li><b>인기·나이를 학습 때 함께 넣으면 오히려 나빠요</b>(42.5~43.1%, 7장). 인기·나이는 나중에 더하는 지금 방식을 유지해요.</li>
+<li><b>공개 TIGER 재현 구현(생성형 학습만)은 같은 SID로 16.7~17.8%</b>로 무작위보다 낮아요(8장). 새 기사가 대부분인 이 데이터에선 후보 중 정답을 고르는 학습이 필요해요.</li>
 </ul></div>
 
 <h2>1. 실험 구성</h2>
@@ -291,10 +304,33 @@ tr.hl td {{ background:var(--hl); font-weight:600; }}
  [[n] + [ms([FUSION_FULL_S[n][s][k] for s in SEEDS], "{:.4f}") for k in range(3)] for n in RUNS])}
 <p class="cap"><b>읽는 법:</b> 크게 오른 건 인기 자체의 힘이에요. 봐야 할 건 SID가 인기 위에 더 보태는 몫이에요. 새 SID(H, R)는 +1.3%p, 예전 SID(V1)는 +0.7%p. H와 R은 여기서도 차이가 없어요. 나이는 +0.1~0.35%p로 작지만 9번 모두 같은 방향이에요.</p>
 
-<h2>7. 다음 단계</h2>
+<h2>7. 인기·나이를 학습 때 함께 넣으면? — 더 나빠져요</h2>
+<p>후보 점수 = SID 점수 + w1 · log(1 + 직전 24시간 클릭 수) + w2 · log(1 + 기사 나이)로 두고 Transformer를 처음부터 학습했어요(여민 코드에 우리 패치 적용, seed 42). 손실은 그대로 후보 5개 softmax → cross entropy예요.</p>
+{table(["H, validation Top-1", "학습 전", "epoch 1", "epoch 2", "epoch 3", "epoch 4", "epoch 5", "epoch 6"],
+ [["w도 같이 학습 (시작 5, −1)"] + [f"{v:.2f}%" for v in JOINT_H_LEARN] + ["—"] * 4,
+  ["w를 5, −1로 고정"] + [f"{v:.2f}%" for v in JOINT_H_FIXED]])}
+<p class="cap">w를 같이 학습하면 epoch 1 만에 인기 가중치가 5 → 0.78, 나이 −1 → −0.09로 줄고 성능이 학습 전보다 떨어졌어요(중단). 고정해도 epoch 1이 정점(42.68%)이고, 나중에 더하기의 validation(43.27% 이상)에 못 미쳐요.</p>
+<div class="fig">{legend(RUNS)}{fig_joint}
+<p class="cap">test Top-1, seed 42. 점선 = 무작위 20%.</p></div>
+{table(["test (seed 42)", "인기만", "함께 학습 (고정) Top-1", "AUC", "MRR", "nDCG@5", "나중에 더하기 Top-1"],
+ [[n, f"{FUSION_S[n][42][1]:.2f}%", f"<b>{JOINT[n][0]:.2f}%</b> ({JOINT[n][0]-FUSION_S[n][42][1]:+.2f}%p)", f"{JOINT[n][1]:.4f}", f"{JOINT[n][2]:.4f}", f"{JOINT[n][3]:.4f}",
+   f"<b>{FUSION_S[n][42][3]:.2f}%</b> ({FUSION_S[n][42][3]-FUSION_S[n][42][1]:+.2f}%p)"] for n in RUNS])}
+<p class="cap"><b>읽는 법:</b> 괄호는 인기만 대비 SID가 보탠 몫이에요. 함께 학습하면 그 몫이 −0.4 ~ +0.1%p로 사라지고, 나중에 더하면 +0.5 ~ +1.3%p가 남아요. <b>원인으로 보이는 것:</b> SID만 학습하면 "어떤 사건·주제가 읽히나" 같은 넓은 패턴을 배우고, 이게 새 기사에도 통해요. 인기를 같이 넣으면 그 넓은 패턴은 인기가 대신 설명하고, SID에는 train 기사를 외우는 일만 남아요. 그런데 test 정답은 98%가 처음 보는 기사라 외운 게 쓸모가 없어요. 같은 이유로 w를 train에서 학습하면 인기 비중을 작게 배워요. 그래서 <b>w는 test와 비슷한 validation에서 정하는 지금 방식(나중에 더하기)</b>을 유지해요.</p>
+
+<h2>8. 공개 TIGER 재현 구현과 비교</h2>
+<p>공개된 비공식 TIGER 재현 구현(EdoardoBotta/RQ-VAE-Recommender @ 957d32b, MIT)의 모델 · 손실 · 학습 설정(d384 · 6 head · 4층, AdamW 1e-3, batch 640, history 20)을 수정 없이 쓰고, 데이터 로더와 평가만 우리 데이터에 맞췄어요. 사용자 history로 <b>다음 클릭 기사의 SID를 생성</b>하도록 학습하고(오답 없음), test는 우리와 같이 후보 5개를 log P(c1) + log P(c2|c1) + log P(c3|c1,c2)로 채점해요. 저자들의 공식 코드는 아니에요.</p>
+<div class="fig">{legend(RUNS)}{fig_tiger}
+<p class="cap">test Top-1, seed 42. 점선 = 무작위 20%.</p></div>
+{table(["공개 TIGER (test, seed 42)", "Top-1", "AUC", "MRR", "nDCG@5", "c1만으로 채점 Top-1", "정답 / 오답 평균 log P"],
+ [[n, f"<b>{TIGER[n][0]:.2f}%</b>", f"{TIGER[n][3]:.4f}", f"{TIGER[n][1]:.4f}", f"{TIGER[n][2]:.4f}", f"{TIGER[n][4]:.2f}%", f"{TIGER[n][5]:.2f} / {TIGER[n][6]:.2f}"] for n in RUNS])}
+<p class="cap"><b>읽는 법:</b> 세 SID 모두 무작위(20%)보다 낮고 AUC가 0.5 아래예요. 정답의 평균 log P가 오답보다 낮아요. TIGER는 train에서 클릭된 기사의 SID를 생성하도록 배우는데, test 정답은 98%가 처음 보는 기사라서 오히려 오답 쪽에 높은 확률을 주는 것으로 보여요(오답에는 train에서 본 기사가 정답보다 많이 섞여 있어요). c1만으로 채점하면 22~23%로 무작위보다 낫지만, c3까지 더하면 떨어져요. 같은 SID로 <b>후보 중 정답 고르기</b>를 학습한 우리 Transformer는 26.2~27.7%예요. 새 기사가 대부분인 이 데이터에서는 생성형 학습만으로는 부족하고, 오답과 비교하는 학습이 필요하다는 근거예요.</p>
+
+<h2>9. 다음 단계</h2>
 {table(["", "내용", "상태"],
  [["seed 123 · 2026", "V1 · H · R Transformer를 seed 2개 더 → 차이가 우연이 아닌지 확인", "완료 (이 보고서)"],
-  ["인기·나이 함께 학습", "후보 점수 = SID 점수 + w1·logpop + w2·logage, w를 같이 학습(시작값 5, −1). Transformer가 인기로 설명 안 되는 개인 취향에 집중하도록. 나중에 더한 결합(H 44.24%)과 비교", "여민 코드에 우리 패치를 적용해 실행 준비 완료 (H → R → V1, seed 42)"],
+  ["인기·나이 함께 학습", "점수에 더해서 함께 학습 → 나중에 더하기보다 낮음 (7장)", "완료"],
+  ["공개 TIGER 비교", "생성형 학습만 하는 공개 재현 구현 → 무작위보다 낮음 (8장)", "완료"],
+  ["인기를 Transformer 입력으로", "점수에 더하는 대신 후보 인기 · 나이를 임베딩으로 넣어, 사용자마다 다른 인기 민감도를 배우게 하기", "제안"],
   ["새 기사 SID 배정 개선", "코사인이 기준값보다 낮으면 사건 C2를 물려받지 않고 기사 자기 r1로 C2를 정하기", "제안"],
   ["R 초기화 보완", "Q2 초기화를 몇 epoch 학습 뒤에 하거나, r1을 정규화해 카테고리 쏠림 줄이기", "제안"]], num_from=99)}
 <div class="note"><b>주의</b><ul>
