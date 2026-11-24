@@ -145,13 +145,13 @@ def hbars(rows, xmax, h_per=34):
     return "".join(s)
 
 
-def table(head, rows, num_from=1):
+def table(head, rows, num_from=1, wrap=False):
     th = "".join(f'<th{" class=n" if i >= num_from else ""}>{escape(c)}</th>' for i, c in enumerate(head))
     body = ""
     for r in rows:
         cls = ' class="hl"' if str(r[0]).startswith("★") else ""
         body += f"<tr{cls}>" + "".join(f'<td{" class=n" if i >= num_from else ""}>{c}</td>' for i, c in enumerate(r)) + "</tr>"
-    return f'<div class="tbl"><table><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
+    return f'<div class="tbl{" wrap" if wrap else ""}"><table><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
 # ---------------- 본문 ----------------
@@ -206,6 +206,20 @@ th {{ background:var(--chip); font-weight:600; }} td.n, th.n {{ text-align:right
 tr.hl td {{ background:var(--hl); font-weight:600; }}
 .grid2 {{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }} .grid2 > * {{ min-width:0; }}
 @media (max-width:720px) {{ .grid2 {{ grid-template-columns:1fr; }} }}
+.flow {{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; counter-reset:st; }}
+.step {{ flex:1 1 150px; min-width:0; border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:8px 10px 9px; font-size:13px; line-height:1.5; }}
+.step::before {{ counter-increment:st; content:counter(st); display:inline-block; width:20px; height:20px; border-radius:50%; background:var(--chip); color:var(--muted); font-size:12px; font-weight:700; text-align:center; line-height:20px; margin-right:6px; }}
+.step b {{ font-size:13.5px; }} .step p {{ margin:4px 0 0; color:var(--muted); }}
+.tag {{ display:inline-block; font-size:11.5px; font-weight:700; border-radius:5px; padding:0 6px; margin-top:6px; }}
+.tag.tr {{ background:#e6f4ee; color:#106b49; }} .tag.va {{ background:var(--hl); color:#1f4fa0; }} .tag.te {{ background:var(--warn-bg); color:#8a5a00; }}
+@media (prefers-color-scheme: dark) {{ :root:not([data-theme="light"]) .tag.tr {{ background:#173a2c; color:#7fd8b1; }} :root:not([data-theme="light"]) .tag.va {{ color:#a9c2f5; }} :root:not([data-theme="light"]) .tag.te {{ color:#f0c878; }} }}
+:root[data-theme="dark"] .tag.tr {{ background:#173a2c; color:#7fd8b1; }} :root[data-theme="dark"] .tag.va {{ color:#a9c2f5; }} :root[data-theme="dark"] .tag.te {{ color:#f0c878; }}
+.split {{ display:flex; height:46px; border-radius:10px; overflow:hidden; margin:10px 0 4px; font-size:13px; font-weight:600; }}
+.split > div {{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:0 6px; line-height:1.25; }}
+.ref-list {{ font-size:13.5px; padding-left:20px; }} .ref-list li {{ margin:4px 0; }}
+.wrap th, .wrap td {{ white-space:normal; min-width:90px; vertical-align:top; }}
+.cap, .step, .ref-list {{ overflow-wrap:anywhere; }}
+code {{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; background:var(--chip); padding:1px 5px; border-radius:4px; }}
 </style></head><body><main>
 
 <h1>v2 재실험 결과 — 새 SID · 실험 H vs R · 인기 결합</h1>
@@ -288,7 +302,7 @@ tr.hl td {{ background:var(--hl); font-weight:600; }}
 <p class="cap">클릭 수는 노출 시각 <b>이전</b>만 셌어요(미래 정보 없음). 모델(27%대)보다 인기만 쓴 쪽이 15%p 높아요. SID에는 "무슨 내용인지"만 있고 "지금 얼마나 읽히는지"는 없어요.</p>
 
 <h2>6. 인기·나이 결합 (재학습 없음)</h2>
-<p>최종 점수 = 모델 점수 + λ · log(1 + 직전 24시간 클릭 수) + μ · log(1 + 기사 나이(시간)). λ, μ는 <b>validation 앞 절반</b>에서 고르고(λ 13개 × μ 10개) test에는 한 번만 적용했어요. 9번(실험 3개 × seed 3개) 모두 <b>λ = 5</b>를 골랐고, μ는 −1(7번) 또는 −2(V1 · R seed 2026)였어요.</p>
+<p>최종 점수 = 모델 점수 + λ · log(1 + 직전 24시간 클릭 수) + μ · log(1 + 기사 나이(시간)). λ, μ는 <b>validation 앞 절반</b>에서 고르고(λ 13개 × μ 10개) test에는 한 번만 적용했어요(절차는 10장 C). 9번(실험 3개 × seed 3개) 모두 <b>λ = 5</b>를 골랐고, μ는 −1(7번) 또는 −2(V1 · R seed 2026)였어요.</p>
 <div class="fig">{legend(["V1", "H", "R"])}{fig_lam}
 <p class="cap">validation Top-1 vs λ (μ = 0, seed 42). 꼭대기가 λ = 3~10 사이에서 평평해요. seed 123 · 2026도 모양이 같아요.</p></div>
 <div class="fig">{legend(["V1", "H", "R"])}{fig_main}
@@ -311,14 +325,14 @@ tr.hl td {{ background:var(--hl); font-weight:600; }}
   ["w를 5, −1로 고정"] + [f"{v:.2f}%" for v in JOINT_H_FIXED]])}
 <p class="cap">w를 같이 학습하면 epoch 1 만에 인기 가중치가 5 → 0.78, 나이 −1 → −0.09로 줄고 성능이 학습 전보다 떨어졌어요(중단). 고정해도 epoch 1이 정점(42.68%)이고, 나중에 더하기의 validation(43.27% 이상)에 못 미쳐요.</p>
 <div class="fig">{legend(RUNS)}{fig_joint}
-<p class="cap">test Top-1, seed 42. 점선 = 무작위 20%.</p></div>
+<p class="cap">test Top-1, seed 42. 점선 = 무작위 20%. 방법은 10장 B·D.</p></div>
 {table(["test (seed 42)", "인기만", "함께 학습 (고정) Top-1", "AUC", "MRR", "nDCG@5", "나중에 더하기 Top-1"],
  [[n, f"{FUSION_S[n][42][1]:.2f}%", f"<b>{JOINT[n][0]:.2f}%</b> ({JOINT[n][0]-FUSION_S[n][42][1]:+.2f}%p)", f"{JOINT[n][1]:.4f}", f"{JOINT[n][2]:.4f}", f"{JOINT[n][3]:.4f}",
    f"<b>{FUSION_S[n][42][3]:.2f}%</b> ({FUSION_S[n][42][3]-FUSION_S[n][42][1]:+.2f}%p)"] for n in RUNS])}
 <p class="cap"><b>읽는 법:</b> 괄호는 인기만 대비 SID가 보탠 몫이에요. 함께 학습하면 그 몫이 −0.4 ~ +0.1%p로 사라지고, 나중에 더하면 +0.5 ~ +1.3%p가 남아요. <b>원인으로 보이는 것:</b> SID만 학습하면 "어떤 사건·주제가 읽히나" 같은 넓은 패턴을 배우고, 이게 새 기사에도 통해요. 인기를 같이 넣으면 그 넓은 패턴은 인기가 대신 설명하고, SID에는 train 기사를 외우는 일만 남아요. 그런데 test 정답은 98%가 처음 보는 기사라 외운 게 쓸모가 없어요. 같은 이유로 w를 train에서 학습하면 인기 비중을 작게 배워요. 그래서 <b>w는 test와 비슷한 validation에서 정하는 지금 방식(나중에 더하기)</b>을 유지해요.</p>
 
 <h2>8. 공개 TIGER 재현 구현과 비교</h2>
-<p>공개된 비공식 TIGER 재현 구현(EdoardoBotta/RQ-VAE-Recommender @ 957d32b, MIT)의 모델 · 손실 · 학습 설정(d384 · 6 head · 4층, AdamW 1e-3, batch 640, history 20)을 수정 없이 쓰고, 데이터 로더와 평가만 우리 데이터에 맞췄어요. 사용자 history로 <b>다음 클릭 기사의 SID를 생성</b>하도록 학습하고(오답 없음), test는 우리와 같이 후보 5개를 log P(c1) + log P(c2|c1) + log P(c3|c1,c2)로 채점해요. 저자들의 공식 코드는 아니에요.</p>
+<p>공개된 비공식 TIGER 재현 구현(EdoardoBotta/RQ-VAE-Recommender @ 957d32b, MIT)의 모델 · 손실 · 학습 설정(d384 · 6 head · 4층, AdamW 1e-3, batch 640, history 20)을 수정 없이 쓰고, 데이터 로더와 평가만 우리 데이터에 맞췄어요. 사용자 history로 <b>다음 클릭 기사의 SID를 생성</b>하도록 학습하고(오답 없음), test는 우리와 같이 후보 5개를 log P(c1) + log P(c2|c1) + log P(c3|c1,c2)로 채점해요. 저자들의 공식 코드는 아니에요. 자세한 방법과 출처는 10장 E.</p>
 <div class="fig">{legend(RUNS)}{fig_tiger}
 <p class="cap">test Top-1, seed 42. 점선 = 무작위 20%.</p></div>
 {table(["공개 TIGER (test, seed 42)", "Top-1", "AUC", "MRR", "nDCG@5", "c1만으로 채점 Top-1", "정답 / 오답 평균 log P"],
@@ -339,6 +353,77 @@ tr.hl td {{ background:var(--hl); font-weight:600; }}
 <li>validation 앞 절반을 best epoch 고르기와 λ · μ 고르기에 두 번 썼어요. 고르는 값이 둘뿐이고 λ는 9번 모두 같은 값(5)을 골라 영향은 작다고 봐요.</li>
 <li>클릭 기록이 train 노출 기간(5/18)부터라 train 첫 24시간 행의 클릭 수는 적게 세져요. test에는 해당 없어요.</li>
 </ul></div>
+
+<h2>10. 부록 — 방법 상세</h2>
+
+<h3>A. 데이터 나누기: train · validation 앞 절반 · test</h3>
+<div class="split">
+<div style="flex:2; background:#e6f4ee; color:#106b49">train 기간 노출<br><span style="font-weight:400">학습</span></div>
+<div style="flex:1; background:var(--hl); color:#1f4fa0">validation 기간 앞 절반<br><span style="font-weight:400">고르기</span></div>
+<div style="flex:1; background:var(--warn-bg); color:#8a5a00">validation 기간 뒤 절반<br><span style="font-weight:400">test (1번만)</span></div>
+</div>
+<p class="cap">시간 →. 폭은 행 수에 맞춘 대략값이에요.</p>
+{table(["", "만드는 법", "행 수 (H 기준)", "쓰는 곳"],
+ [["train", "train 기간 behaviors → 시퀀스 → 1pos4neg(정답 1 + 같은 노출의 오답 4) → 후보 순서 섞기", "233,304", "Transformer 학습"],
+  ["validation 앞 절반", "validation 기간 1pos4neg의 <b>노출(impression)</b>을 (노출 시각, impression_id) 순으로 줄 세워 앞 50%", "122,560", "① best epoch 고르기 (Top-1) ② λ · μ 고르기"],
+  ["test", "같은 줄에서 뒤 50%. 한 노출이 양쪽에 나뉘지 않게 노출 단위로 자름", "122,680", "마지막에 한 번만 채점"]], num_from=99, wrap=True)}
+<p class="cap">나누는 코드는 여민 <code>split_validation.py</code>(22028ba)예요. R · V1은 SID 중복으로 빠지는 행이 조금 달라서 validation 122,454 · 122,549행, test 122,573 · 122,668행이에요. test는 어떤 값을 고르는 데도 쓰지 않았어요.</p>
+
+<h3>B. 후보 특징: 인기(logpop)와 나이(logage)</h3>
+{table(["특징", "정의", "계산"],
+ [["logpop", "log(1 + 노출 직전 24시간 동안 그 후보 기사가 클릭된 횟수)", "train + validation behaviors의 <code>article_ids_clicked</code>를 모두 모아, 클릭 시각 = 그 행의 노출 시각으로 둠. 노출 시각 T의 후보마다 [T − 24h, T) 안의 클릭 수를 셈 (T와 같은 시각은 빼서 지금 노출의 클릭은 안 들어감)"],
+  ["logage", "log(1 + 노출 시각 − 발행 시각, 시간 단위)", "발행 시각은 <code>articles.parquet</code>의 <code>published_time</code>. 발행이 노출보다 늦으면 0"]], num_from=99, wrap=True)}
+<p class="cap">전체 사용자의 클릭이고 노출만 된 것(inview)은 세지 않아요. 노출 이전 정보만 쓰므로 실제 서비스에서도 그 순간 알 수 있는 값이에요. 클릭 기록이 train 노출 시작(5/18)부터라 train 첫 24시간 행은 적게 세져요(test는 해당 없음). 6장(나중에 더하기)과 7장(함께 학습)이 <b>같은 규칙</b>으로 계산해요(<code>popularity_fusion.py</code>, <code>add_candidate_features.py</code>).</p>
+
+<h3>C. 나중에 더하기 (6장) — 재학습 없음</h3>
+<div class="flow">
+<div class="step"><b>SID만으로 학습</b><p>여민 Transformer + V1 설정. 손실 = 후보 5개 점수 softmax → CE</p><span class="tag tr">train</span></div>
+<div class="step"><b>best epoch</b><p>epoch마다 Top-1을 재서 가장 높은 checkpoint 저장 (최대 30, 5번 연속 못 넘으면 종료)</p><span class="tag va">validation 앞 절반</span></div>
+<div class="step"><b>점수 저장</b><p>best checkpoint로 후보마다 s = log P(c1) + log P(c2|c1) + log P(c3|c1,c2)</p><span class="tag va">validation</span> <span class="tag te">test</span></div>
+<div class="step"><b>λ · μ 고르기</b><p>s + λ·logpop + μ·logage 를 130개 조합으로 채점, Top-1 최대 선택</p><span class="tag va">validation 앞 절반</span></div>
+<div class="step"><b>test 한 번</b><p>고른 λ · μ로 Top-1 · AUC · MRR · nDCG@5</p><span class="tag te">test</span></div>
+</div>
+{table(["항목", "값"],
+ [["λ 후보 (13개)", "0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10"],
+  ["μ 후보 (10개)", "−5, −3, −2, −1, −0.5, −0.2, 0, 0.2, 0.5, 1 (음수 = 최근 기사 우대)"],
+  ["고르는 기준", "validation 앞 절반 Top-1이 가장 높은 조합. 같으면 |λ|, |μ|가 작은 쪽"],
+  ["고른 값", "9번 모두 λ = 5. μ = −1 (7번), −2 (V1 · R seed 2026)"],
+  ["기준선", "인기만 = logpop만으로 채점, 모델만 = s만 (λ = μ = 0)"],
+  ["동점 처리", "정답이 동점 k개 안이면 Top-1 = 1/k, 순위는 동점 안 평균 (인기만은 클릭 0 동점이 많아서)"],
+  ["코드", "<code>5_predict_val.sh</code> (validation 점수) → <code>popularity_fusion.py --with-age</code>"]], num_from=99, wrap=True)}
+<p class="cap">Transformer 가중치는 하나도 바꾸지 않아요. 학습된 점수 위에 두 숫자(λ, μ)만 validation에서 정해 더해요.</p>
+
+<h3>D. 함께 학습 (7장) — 우리 패치</h3>
+<div class="flow">
+<div class="step"><b>특징 붙이기</b><p>1pos4neg 세 파일에 후보 5개와 같은 순서로 <code>candidate_logpop</code> · <code>candidate_logage</code> 열 추가 (B와 같은 규칙, 새 폴더)</p><span class="tag tr">train</span> <span class="tag va">validation</span> <span class="tag te">test</span></div>
+<div class="step"><b>점수에 더해서 학습</b><p>후보 점수 = SID 점수 + w1·logpop + w2·logage. 손실은 그대로 softmax → CE</p><span class="tag tr">train</span></div>
+<div class="step"><b>best epoch</b><p>위 점수로 Top-1, C와 같은 규칙</p><span class="tag va">validation 앞 절반</span></div>
+<div class="step"><b>test 한 번</b><p>같은 식으로 채점 (SID 점수만도 <code>sid_score</code>로 따로 저장)</p><span class="tag te">test</span></div>
+</div>
+{table(["항목", "w도 같이 학습", "w 고정 (보고서 숫자)"],
+ [["w 시작값", "5, −1 (C에서 고른 값)", "5, −1"],
+  ["w 학습", "AdamW, lr 0.01, weight decay 0", "lr 0 → 끝까지 5, −1"],
+  ["Transformer", "V1 설정 그대로: history 50, d256 · 8 head · 2층, lr 5e-5, wd 0, dropout 0, batch 128, fp32", "같음"],
+  ["gradient clip", "1.0, Transformer에만 (w는 제외)", "같음"],
+  ["결과", "epoch 1에 w → 0.78, −0.09, validation 하락 → 중단", "H · R · V1 seed 42 끝까지"]], num_from=99, wrap=True)}
+<p class="cap">코드: 여민 Transformer(22028ba)를 복사한 폴더에 <code>transformer_features.patch</code>를 적용(데이터 로더 · 모델 점수 · optimizer 그룹 · 예측 4개 파일). 특징 옵션을 끄면 원래 코드와 loss · validation Top-1 · test 점수가 비트 단위로 같음을 CPU에서 확인했어요. 실행은 <code>8_transformer_features.sh</code>(고정은 <code>FEATURE_LR=0</code>). 여민 저장소는 건드리지 않았어요.</p>
+<div class="note"><b>C와 D의 차이는 한 가지예요.</b> 최종 점수 식(SID 점수 + 5·logpop − 1·logage)은 같고, Transformer가 학습할 때 인기 · 나이 항이 <b>있었느냐</b>만 달라요. C는 SID만으로 학습한 뒤 더하고, D는 더한 상태로 학습해요.</div>
+
+<h3>E. 공개 TIGER 재현 구현 (8장)</h3>
+{table(["", "공개 구현 그대로", "우리 데이터에 맞춘 것"],
+ [["모델", "EncoderDecoderRetrievalModel (T5 인코더–디코더), d384 · 6 head · 4층 · d_ff 1024, SEP 토큰, level별 출력 head, 사용자 토큰 없음, dropout 0.1", "level별 코드북 크기: 공개 구현은 같은 크기 하나 → 512 (우리 c1 25 · c2 128 · c3 512 중 최대)"],
+  ["입력 · 정답", "history 최근 20개 기사의 SID를 토큰으로 나열 → 다음 기사 SID (c1, c2, c3) 생성. c4(중복 구분 번호)는 모델이 입력 · 정답에서 뺌", "SID: 공개 구현의 RQ-VAE 대신 우리 SID(V1 · H · R)를 그대로 넣음"],
+  ["학습 데이터", "—", "1pos4neg 만들기 전 train 시퀀스에서, 노출마다 클릭된 기사 하나하나를 정답으로 (오답 없음). history가 빈 예시는 뺌"],
+  ["손실 · 최적화", "level별 CE 합 (teacher forcing), AdamW lr 1e-3 · wd 1e-4, batch 640, inverse-sqrt 스케줄러(warmup 10,000), gradient clip 없음, fp32", "—"],
+  ["학습 길이 · 선택", "—", "우리 Transformer와 같게: 최대 30 epoch, patience 5, validation 앞 절반 Top-1로 best"],
+  ["평가", "공개 구현: 전체 기사 대상 beam search Recall@K", "우리 1pos4neg 후보 5개를 같은 head로 log P(c1) + log P(c2|c1) + log P(c3|c1,c2) 합 → 가장 높은 후보. \"c1만으로 채점\" = 첫 항만"]], num_from=99, wrap=True)}
+<p class="cap">코드: <code>7_tiger_reference.sh</code> → <code>experiments/eventc2_tiger_reference_v1/run_reference.py</code>. 공개 구현의 <code>modules/model.py</code> · <code>data/schemas.py</code> · <code>modules/scheduler/</code>를 바이트 단위로 같게 복사해 썼어요. 공개 구현의 학습 스크립트는 Amazon 데이터만 지원해서, 데이터 로더와 학습 루프는 우리가 썼어요. 그래서 "논문 TIGER와 같다"가 아니라 "TIGER 방식(생성형 학습)의 대표 공개 구현을 우리 데이터에 적용"이라고 봐야 해요.</p>
+<p><b>출처</b></p>
+<ul class="ref-list">
+<li>TIGER 논문: S. Rajput 외, <i>Recommender Systems with Generative Retrieval</i>, NeurIPS 2023 (arXiv:2305.05065). 저자들의 공식 코드는 공개되지 않았어요.</li>
+<li>사용한 구현: EdoardoBotta, <i>RQ-VAE-Recommender</i> — github.com/EdoardoBotta/RQ-VAE-Recommender, 커밋 957d32b, MIT 라이선스. 비공식 PyTorch 재현 구현이고, 우리 <code>RQVAE/</code> 코드도 이 저장소에서 가져왔어요.</li>
+<li>여민 코드: github.com/baekyeomin/SID_Project, 커밋 22028ba (RQ-VAE · SID 생성 · Transformer · split).</li>
+</ul>
 </main></body></html>
 """
 OUT.write_text(html, encoding="utf-8")
