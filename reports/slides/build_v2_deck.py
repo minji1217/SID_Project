@@ -15,7 +15,7 @@ from rakko import (KIND, MARGIN, WARNINGS, Deck, arrow, box, check, chip, dot, f
                    table, text, text_width)
 
 OUT = Path(__file__).resolve().parent / "v2_재실험_결과.pptx"
-TOTAL = 14
+TOTAL = 18
 FOOT = "기준: 여민 코드 22028ba + 우리 설정 · Transformer seed 42 · 123 · 2026 · 보고서 v2_재실험_결과_3seed.html"
 CH = {"01": "실험 구성", "02": "RQ-VAE · SID", "03": "Transformer 결과", "04": "진단", "05": "인기 · 나이",
       "06": "TIGER 비교", "07": "정리"}
@@ -104,6 +104,29 @@ def stepcard(s, name, x, y, w, h, no, title, desc, tags):
 
 DATA = {"train": "green", "validation": "blue", "test": "amber"}
 
+
+def line_chart(s, name, x, y, w, h, xs, ys, ymin, ymax, ticks, color="H", hi=None, xlabel="", fmt="{:.2f}"):
+    """x 범주를 같은 간격으로 놓은 꺾은선. hi = 강조할 x 위치(인덱스)."""
+    L, B = 56, 64
+    px, pw, ph = x + L, w - L - 12, h - B
+    X = lambda i: px + i / (len(xs) - 1) * pw
+    Y = lambda v: y + ph - (v - ymin) / (ymax - ymin) * ph
+    for t in ticks:
+        hline(s, f"{name} grid {t}", px, Y(t), pw, color="hairline-soft")
+        text(s, f"{name} tick {t}", x, Y(t) - 14, L - 10, 28, f"{t:g}", "footer", "muted", align="r")
+    for i, lab in enumerate(xs):
+        text(s, f"{name} x {lab}", X(i) - 32, y + ph + 8, 64, 28, str(lab), "footer", "steel", align="c")
+    text(s, f"{name} x label", px, y + ph + 34, pw, 28, xlabel, "footer", "steel", align="c")
+    arrow(s, f"{name} line", [(X(i), Y(v)) for i, v in enumerate(ys)], color=COL[color], width_pt=2.5, head=False)
+    for i, v in enumerate(ys):
+        big = hi is not None and i == hi
+        dot(s, f"{name} point {xs[i]}", X(i), Y(v), 9 if big else 5, fill=COL[color] if big else "canvas",
+            line=COL[color], line_w=2)
+    if hi is not None:
+        text(s, f"{name} highlight", X(hi) - 70, Y(ys[hi]) - 44, 140, 30, fmt.format(ys[hi]) + "%", "caption",
+             "ink", align="c", weight=700)
+    hline(s, f"{name} axis", px, y + ph, pw, color="steel", width_px=2)
+
 # ════════ 1. 표지 ════════
 s = d.new("v2 재실험 결과 보고. 숫자는 reports/v2_재실험_결과_3seed.html 과 같다.")
 text(s, "Deck label", MARGIN, 300, 1200, 32, "SID Project · v2 재실험 결과", "chapter", "brand-blue-deep")
@@ -124,12 +147,12 @@ text(s, "Title", MARGIN, 112, 1728, 72, "목차", "title", "ink", anchor="m")
 text(s, "Subtitle", MARGIN, 192, 1728, 40, "실험 구성부터 결론까지 일곱 부분", "subtitle", "steel", anchor="m")
 hline(s, "Header rule", MARGIN, 256, 1728)
 agenda = [("01", "실험 구성", "V1 · H · R은 무엇이 다른가", "3–4"),
-          ("02", "RQ-VAE · SID", "코드북 사용과 새 기사 붙이기", "5–6"),
-          ("03", "Transformer 결과", "seed 3개 test 성능", "7"),
-          ("04", "진단", "어디서 막히나", "8"),
-          ("05", "인기 · 나이", "나중에 더하기 vs 함께 학습", "9–11"),
-          ("06", "TIGER 비교", "공개 재현 구현과 비교", "12"),
-          ("07", "정리", "결론과 다음 단계", "13")]
+          ("02", "RQ-VAE · SID", "모델 품질과 새 기사 붙이기", "5–7"),
+          ("03", "Transformer 결과", "seed 3개 test 성능", "8"),
+          ("04", "진단", "어디서 막히나", "9"),
+          ("05", "인기 · 나이", "계산 · 고르기 · 함께 학습", "10–15"),
+          ("06", "TIGER 비교", "공개 재현 구현과 비교", "16"),
+          ("07", "정리", "결론과 다음 단계", "17")]
 for i, (no, name, q, pg) in enumerate(agenda):
     col, row = (0, i) if i < 4 else (1, i - 4)
     x, y = [132, 945][col], 330 + row * 125
@@ -173,34 +196,57 @@ text(s, "Takeaway", MARGIN, 860, 1728, 40,
      "body", "charcoal", one_line=True)
 
 # ════════ 5. RQ-VAE ════════
-s = d.new("R의 Q2 코드 사용: seed 42에서 59개, seed 123에서 93개 (128개 중). H s123·s2026은 기존 ver2 모델.")
+s = d.new("RQ-VAE는 seed 42 모델 하나로 비교. SID도 이 모델로 만들었고, Transformer seed 3개는 모두 같은 SID를 씀.")
 d.frame(s, "02", CH["02"], "R은 Q2 코드 128개 중 절반 정도만 쓴다",
         "H는 128개 모두 사용 · 복원 손실은 R이 약 0.9% 높고 늦게 수렴한다")
 sub(s, "Chart caption", MARGIN, 330, 800, "1. Train 기사의 c2 코드 종류 (128개 중)")
-bars = [("H s42", "H", 128), ("H s123", "H", 128), ("H s2026", "H", 128), ("R s42", "R", 59), ("R s123", "R", 93)]
+bars = [("H s42", "H", 128), ("R s42", "R", 59)]
 X0, XW = 250, 560
 for i, (lab, n, v) in enumerate(bars):
-    y = 400 + i * 74
+    y = 440 + i * 100
     text(s, f"C2 use label {lab}", MARGIN, y, 140, 44, lab, "table", "charcoal", anchor="m", weight=600)
     rect(s, f"C2 use bar {lab}", X0, y + 6, XW * v / 128, 32, fill=COL[n], radius=6)
     text(s, f"C2 use value {lab}", X0 + XW * v / 128 + 12, y, 80, 44, str(v), "table", "ink", anchor="m", weight=700)
 for t in (0, 32, 64, 96, 128):
-    text(s, f"C2 use tick {t}", X0 + XW * t / 128 - 30, 776, 60, 28, str(t), "footer", "muted", align="c")
-hline(s, "C2 use axis", X0, 770, XW, color="steel", width_px=2)
-text(s, "C2 use note", MARGIN, 814, 800, 28, "H s123 · s2026은 기존 ver2 모델", "footer", "muted")
+    text(s, f"C2 use tick {t}", X0 + XW * t / 128 - 30, 656, 60, 28, str(t), "footer", "muted", align="c")
+hline(s, "C2 use axis", X0, 650, XW, color="steel", width_px=2)
+text(s, "C2 use note", MARGIN, 700, 800, 28, "Train 기사 10,419개 · RQ-VAE seed 42", "footer", "muted")
 RX = 1010
 sub(s, "Table caption", RX, 330, 814, "2. RQ-VAE 학습 (validation 복원 손실 최소 checkpoint)")
 table(s, "RQ table", RX, 392, [200, 260, 170, 184], 60,
       [["모델", "best_rec", "best epoch", "끝난 epoch"],
-       ["H s42", "0.150854", "190", "390"], ["R s42", "0.152190", "300", "500"], ["R s123", "0.152124", "470", "670"]],
+       ["H s42", "0.150854", "190", "390"], ["R s42", "0.152190", "300", "500"]],
       align=["l", "r", "r", "r"], bold_cols=(0,))
-sub(s, "Cause heading", RX, 666, 814, "원인으로 보이는 것", color="ink", size=24)
-bullets(s, "Cause list", RX, 712, 814, 200,
+sub(s, "Cause heading", RX, 620, 814, "원인으로 보이는 것", color="ink", size=24)
+bullets(s, "Cause list", RX, 666, 814, 200,
         ["학습 전 **r1 = h − Q1[카테고리]**의 사건 평균으로 Q2를 KMeans 초기화",
          "그때 Q1은 랜덤이고 h보다 약 2.5배 커서 중심이 카테고리 쪽으로 몰림 → 많은 코드가 끝까지 안 쓰임"],
         "caption", gap=12)
 
-# ════════ 6. SID 생성 ════════
+# ════════ 6. 처음 보는 기사로 본 모델 품질 ════════
+s = d.new("compare_ver1_ver2.py, 학습 코드 evaluate()와 같은 계산. 자기 검증(학습 기록 valid rec와 다시 잰 값) 차이는 H · R 모두 1e-5 수준. "
+          "H s42는 11/17 비교의 ver2 s42와 숫자가 완전히 같음(같은 모델). SID는 기사마다 가장 가까운 코드(학습 때와 같은 방식)라 최종 SID와 다름.")
+d.frame(s, "02", CH["02"], "R은 모델 자체가 Q2를 덜 쓰고 SID가 더 겹친다",
+        "세 모델이 모두 처음 보는 기사 2,741개로 같은 방식으로 다시 평가 (가장 가까운 코드 SID)")
+table(s, "Quality table", MARGIN + 100, 316, [480, 260, 260, 260, 268], 54,
+      [["지표 (RQ-VAE seed 42)", "V1 (예전 UNI)", "H", "R", "좋은 방향"],
+       ["재구성 손실", "0.152497", "**0.150848**", "0.152186", "낮을수록"],
+       ["collision rate", "**12.22%**", "13.39%", "19.30%", "낮을수록"],
+       ["고유 SID 수", "**2,543**", "2,522", "2,409", "높을수록"],
+       ["Q2 사용 (128개 중)", "128", "128", "[[59]]", "높을수록"],
+       ["Q3 사용 (512개 중)", "496", "485", "481", "높을수록"],
+       ["codebook = commitment 손실", "0.491", "0.526", "0.624", "낮을수록"]],
+      align=["l", "r", "r", "r", "r"], bold_cols=(0,), cell_colors={(4, 3): "brand-blue-200"})
+sub(s, "Set heading", MARGIN, 724, 820, "평가한 기사 2,741개", color="ink", size=24)
+bullets(s, "Set list", MARGIN, 770, 820, 180,
+        ["새 전처리의 validation-only = V1 validation 3,122개 − 새 전처리에서 Train이 된 381개",
+         "세 모델 모두 학습에 안 쓴 기사라 공정한 비교"], "caption", gap=10)
+sub(s, "Read heading", 1000, 724, 824, "읽는 법", color="ink", size=24)
+bullets(s, "Read list", 1000, 770, 824, 180,
+        ["**R의 Q2 감소는 사건 배정 전, 모델 자체**에서 이미 생김",
+         "복원은 H가 가장 좋고, R은 V1 수준 · 그래도 Transformer Top-1은 H와 비슷"], "caption", gap=10)
+
+# ════════ 7. SID 생성 ════════
 s = d.new("R1 코드에 H checkpoint를 넣으면 H와 같은 사건에 100% 붙음 → 코사인은 둘 다 h로 계산됨을 확인. H와 R은 모델이 달라 실제로는 55%만 같은 사건.")
 d.frame(s, "02", CH["02"], "새 기사는 89%가 h 코사인으로 사건에 붙는다",
         "validation-only 기사 2,741개가 Train 사건에 붙는 순서와 건수 (H · R)")
@@ -303,6 +349,69 @@ text(s, "Choice line", MARGIN, 790, 1728, 40,
      "[[고른 값]]  9번(실험 3 × seed 3) 모두 λ = 5 · μ는 −1(7번) 또는 −2(2번) — Transformer 가중치는 하나도 바꾸지 않는다",
      "body", "charcoal", one_line=True)
 
+# ════════ 9-1. 인기 · 나이 계산 (실제 test 노출) ════════
+s = d.new("클릭 기록 장부 = train·validation behaviors 전체에서 (article_ids_clicked의 기사, 그 행의 impression_time). 480,566건, 클릭된 기사 3,080개. "
+          "1pos4neg 행마다 T = 그 행의 impression_time, 후보마다 장부에서 [T−24h, T) 기록 수. T와 같은 시각(지금 노출의 클릭)과 이후는 제외. "
+          "예시 노출 184583062 (사용자 2141956, T = 2023-05-30 10:40:07): 정답 9788095의 장부 기록 243건 중 창 안 75건, T와 같은 시각 1건, 나머지는 T 이후.")
+d.frame(s, "05", CH["05"], "인기 · 나이는 노출 직전 정보만으로 계산한다",
+        "장부는 behaviors 전체에서 한 번, 계산은 1pos4neg 행마다 — 실제 test 노출로 본 예시")
+sub(s, "Ledger heading", MARGIN, 330, 760, "1. 클릭 기록 장부 (behaviors 전체, 한 번)")
+chip(s, "Ledger from", MARGIN, 384, "behaviors 한 행: 사용자 · 노출 시각 · 클릭한 기사", "gray", h=44, size=19)
+arrow(s, "Ledger arrow", [(MARGIN + 250, 432), (MARGIN + 250, 470)], width_pt=2.5)
+chip(s, "Ledger to", MARGIN, 476, "(기사, 노출 시각) × 클릭한 기사 수", "blue", h=44, size=19)
+text(s, "Ledger note", MARGIN + 470, 476, 330, 44, "→ 480,566건", "body-strong", "ink", anchor="m")
+sub(s, "Window heading", MARGIN, 560, 760, "2. 1pos4neg 행마다: T 직전 24시간만 센다")
+TX0, TX1 = MARGIN + 20, MARGIN + 700
+rect(s, "Window band", TX0 + 60, 636, 520, 40, fill="brand-blue-200", radius=6)
+text(s, "Window label", TX0 + 60, 636, 520, 40, "세는 구간 [T − 24시간, T)", "caption", "brand-blue-deep", align="c",
+     anchor="m", weight=700)
+hline(s, "Window axis", TX0, 690, TX1 - TX0, color="steel", width_px=2)
+for lab, xx in [("T − 24시간", TX0 + 60), ("T = 노출 시각", TX0 + 580)]:
+    rect(s, f"Window tick {lab}", xx - 1, 682, 2, 16, fill="steel")
+    text(s, f"Window tick label {lab}", xx - 90, 702, 180, 28, lab, "footer", "steel", align="c")
+text(s, "Window excluded", TX0 + 596, 628, 216, 56, ["T와 같은 시각,", "그 이후는 제외"], "footer", "k-red-text", weight=600)
+bullets(s, "Calc list", MARGIN, 760, 780, 160,
+        ["**logpop** = ln(1 + 그 구간 클릭 수)  ·  **logage** = ln(1 + T − 발행 시각, 시간)",
+         "T 이전 기록만 써서 실제 서비스에서도 그 순간 알 수 있는 값"], "caption", gap=10)
+RX = 940
+sub(s, "Example heading", RX, 330, 884, "실제 test 노출 184583062 · T = 2023-05-30 10:40", color="ink", size=24)
+table(s, "Example table", RX, 384, [170, 90, 150, 130, 210, 134], 58,
+      [["후보 기사", "정답", "24시간 클릭", "logpop", "발행 후", "logage"],
+       ["8558684", "", "0", "0.00", "약 2년", "9.74"],
+       ["9788095", "✓", "75", "4.33", "1시간", "0.70"],
+       ["9428643", "", "51", "3.95", "약 8개월", "8.64"],
+       ["9529776", "", "12", "2.56", "약 6개월", "8.38"],
+       ["9080070", "", "4", "1.61", "약 1.3년", "9.37"]],
+      highlight_rows=(2,), align=["l", "c", "r", "r", "r", "r"])
+text(s, "Example note", RX, 750, 884, 90,
+     ["정답은 **T 1시간 전에 나온 기사**, 발행 후 1시간 만에 75번 클릭됨",
+      "오답 넷은 몇 달 ~ 2년 된 기사 (EB-NeRD 화면에는 옛 기사도 섞여 뜸)"], "caption", "charcoal", gap=6)
+
+# ════════ 9-2. λ · μ 고르기 ════════
+s = d.new("λ 후보 13개: 0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10. μ 후보 10개: −5, −3, −2, −1, −0.5, −0.2, 0, 0.2, 0.5, 1. "
+          "조합마다 validation 앞 절반 전체 행에서 최종 점수 1등 후보가 정답인 비율(동점이면 1/k)을 재고, 가장 높은 조합을 고름. 같으면 |λ|, |μ|가 작은 쪽. "
+          "예시 노출 184583062 (SID 점수 예시: 정답 −10.5, 9428643 −8.8): μ=0에서 λ=0·1·3은 오답, λ=5에서 11.15 vs 10.95로 정답, μ=−1이면 10.45 vs 2.31.")
+d.frame(s, "05", CH["05"], "λ · μ는 validation에서 130개 조합 중 골랐다",
+        "학습하지 않고, validation 앞 절반 122,560행에서 Top-1이 가장 높은 조합을 test에 한 번만 적용")
+steps_ = [("후보 값", "λ 13개 (0 ~ 10) × μ 10개 (−5 ~ 1) = **130개 조합**"),
+          ("채점", "조합마다 validation 122,560행 **전체**를 최종 점수로 채점 → Top-1"),
+          ("선택", "Top-1이 가장 높은 조합 (같으면 |λ|, |μ|가 작은 쪽)"),
+          ("적용", "고른 값을 test 122,680행에 **한 번만** — test로는 아무것도 안 고름")]
+for i, (h_, t_) in enumerate(steps_):
+    y = 340 + i * 112
+    text(s, f"Pick step {i+1} title", MARGIN, y, 760, 36, f"{i+1}. {h_}", "card-title", "brand-blue-deep", size=26,
+         weight=700, one_line=True)
+    text(s, f"Pick step {i+1} body", MARGIN, y + 42, 760, 64, t_, "body", "charcoal")
+text(s, "Pick result", MARGIN, 812, 780, 80,
+     ["[[결과]]  9번(실험 3 × seed 3) 모두 **λ = 5**,", "μ는 **−1** (7번) 또는 −2 (V1 · R seed 2026)"], "body", "charcoal", gap=4)
+sub(s, "Curve heading", 960, 330, 864, "H seed 42 · μ = 0일 때 λ별 validation Top-1 (%)", color="ink", size=24)
+LAMS_ = ["0", "0.05", "0.1", "0.2", "0.3", "0.5", "0.75", "1", "1.5", "2", "3", "5", "10"]
+VAL_H = [27.58, 28.84, 30.01, 32.16, 33.89, 36.65, 38.93, 40.33, 41.91, 42.67, 43.14, 43.27, 43.00]
+line_chart(s, "Lambda curve", 960, 390, 864, 420, LAMS_, VAL_H, 25, 45, [25, 30, 35, 40, 45], hi=11,
+           xlabel="λ (인기 가중치) · 0 = 모델만, 클수록 인기만에 가까움")
+text(s, "Curve note", 1016, 846, 808, 60,
+     ["λ = 3 ~ 10에서 평평 → 5 근처면 결과가 거의 같음 · μ까지 고르면 43.47% (seed 123)"], "caption", "steel")
+
 # ════════ 10. 결합 결과 ════════
 s = d.new("결합+나이 − 인기만, seed 42/123/2026: V1 +0.47/+0.79/+0.90, H +1.28/+1.21/+1.44, R +1.26/+1.38/+1.12.")
 d.frame(s, "05", CH["05"], "인기 · 나이를 더하면 44.2%, SID 몫은 새 SID가 약 2배",
@@ -344,6 +453,33 @@ text(s, "Joint table note", 960, 666, 864, 28, "괄호 = 인기만 대비 SID가
 text(s, "Takeaway", 960, 740, 864, 120,
      ["[[결론]]  w는 test와 비슷한 **validation에서** 정한다",
       "→ SID만 학습하고 인기 · 나이는 나중에 더하는 방식을 유지"], "body", "charcoal", gap=8)
+
+# ════════ 11-1. 왜 학습에 넣으면 안 되나 ════════
+s = d.new("최종 점수(예시 노출, SID 점수는 예시) 8558684 −19.24, 9788095 10.45, 9428643 2.31, 9529776 −5.48, 9080070 −12.52. "
+          "정답이 9788095면 softmax 확률 0.9997, loss 0.0003. 정답이 9080070이었다면 확률 ≈ 0, loss ≈ 23. "
+          "w 고정 버전 validation loss 3.27 (SID만 학습할 때 1.4 안팎) → loss가 큰 행이 학습을 끌고 감.")
+d.frame(s, "05", CH["05"], "학습에 넣으면 Transformer가 배울 신호가 사라진다",
+        "학습 중 점수 = s + 5 · logpop − 1 · logage → softmax → cross entropy (같은 예시 노출, SID 점수는 예시)")
+table(s, "Mech table", MARGIN, 340, [210, 200, 210], 56,
+      [["후보", "s (예시)", "최종 점수"],
+       ["8558684", "−9.5", "−19.24"], ["9788095", "−10.5", "**10.45**"], ["9428643", "−8.8", "2.31"],
+       ["9529776", "−9.9", "−5.48"], ["9080070", "−11.2", "−12.52"]],
+      align=["l", "r", "r"], cell_colors={(2, 2): "brand-blue-200", (5, 2): "k-red-fill"})
+CX = 800
+for i, (h_, items) in enumerate([
+        ("1. 정답이 인기 기사 (9788095)", ["정답 확률 **0.9997** → loss **0.0003**",
+                                         "인기가 이미 맞혀서 **Transformer가 배울 게 없음**"]),
+        ("2. 정답이 클릭 4번 · 1.3년 된 기사였다면 (9080070)", ["정답 확률 ≈ 0 → loss ≈ **23**",
+                                                         "그 기사 SID 점수를 20 넘게 올려야 함 → **기사 외우기**"])]):
+    y = 340 + i * 190
+    text(s, f"Case {i+1} title", CX, y, 1024, 36, h_, "card-title", "brand-blue-deep", size=26, weight=700, one_line=True)
+    bullets(s, f"Case {i+1} list", CX, y + 48, 1024, 120, items, "body", gap=10)
+hline(s, "Mech rule", CX, 724, 1024, color="hairline")
+text(s, "Mech result", CX, 744, 1024, 150,
+     ["[[결과]]  train 정답은 학습에 나온 기사라 외우기가 통하지만, test 정답은 **98%가 새 기사**",
+      "H test 42.92% = 인기만 42.93% (나중에 더하기 44.21%)",
+      "w도 학습하게 두면 epoch 1에 인기 가중치 5 → 0.78로 줄며 더 나빠짐"], "body", "charcoal", gap=10)
+text(s, "Mech caption", MARGIN, 690, 620, 60, "빨간 칸 = 정답이 그 기사였다면 loss가 커지는 경우", "footer", "steel")
 
 # ════════ 12. TIGER ════════
 s = d.new("공개 TIGER test (seed 42): V1 16.69% / AUC 0.478, H 17.30% / 0.483, R 17.77% / 0.475. 정답 평균 log P가 오답보다 낮음. "
