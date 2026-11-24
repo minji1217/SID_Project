@@ -250,7 +250,7 @@ code {{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-s
   ["validation-only 기사", "3,122", "2,741", "노출 기사가 Train으로 옮겨가서"],
   ["validation-only 기사가 붙는 곳", "전처리에서 validation 기사끼리도 사건을 새로 만듦 → <b>Train 사건에 붙은 기사 32개(1%)</b>, 나머지 3,090개는 새 사건 3,001개(대부분 기사 1개짜리)", "<b>모두 Train 사건에 붙음</b>: Jaccard ≥ 0.3 (72h) → 없으면 h 코사인 최대 (72h) → 없으면 전체 사건", "새 기사의 c2가 Train 기사와 같은 사건 코드를 쓰도록 (교수님 결정, 갱신 정책 B)"],
   ["validation-only 기사의 C2", "Train 사건이면 그 사건 C2, 새 사건이면 그 사건(사실상 기사 자신)의 h 평균 → 가장 가까운 Q2", "붙은 Train 사건의 C2를 물려받음", "위 규칙 변경"],
-  ["처음 보는 개체의 IDF", "해당 없음 (SID 생성 단계에서 개체를 비교하지 않음)", "log(N+1)+1, N = Train 기사 수 (entity_idf_meta.json)", "SID 생성 단계의 Jaccard 계산을 Train과 같은 IDF로"]], num_from=99, wrap=True)}
+  ["처음 보는 개체의 IDF", "log(N+1)+1, N = Train 기사 수 — 전처리 안에서 새 기사를 사건에 배정할 때 계산", "<b>같은 식</b>. 새 기사를 SID 생성 단계(여민 코드)에서 붙이므로, 전처리가 N을 <code>entity_idf_meta.json</code>에 저장해 넘겨줌", "새 기사를 붙이는 단계가 전처리 → SID 생성으로 옮겨가서 (규칙은 그대로)"]], num_from=99, wrap=True)}
 <p class="cap">Train 사건을 만드는 규칙(IDF 가중 Jaccard ≥ 0.3, 72시간, 빈도 상위 1% 개체 제외)은 두 전처리가 같아요. 새 코드에서 고친 개체 함수 버그(<code>build_baseline_entity_set</code>의 return 위치)는 파이프라인에서 쓰지 않는 함수라 V1 SID에는 영향이 없었어요. 그래서 V1 → H의 차이(약 +1%p)는 <b>Train 기사에 노출 기사를 넣은 것</b>과 <b>새 기사를 Train 사건에 붙여 C2를 물려받게 한 것</b>을 합친 효과예요. 둘을 따로 떼어 본 실험은 아직 없어요.</p>
 <div class="note"><b>V1 숫자가 예전 기록(27.07%)과 다른 이유</b> — 예전 숫자는 후보를 섞기 전 데이터(정답이 항상 첫 자리)와 AMP(bf16)로 잰 값이라, 점수 동점이 정답으로 처리되며 부풀려졌어요. 이번엔 섞은 데이터 + fp32라서 V1 기준은 <b>26.16%</b>로 새로 잡았어요.</div>
 
