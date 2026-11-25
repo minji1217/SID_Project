@@ -590,13 +590,13 @@
     <h3>5단계 지도: 어느 표의 어느 부분으로 무엇을 구하나</h3>
     <p>5단계에서 만드는 값은 모두 <b>배정표 S 하나</b>에서 나와요. 아래 그림 다섯 장은 각 식이 <b>어느 행렬의 어느 칸을 쓰는지</b>를 보여 줘요. <span style="color:var(--accent);font-weight:700">파란 칸</span>이 그 식의 재료이고, <span style="color:var(--good);font-weight:700">초록 칸</span>이 그 식으로 구하는 결과예요. 숫자는 지금 고른 후보와 기준 기사로 계산한 실제 값이에요.</p>
     <div class="fig">
-      <div class="scroll"><svg class="w640" id="pm1" viewBox="0 0 860 560" role="img" aria-label="식 11: 배정표의 한 줄 구하기"></svg></div>
+      <div class="scroll"><svg class="w640" id="pm1" viewBox="0 0 860 760" role="img" aria-label="식 11: 배정표의 한 줄 구하기"></svg></div>
       <div class="scroll"><svg class="w640" id="pm15" viewBox="0 0 760 310" role="img" aria-label="S는 명단, h*는 덩어리의 대표 벡터"></svg></div>
       <div class="scroll"><svg class="w640" id="pm2" viewBox="0 0 760 248" role="img" aria-label="식 9: 덩어리 값 구하기"></svg></div>
       <div class="scroll"><svg class="w640" id="pm3" viewBox="0 0 760 240" role="img" aria-label="식 10: 덩어리 중요도 구하기"></svg></div>
       <div class="scroll"><svg class="w640" id="pm4" viewBox="0 0 760 240" role="img" aria-label="덩어리 그래프 구하기"></svg></div>
       <div class="scroll"><svg class="w640" id="pm5" viewBox="0 0 760 230" role="img" aria-label="벌점 세 개"></svg></div>
-      <div class="cap"><b>그림 10.</b> 5단계의 순서예요. ① 기사마다 S의 한 줄을 구해 S(6 × 3)를 채우고(자세한 계산은 그림 10a), 그다음 그림(①→②)처럼 S는 명단일 뿐이라 덩어리마다 대표 벡터가 필요해서, ② S의 한 열로 h′를 모아 덩어리 값 h*를, ③ 같은 열로 γ를 모아 덩어리 중요도 γ*를 구해요(그림 10b). ④ S를 양쪽에 곱해 A를 덩어리 그래프 A*로 줄이고(그림 10d), ⑤ S가 규칙을 지키는지 벌점을 매겨요(8단계 그림 13). ②–④는 지금 후보와 가장 관련 큰 덩어리를 예로 들었어요. h′와 h*의 열 "H1 스, H1 정, H2 스, H2 정"은 덩어리가 아니라 <b>숫자 칸</b>이에요. 헤드 1의 [스포츠, 정치]와 헤드 2의 [스포츠, 정치]를 이어 붙인 4칸이에요. 덩어리는 행(3개)이에요. 날씨 칸이 없는 건 기사 벡터가 처음부터 [스포츠, 정치] 두 칸뿐이라서예요. 날씨 기사는 [0.60, 0.55]처럼 두 칸이 섞인 값으로 나타나요.</div>
+      <div class="cap"><b>그림 10.</b> 5단계의 순서예요. ① 기사마다 S의 한 줄을 구해 S(6 × 3)를 채우고(자세한 계산은 그림 10a), ①의 (마)에서 S가 ŷ까지 가는 큰 길을 먼저 보여 줘요. 그다음 그림(①→②)처럼 S는 명단일 뿐이라 덩어리마다 대표 벡터가 필요해서, ② S의 한 열로 h′를 모아 덩어리 값 h*를, ③ 같은 열로 γ를 모아 덩어리 중요도 γ*를 구해요(그림 10b). ④ S를 양쪽에 곱해 A를 덩어리 그래프 A*로 줄이고(그림 10d), ⑤ S가 규칙을 지키는지 벌점을 매겨요(8단계 그림 13). ②–④는 지금 후보와 가장 관련 큰 덩어리를 예로 들었어요. h′와 h*의 열 "H1 스, H1 정, H2 스, H2 정"은 덩어리가 아니라 <b>숫자 칸</b>이에요. 헤드 1의 [스포츠, 정치]와 헤드 2의 [스포츠, 정치]를 이어 붙인 4칸이에요. 덩어리는 행(3개)이에요. 날씨 칸이 없는 건 기사 벡터가 처음부터 [스포츠, 정치] 두 칸뿐이라서예요. 날씨 기사는 [0.60, 0.55]처럼 두 칸이 섞인 값으로 나타나요.</div>
     </div>
     <div class="tbl"><table>
       <tr><th>값</th><th>식</th><th class="n">모양</th><th>읽는 법</th></tr>
@@ -1420,7 +1420,7 @@ document.getElementById("fig7ccap").innerHTML = "<b>그림 7c.</b> α는 그림 
   function renderSPic(R) {
     var root = document.getElementById("pm1"); if (!root) return; clear(root);
     txt(root, 10, 22, "① 배정표의 한 줄 S" + state.node + " 구하기 (식 11): 기준 기사 " + state.node + "번", { "font-size": 13, "font-weight": 700, "class": "ta" });
-    txt(root, 10, 40, "(가) 이웃 찾기 → (나) 이웃의 h′ 더하기 → (다) W_p의 행마다 곱해 더하기(궁합 점수) → (라) softmax → S의 한 줄. 기사 6개 모두 반복하면 S", { "font-size": 11.5, "class": "tm" });
+    txt(root, 10, 40, "(가) 이웃 찾기 → (나) 이웃의 h′ 더하기 → (다) W_p의 행마다 곱해 더하기(궁합 점수) → (라) softmax → S의 한 줄. 6개 모두 하면 S → (마) ŷ까지", { "font-size": 11.5, "class": "tm" });
     var svg = el("g", { transform: "translate(0, 46)" }, root);
     var i0 = state.node - 1, nb = [i0].concat(neighbors(R.A, i0, false)), sm = R.Ssum[i0];
     var cl = [0, 1, 2].map(function (k) { return clusterLabel[R.dom[k]]; });
@@ -1506,6 +1506,24 @@ document.getElementById("fig7ccap").innerHTML = "<b>그림 7c.</b> α는 그림 
         txt(svg, tx + 40 + k * tcw + tcw / 2 - 1, y + 13, v.toFixed(2), { "text-anchor": "middle", "font-size": 10.5, "font-weight": q === i0 ? 700 : 400, "class": q === i0 ? null : "tm" });
       });
     });
+    // (마) 그다음: S → h*, γ* → AUGRU → MLP → ŷ (root 좌표)
+    var kk = R.gs.indexOf(Math.max.apply(null, R.gs)), yM = 590;
+    var rar = function (x1, y1, x2, y2) { el("path", { d: "M" + x1 + " " + y1 + " L" + x2 + " " + y2, "class": "ln", "stroke-width": 2, "marker-end": "url(#mM)" }, root); };
+    var rbox = function (x, y, w, h, cls, lines) {
+      el("rect", { x: x, y: y, width: w, height: h, rx: 10, "class": cls }, root);
+      lines.forEach(function (t, q) { txt(root, x + w / 2, y + 18 + q * 16, t, { "text-anchor": "middle", "font-size": q ? 11 : 12, "font-weight": q ? 400 : 700, "class": q ? "tm" : null }); });
+    };
+    txt(root, 10, yM - 8, "(마) 그다음: 완성된 S(명단)로 덩어리마다 값을 모아 클릭 확률 ŷ까지", { "font-size": 13, "font-weight": 700, "class": "ta" });
+    rbox(10, yM + 14, 110, 80, "box", ["S (6 × 3)", "누가 어느", "바구니에", "얼마나"]);
+    rbox(150, yM, 240, 50, "box-a", ["② h* = Sᵀh′ (3 × 4): 덩어리 내용", cl[kk] + " = [" + R.Hs[kk].map(function (v) { return v.toFixed(2); }).join(", ") + "]"]);
+    rbox(150, yM + 58, 240, 50, "box-a", ["③ γ* = Sᵀγ (3): 덩어리 중요도", cl.map(function (c, k) { return c + " " + R.gs[k].toFixed(2); }).join(", ")]);
+    rar(122, yM + 46, 146, yM + 26); rar(122, yM + 62, 146, yM + 82);
+    rbox(420, yM + 4, 210, 100, "box", ["6단계 AUGRU", "h* 세 개를 1 → 2 → 3", "순서로 한 번씩 읽고,", "γ*만큼 문을 열어 기억 고치기", "→ 메모 h_s"]);
+    rar(392, yM + 26, 416, yM + 44); rar(392, yM + 82, 416, yM + 64);
+    rbox(660, yM + 4, 190, 100, "cell-out", ["7단계 MLP", "[h_s, h_g, h_t, h_g ⊙ h_t]", "16칸을 이어 붙여 넣기", "→ 클릭 확률 ŷ", "(이 예시 ≈ " + R.score.toFixed(2) + ", 설명용)"]);
+    rar(632, yM + 54, 656, yM + 54);
+    txt(root, 10, yM + 130, "h*는 AUGRU가 읽는 재료(입력 x), γ*는 AUGRU의 문 세기(u에 곱함)예요. ④ A* = SᵀAS(2층 풀링용)와 ⑤ 벌점 3개(학습할 때만)도", { "font-size": 11.5, "class": "tm" });
+    txt(root, 10, yM + 148, "S로 계산하지만 ŷ로 가는 길에는 없어요. 아래 그림들이 ②~⑤를 하나씩 자세히 보여 줘요.", { "font-size": 11.5, "class": "tm" });
   }
   function renderPool(R) {
     var i0 = state.node - 1, me = items[i0], sm = R.Ssum[i0];
