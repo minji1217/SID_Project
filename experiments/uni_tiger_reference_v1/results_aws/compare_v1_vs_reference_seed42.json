@@ -1,0 +1,81 @@
+{
+  "v1": {
+    "num_samples": 122668,
+    "top1_accuracy": 0.2706655362441713,
+    "mrr": 0.5180651569004684,
+    "ndcg@5": 0.6368749346640492,
+    "auc": 0.5787389539244139,
+    "preference_loss": 1.7446236677202553,
+    "positive_probability": 0.24348396683735493
+  },
+  "v1_config": {
+    "NewsEncoderDecoderTransformer.d_model": "256",
+    "NewsEncoderDecoderTransformer.num_heads": "8",
+    "NewsEncoderDecoderTransformer.num_layers": "2",
+    "NewsEncoderDecoderTransformer.d_ff": "1024",
+    "NewsEncoderDecoderTransformer.dropout_rate": "0.0",
+    "NewsEncoderDecoderTransformer.use_sep": "False",
+    "NewsEncoderDecoderTransformer.c4_vocab_size": "28",
+    "NewsSequenceDataset.max_history_length": "50",
+    "train.learning_rate": "5e-05",
+    "train.batch_size": "128",
+    "train.weight_decay": "0.0",
+    "train.seed": "42",
+    "train.num_epochs": "30",
+    "train.early_stopping_patience": "5",
+    "train.train_path": "'datasets/ebnerd/train_sequences_1pos4neg.parquet'",
+    "best_epoch": 1,
+    "selection_metric": "val_top1_accuracy"
+  },
+  "tiger": {
+    "num_samples": 122668,
+    "top1_accuracy": 0.17358235236573516,
+    "mrr": 0.43960024891033794,
+    "ndcg@5": 0.5768807249492417,
+    "auc": 0.48659797176117653,
+    "preference_loss": 4.888991903103879,
+    "positive_probability": 0.1741261301149921
+  },
+  "tiger_diagnostics": {
+    "num_samples": 122668,
+    "top1_accuracy": 0.17358235236573516,
+    "mrr": 0.43960024891033794,
+    "ndcg@5": 0.5768807249492417,
+    "auc": 0.48659797176117653,
+    "preference_loss": 4.888991355895996,
+    "positive_probability": 0.17412611842155457,
+    "level_ce": {
+      "c1": 1.8779476881027222,
+      "c2": 4.934970855712891,
+      "c3": 10.315157890319824
+    },
+    "level_token_accuracy": {
+      "c1": 0.3020755209182509,
+      "c2": 0.0623226921446506,
+      "c3": 0.005013532461603678
+    },
+    "positive_mean_log_prob": -17.128076553344727,
+    "negative_mean_log_prob": -16.792789459228516,
+    "positive_negative_score_gap": -0.33528709411621094,
+    "cumulative_levels": {
+      "c1": {
+        "top1_accuracy": 0.22992141389767504,
+        "mrr": 0.4810828143172357,
+        "ndcg@5": 0.6083786898927369,
+        "auc": 0.5297347311442266
+      },
+      "c1+c2": {
+        "top1_accuracy": 0.23721753024423647,
+        "mrr": 0.48632243127792085,
+        "ndcg@5": 0.6122910072280351,
+        "auc": 0.5321966609058597
+      },
+      "c1+c2+c3": {
+        "top1_accuracy": 0.17358235236573516,
+        "mrr": 0.43960024891033794,
+        "ndcg@5": 0.5768807249492417,
+        "auc": 0.48659797176117653
+      }
+    }
+  }
+}

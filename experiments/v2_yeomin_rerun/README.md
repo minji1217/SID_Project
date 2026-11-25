@@ -102,3 +102,17 @@ python experiments/v2_yeomin_rerun/collect_results.py data/output/fixedcluster_v
 - ③④ H: train 121,209 / validation 앞 절반 72,197 / test 72,298, 정답 첫 자리 비율 0.200~0.201
 - ⑤ H (데이터 일부·1 epoch): 학습·예측·지표까지 정상, history 50, 어휘 크기 자동
 - 1 epoch 모델이라 SID와 지표 값 자체는 의미 없음. 시험용 H 모델에서는 Train 사건 9,794개가 모두 같은 C2 하나를 받았다 → 실제 모델에서 `check_sid.txt`의 "사건 C2 종류"를 꼭 확인
+
+## 인기·나이 함께 학습 (여민 코드 + 우리 패치)
+
+여민에게 요청한 수정을 우리가 `transformer_features.patch`로 구현했다. 여민 저장소와 `~/minji/yeomin_code_22028ba`는 건드리지 않고, `8_transformer_features.sh`가 여민 코드를 `~/minji/yeomin_code_22028ba_features`에 한 번 더 복사해 패치를 적용한다.
+
+- 후보 점수 = SID 점수 + w1·`candidate_logpop` + w2·`candidate_logage`. w는 같이 학습(시작 5, −1 = 재학습 없는 결합에서 validation으로 고른 값, lr 0.01 따로, weight decay 0, gradient clip에서 제외).
+- 패치가 바꾸는 파일: `data/sequence.py`(특징 컬럼 읽기), `modules/model.py`(가중치·점수), `train_transformer.py`(특징 전달·optimizer 그룹·epoch마다 가중치 출력), `predict_sid.py`(특징 전달·`sid_score` 저장).
+- 옵션을 안 켜면 기존과 같다: 같은 데이터·seed로 원래 코드와 loss·validation Top-1·test 점수가 비트 단위로 같았다(2026-11-23, CPU 시험).
+
+```bash
+python experiments/v2_yeomin_rerun/add_candidate_features.py --run h        # 특징 파일 (v1, r 도)
+RUN=h SEED=42 CUDA_VISIBLE_DEVICES=0 nohup bash experiments/v2_yeomin_rerun/8_transformer_features.sh > ~/minji/v2_tffeat_h_s42.log 2>&1 &
+```
+결과: `$V2/transformer_feat/<RUN>_seed<SEED>/test_metrics.json`. 재학습 없는 결합(`popularity_fusion.py --with-age`)의 "결합+나이"와 비교한다.
