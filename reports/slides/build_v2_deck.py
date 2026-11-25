@@ -15,7 +15,7 @@ from rakko import (KIND, MARGIN, WARNINGS, Deck, arrow, box, check, chip, dot, f
                    table, text, text_width)
 
 OUT = Path(__file__).resolve().parent / "v2_재실험_결과.pptx"
-TOTAL = 18
+TOTAL = 19
 FOOT = "기준: 여민 코드 22028ba + 우리 설정 · Transformer seed 42 · 123 · 2026 · 보고서 v2_재실험_결과_3seed.html"
 CH = {"01": "실험 구성", "02": "RQ-VAE · SID", "03": "Transformer 결과", "04": "진단", "05": "인기 · 나이",
       "06": "TIGER 비교", "07": "정리"}
@@ -33,6 +33,23 @@ FUSED = {"V1": [43.41, 43.73, 43.84], "H": [44.21, 44.14, 44.37], "R": [44.23, 4
 GAIN = {n: [f - POP[n] for f in FUSED[n]] for n in RUNS}
 JOINT = {"V1": 42.50, "H": 42.92, "R": 43.07}       # 함께 학습, 가중치 고정, seed 42
 TIGER = {"V1": 16.69, "H": 17.30, "R": 17.77}       # 공개 TIGER, seed 42
+# test 전체 지표 (Top-1 %, AUC, MRR, nDCG@5)
+POP_FULL = {"V1": (42.94, 0.7344, 0.6505, 0.7382), "H": (42.93, 0.7344, 0.6505, 0.7382), "R": (42.97, 0.7347, 0.6508, 0.7384)}
+FUSED_FULL = {  # 결합 + 나이, seed 42 / 123 / 2026
+    "V1": [(43.41, 0.7394, 0.6546, 0.7413), (43.73, 0.7407, 0.6565, 0.7428), (43.84, 0.7398, 0.6566, 0.7428)],
+    "H": [(44.21, 0.7418, 0.6589, 0.7445), (44.14, 0.7419, 0.6588, 0.7445), (44.37, 0.7431, 0.6602, 0.7455)],
+    "R": [(44.23, 0.7438, 0.6599, 0.7454), (44.35, 0.7436, 0.6604, 0.7457), (44.09, 0.7421, 0.6587, 0.7444)]}
+JOINT_FULL = {"V1": (42.50, 0.7342, 0.6485, 0.7368), "H": (42.92, 0.7366, 0.6513, 0.7389), "R": (43.07, 0.7363, 0.6519, 0.7392)}
+TIGER_FULL = {"V1": (16.69, 0.4784, 0.4332, 0.5720), "H": (17.30, 0.4829, 0.4378, 0.5754), "R": (17.77, 0.4750, 0.4371, 0.5746)}
+MODEL42_FULL = {n: (TOP1[n][0], AUC[n][0], MRR[n][0], NDCG[n][0]) for n in ["V1", "H", "R"]}
+
+
+def frow(vals, bold=False):
+    """(Top-1 %, AUC, MRR, nDCG) → 표 칸 4개."""
+    c = [f"{vals[0]:.2f}%", f"{vals[1]:.4f}", f"{vals[2]:.4f}", f"{vals[3]:.4f}"]
+    return [f"**{x}**" for x in c] if bold else c
+
+
 COS_BINS = ["< 0.25", "0.25~0.35", "0.35~0.45", "≥ 0.45"]
 COS_TOP1 = {"H": [4.42, 19.76, 27.37, 31.92], "R": [1.36, 23.38, 26.77, 34.85]}
 
@@ -151,8 +168,8 @@ agenda = [("01", "실험 구성", "V1 · H · R은 무엇이 다른가", "3–4"
           ("03", "Transformer 결과", "seed 3개 test 성능", "8"),
           ("04", "진단", "어디서 막히나", "9"),
           ("05", "인기 · 나이", "계산 · 고르기 · 함께 학습", "10–15"),
-          ("06", "TIGER 비교", "공개 재현 구현과 비교", "16"),
-          ("07", "정리", "결론과 다음 단계", "17")]
+          ("06", "TIGER 비교", "공개 재현 구현과 비교", "16–17"),
+          ("07", "정리", "결론과 다음 단계", "18")]
 for i, (no, name, q, pg) in enumerate(agenda):
     col, row = (0, i) if i < 4 else (1, i - 4)
     x, y = [132, 945][col], 330 + row * 125
@@ -413,9 +430,11 @@ text(s, "Curve note", 1016, 846, 808, 60,
      ["λ = 3 ~ 10에서 평평 → 5 근처면 결과가 거의 같음 · μ까지 고르면 43.47% (seed 123)"], "caption", "steel")
 
 # ════════ 10. 결합 결과 ════════
-s = d.new("결합+나이 − 인기만, seed 42/123/2026: V1 +0.47/+0.79/+0.90, H +1.28/+1.21/+1.44, R +1.26/+1.38/+1.12.")
+s = d.new("결합+나이 − 인기만, seed 42/123/2026: V1 +0.47/+0.79/+0.90, H +1.28/+1.21/+1.44, R +1.26/+1.38/+1.12. "
+          "V1 최고 seed(+0.90)와 H·R 최저 seed(+1.12)가 겹치지 않음. 크게 오른 건 인기 자체의 힘, 봐야 할 건 SID가 보태는 몫. "
+          "나이는 +0.1~0.35%p로 작지만 9번 모두 같은 방향. 인기만 지표는 V1·H 같고 R은 0.7347 / 0.6508 / 0.7384.")
 d.frame(s, "05", CH["05"], "인기 · 나이를 더하면 44.2%, SID 몫은 새 SID가 약 2배",
-        "test Top-1, seed 3개 평균 · 인기만으로도 42.9%를 맞힌다")
+        "test, seed 3개 평균 · 인기만으로도 42.9%를 맞힌다 · AUC · MRR · nDCG도 같은 방향")
 legend(s, "Fusion legend", MARGIN, 320, RUNS)
 vbars(s, "Fusion chart", MARGIN, 370, 900, 500, ["모델만", "인기만", "결합 + 나이"],
       [(n, [mean(TOP1[n]), POP[n], mean(FUSED[n])]) for n in RUNS], 50, [0, 10, 20, 30, 40, 50],
@@ -426,31 +445,34 @@ table(s, "Gain table", GX, 390, [110, 140, 140, 140, 194], 62,
       [["", "seed 42", "seed 123", "seed 2026", "평균"]] +
       [[n] + [f"+{g:.2f}" for g in GAIN[n]] + [f"+{mean(GAIN[n]):.2f}%p"] for n in RUNS],
       highlight_rows=(2, 3), align=["l", "r", "r", "r", "r"], bold_cols=(0, 4))
-bullets(s, "Gain list", GX, 672, 724, 220,
-        ["V1 최고 seed(+0.90)와 H · R 최저 seed(+1.12)가 **겹치지 않음**",
-         "크게 오른 건 인기 자체의 힘, 봐야 할 건 **SID가 보태는 몫**",
-         "나이는 +0.1~0.35%p로 작지만 9번 모두 같은 방향"], "caption", gap=12)
+sub(s, "Full heading", GX, 664, 724, "결합 + 나이의 다른 지표 (seed 3개 평균)", color="ink", size=24)
+table(s, "Full table", GX, 712, [150, 140, 140, 140, 154], 46,
+      [["", "Top-1", "AUC", "MRR", "nDCG@5"]] +
+      [[n] + frow([mean(v[k] for v in FUSED_FULL[n]) for k in range(4)], bold=(n != "V1")) for n in RUNS] +
+      [["인기만"] + frow(POP_FULL["H"])],
+      highlight_rows=(2, 3), align=["l", "r", "r", "r", "r"], bold_cols=(0,))
 
 # ════════ 11. 함께 학습 ════════
 s = d.new("score = s + w1·logpop + w2·logage 로 Transformer를 처음부터 학습 (여민 코드 + 우리 패치). "
           "w도 같이 학습: epoch 1에 5 → 0.78, −1 → −0.09로 줄고 validation 41.96 → 41.21 → 41.10%로 하락(중단). "
           "w 고정(5, −1): validation 42.68%(epoch 1)가 최고, 이후 하락. 나중에 더하기 validation 43.27% 이상.")
 d.frame(s, "05", CH["05"], "인기 · 나이를 학습 때 넣으면 오히려 낮아진다",
-        "같은 점수 식으로 Transformer를 처음부터 학습 (seed 42, test Top-1)")
+        "같은 점수 식으로 Transformer를 처음부터 학습 (seed 42, test) — 세 실험 · 네 지표 모두 나중에 더하기가 높다")
 formula(s, "Joint formula", MARGIN, 350, r"\mathrm{score} = s + w_1\,\mathrm{logpop} + w_2\,\mathrm{logage}",
         "score = s + w1 logpop + w2 logage", scale=1.4)
-bullets(s, "Joint list", MARGIN, 440, 760, 330,
+bullets(s, "Joint list", MARGIN, 440, 740, 330,
         ["**w도 같이 학습**: epoch 1에 인기 가중치 5 → 0.78로 줄며 학습 전보다 하락 (중단)",
          "**w를 5, −1로 고정**: epoch 1이 정점, 나중에 더하기보다 낮음",
          "**원인으로 보이는 것**: train 정답은 대부분 본 기사라 SID가 외워서 맞히고, 인기를 덜 씀 → test 정답은 98%가 새 기사"],
         "body", gap=18)
-table(s, "Joint table", 960, 370, [150, 210, 250, 254], 70,
-      [["", "인기만", "함께 학습 (고정)", "나중에 더하기"]] +
-      [[n, f"{POP[n]:.2f}%", f"{JOINT[n]:.2f}%  ({JOINT[n] - POP[n]:+.2f})", f"**{FUSED[n][0]:.2f}%**  ({FUSED[n][0] - POP[n]:+.2f})"]
-       for n in RUNS],
-      align=["l", "r", "r", "r"], bold_cols=(0,))
-text(s, "Joint table note", 960, 666, 864, 28, "괄호 = 인기만 대비 SID가 보탠 몫 (%p)", "footer", "steel")
-text(s, "Takeaway", 960, 740, 864, 120,
+jrows, jhl = [["", "방식", "Top-1", "AUC", "MRR", "nDCG@5"]], []
+for n in RUNS:
+    jrows += [[n, "인기만"] + frow(POP_FULL[n]), ["", "함께 학습 (고정)"] + frow(JOINT_FULL[n]),
+              ["", "나중에 더하기"] + frow(FUSED_FULL[n][0], bold=True)]
+    jhl.append(len(jrows) - 1)
+table(s, "Joint table", 920, 330, [80, 220, 140, 140, 140, 184], 46, jrows, highlight_rows=tuple(jhl),
+      align=["l", "l", "r", "r", "r", "r"], bold_cols=(0,))
+text(s, "Takeaway", 920, 852, 904, 100,
      ["[[결론]]  w는 test와 비슷한 **validation에서** 정한다",
       "→ SID만 학습하고 인기 · 나이는 나중에 더하는 방식을 유지"], "body", "charcoal", gap=8)
 
@@ -501,6 +523,22 @@ legend(s, "Tiger legend", 940, 330, RUNS)
 vbars(s, "Tiger chart", 940, 380, 884, 490, ["공개 TIGER", "우리 Transformer", "+ 인기 · 나이"],
       [(n, [TIGER[n], TOP1[n][0], FUSED[n][0]]) for n in RUNS], 50, [0, 10, 20, 30, 40, 50],
       ref=20, ref_label="무작위 20%", bw_max=64)
+
+# ════════ 12-1. TIGER 지표 전체 ════════
+s = d.new("공개 TIGER는 AUC가 0.5보다 낮음(정답보다 오답을 더 높게 침). 같은 SID로 후보 중 고르기를 학습한 우리 Transformer는 AUC 0.57~0.59, "
+          "인기·나이를 더하면 0.74. 모두 seed 42, test 122,573~122,680행.",)
+d.frame(s, "06", CH["06"], "네 지표 모두 공개 TIGER가 가장 낮다",
+        "같은 SID · 같은 test (seed 42) — 공개 TIGER는 AUC도 0.5보다 낮다",
+        footer_left="TIGER: Rajput 외, NeurIPS 2023 · 구현: EdoardoBotta/RQ-VAE-Recommender @ 957d32b (MIT, 비공식 재현)")
+trows, thl = [["SID", "모델", "Top-1", "AUC", "MRR", "nDCG@5"]], []
+for n in RUNS:
+    trows += [[n, "공개 TIGER (생성 학습)"] + frow(TIGER_FULL[n]), ["", "우리 Transformer (후보 중 고르기)"] + frow(MODEL42_FULL[n]),
+              ["", "+ 인기 · 나이 (나중에 더하기)"] + frow(FUSED_FULL[n][0], bold=True)]
+    thl.append(len(trows) - 1)
+table(s, "Tiger full table", MARGIN + 112, 330, [110, 480, 210, 200, 200, 304], 52, trows, highlight_rows=tuple(thl),
+      align=["l", "l", "r", "r", "r", "r"], bold_cols=(0,), cell_colors={(r, 3): "k-red-fill" for r in (1, 4, 7)})
+text(s, "Tiger full note", MARGIN + 112, 870, 1504, 40,
+     "빨간 칸 = AUC 0.5 미만 (무작위보다 낮음) · 무작위 기준: Top-1 20%, AUC 0.5", "caption", "steel", one_line=True)
 
 # ════════ 13. 정리 ════════
 s = d.new()
