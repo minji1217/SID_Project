@@ -13,6 +13,7 @@ popularity_fusion.py (모델 + λ·인기 + μ·나이) 를 그대로 기준으�
   클릭 기록 = train + validation behaviors 의 모든 클릭 (클릭 시각 = 그 노출의 impression_time).
   클릭된 기사에 SID 파일의 (c1, c2) 를 붙이고, (c1, c2) → 정렬된 클릭 시각. SID 없는 클릭은 건너뛴다.
   후보마다 [노출 시각 − 24h, 노출 시각) 안에서 후보와 (c1, c2) 가 같은 클릭 수를 센다.
+  (기사 인기도와 사건 인기도의 창 24h 는 --window-hours 로 바꾼다. popularity_window.py 결과 12h 가 validation 최고)
 
 아이디어 2 · 매칭 (비율표 R)
   행마다 그 행의 history 로 w = exp(−(노출 시각 − 클릭 시각)/τ) 를 매기고,
@@ -244,6 +245,7 @@ def main():
     ap.add_argument("--raw", default=str(REPO / "data/raw"))
     ap.add_argument("--exp-prefix", default="v2_")
     ap.add_argument("--max-history", type=int, default=50, help="매칭에 쓸 history 마지막 N개 (Transformer V1 = 50). 0 = 전체")
+    ap.add_argument("--window-hours", type=float, default=WINDOW_H, help="기사 · 사건 인기도를 셀 직전 시간 (기본 24)")
     ap.add_argument("--wide-grid", action="store_true", help="τ, ν, c 후보를 바깥쪽으로 넓힘 (기본 격자는 그대로 포함)")
     a = ap.parse_args()
     global TAUS, NUS, C_MATCH
@@ -253,11 +255,11 @@ def main():
     v2 = Path(a.v2).expanduser() if a.v2 else pre / "v2"
     raw = Path(a.raw).expanduser()
     out_dir = v2 / "analysis"
-    tag = f"seed{a.seed}" + ("" if a.max_history == 50 else f"_hist{a.max_history or 'all'}") + ("_wide" if a.wide_grid else "")
+    tag = f"seed{a.seed}" + ("" if a.max_history == 50 else f"_hist{a.max_history or 'all'}") + ("_wide" if a.wide_grid else "") + ("" if a.window_hours == WINDOW_H else f"_w{a.window_hours:g}")
     jpath, cpath = out_dir / f"surge_fusion_{tag}.json", out_dir / f"surge_fusion_{tag}.csv"
     if jpath.exists() or cpath.exists():
         sys.exit(f"멈춤: {jpath} 가 이미 있습니다 (덮어쓰지 않음)")
-    window_s = int(WINDOW_H * 3600)
+    window_s = int(a.window_hours * 3600)
 
     log("클릭 기록 읽는 중")
     clicks = load_click_log(raw)
@@ -352,12 +354,12 @@ def main():
 
         warn = (edge_warn("A", bA, [LAMBDAS, MUS]) + edge_warn("B", bB, [LAMBDAS, MUS, LAMBDA_E])
                 + edge_warn("C", bC, [LAMBDAS, MUS, TAUS, NUS, C_MATCH]) + edge_warn("D", bD[2:], [LAMBDA_E, TAUS, NUS, C_MATCH]))
-        r = {"run": run, "seed": a.seed, "max_history": a.max_history, "wide_grid": a.wide_grid,
+        r = {"run": run, "seed": a.seed, "max_history": a.max_history, "wide_grid": a.wide_grid, "window_hours": a.window_hours,
              "grid": {"TAUS": TAUS, "NUS": NUS, "C_MATCH": C_MATCH}, "info": info, "grid_edge_warnings": warn,
              "val_top1": {"A": gA[bA], "B": gB[bB], "C": gC[bC], "D": gD[bD]},
              "best": {"A": bA, "B": bB, "C": bC, "D": bD}, "test": test}
         results.append(r)
-        print(f"\n===== {run.upper()} (seed {a.seed}, 매칭 history {'전체' if a.max_history == 0 else f'마지막 {a.max_history}개'}) =====")
+        print(f"\n===== {run.upper()} (seed {a.seed}, 매칭 history {'전체' if a.max_history == 0 else f'마지막 {a.max_history}개'}, 인기도 창 {a.window_hours:g}시간) =====")
         print(f"SID 없어 건너뛴 클릭 {skipped:.2%} · " + " · ".join(
             f"{s}: history 시각 못 찾음 {info[s]['history_time_missing']:.2%}, 후보 사건이 R 에 있음 정답 {info[s]['정답 후보 사건이 R 에 있음']:.1%} / 오답 {info[s]['오답 후보 사건이 R 에 있음']:.1%}"
             for s in ("val", "test")))
