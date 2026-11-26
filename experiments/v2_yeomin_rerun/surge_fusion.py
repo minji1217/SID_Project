@@ -34,7 +34,8 @@ popularity_fusion.py (모델 + λ·인기 + μ·나이) 를 그대로 기준으�
             h,r: <PRE>/experiments/v2_<run>/split/ 같은 파일 이름
   SID    v1 : ~/minji/uni_post_rqvae/article_semantic_ids.parquet,  h,r: <V2>/sid/<run>/article_semantic_ids.parquet
   원본   <raw>/{train,validation}/behaviors.parquet, validation/history.parquet, articles.parquet
-결과: <V2>/analysis/surge_fusion_seed<seed>.json, .csv (이미 있으면 멈춤). --max-history 를 바꾸면 이름 끝에 _hist<N>/_histall
+결과: <V2>/analysis/surge_fusion_seed<seed>.json, .csv (이미 있으면 멈춤). --max-history 를 바꾸면 이름 끝에 _hist<N>/_histall,
+  --wide-grid 면 _wide (τ 336h·720h·∞, ν 0.5·0.75·1, c 32·64·128 추가)
 """
 import argparse
 import itertools
@@ -56,6 +57,8 @@ LAMBDA_E = [0, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, 4]
 C_MATCH = [0, 0.1, 0.25, 0.5, 1, 2, 4, 8, 16]
 TAUS = [24.0, 48.0, 96.0, 168.0]       # 시간
 NUS = [0, 0.1, 0.2, 0.3]
+# --wide-grid: 지난 결과(τ 168h, ν 0.3, c 16)가 모두 격자 끝이라 바깥쪽 후보를 더한다. τ = inf 는 감쇠 없음 (w = 1).
+WIDE = {"TAUS": [336.0, 720.0, float("inf")], "NUS": [0.5, 0.75, 1.0], "C_MATCH": [32, 64, 128]}
 WINDOW_H = 24.0
 FILES = {"val": "validation_sequences_1pos4neg_half.parquet", "test": "test_sequences_1pos4neg.parquet"}
 
@@ -195,7 +198,8 @@ def match_features(p: pd.DataFrame, seq, ht: HistoryTimes, taus: list, max_histo
     out = {"history_items": int(len(row)), "history_time_missing": float(1 - found.mean()) if len(row) else 0.0,
            "rows_without_history": int((lens == 0).sum())}
     for tau in taus:
-        w = np.exp(-hours / tau)
+        with np.errstate(invalid="ignore"):
+            w = np.where(found, np.exp(-hours / tau), 0.0)   # τ = inf → 시각 찾은 항목은 w = 1
         h = pd.DataFrame({"row": row, "ev": ev, "c1": hc1, "w": w})
         tot = h.groupby("row").w.sum()
         cell = h.groupby(["row", "ev"]).w.sum()
@@ -240,12 +244,16 @@ def main():
     ap.add_argument("--raw", default=str(REPO / "data/raw"))
     ap.add_argument("--exp-prefix", default="v2_")
     ap.add_argument("--max-history", type=int, default=50, help="매칭에 쓸 history 마지막 N개 (Transformer V1 = 50). 0 = 전체")
+    ap.add_argument("--wide-grid", action="store_true", help="τ, ν, c 후보를 바깥쪽으로 넓힘 (기본 격자는 그대로 포함)")
     a = ap.parse_args()
+    global TAUS, NUS, C_MATCH
+    if a.wide_grid:
+        TAUS, NUS, C_MATCH = TAUS + WIDE["TAUS"], NUS + WIDE["NUS"], C_MATCH + WIDE["C_MATCH"]
     pre = Path(a.pre).expanduser()
     v2 = Path(a.v2).expanduser() if a.v2 else pre / "v2"
     raw = Path(a.raw).expanduser()
     out_dir = v2 / "analysis"
-    tag = f"seed{a.seed}" + ("" if a.max_history == 50 else f"_hist{a.max_history or 'all'}")
+    tag = f"seed{a.seed}" + ("" if a.max_history == 50 else f"_hist{a.max_history or 'all'}") + ("_wide" if a.wide_grid else "")
     jpath, cpath = out_dir / f"surge_fusion_{tag}.json", out_dir / f"surge_fusion_{tag}.csv"
     if jpath.exists() or cpath.exists():
         sys.exit(f"멈춤: {jpath} 가 이미 있습니다 (덮어쓰지 않음)")
@@ -344,7 +352,8 @@ def main():
 
         warn = (edge_warn("A", bA, [LAMBDAS, MUS]) + edge_warn("B", bB, [LAMBDAS, MUS, LAMBDA_E])
                 + edge_warn("C", bC, [LAMBDAS, MUS, TAUS, NUS, C_MATCH]) + edge_warn("D", bD[2:], [LAMBDA_E, TAUS, NUS, C_MATCH]))
-        r = {"run": run, "seed": a.seed, "max_history": a.max_history, "info": info, "grid_edge_warnings": warn,
+        r = {"run": run, "seed": a.seed, "max_history": a.max_history, "wide_grid": a.wide_grid,
+             "grid": {"TAUS": TAUS, "NUS": NUS, "C_MATCH": C_MATCH}, "info": info, "grid_edge_warnings": warn,
              "val_top1": {"A": gA[bA], "B": gB[bB], "C": gC[bC], "D": gD[bD]},
              "best": {"A": bA, "B": bB, "C": bC, "D": bD}, "test": test}
         results.append(r)

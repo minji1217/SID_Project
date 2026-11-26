@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TIGER 동일 설정 비교</title>
+<style>
+:root { --bg:#fff; --text:#14181f; --muted:#5b6577; --line:#e3e6eb; --surface:#f8f9fb; --hl:#eef4ff; --hl-line:#9fb8ec; --blue:#2a78d6; --orange:#d9792b; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Segoe UI",sans-serif; font-size:15.5px; line-height:1.7; word-break:keep-all; }
+main { max-width:880px; margin:0 auto; padding:32px 16px 72px; }
+h1 { font-size:25px; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 20px; font-size:14px; }
+h2 { font-size:20px; margin:40px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--line); }
+h3 { font-size:16.5px; margin:22px 0 6px; }
+.box1 { border:1.5px solid var(--hl-line); background:var(--hl); border-radius:12px; padding:14px 18px; }
+.fig { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; margin:12px 0; }
+.chart { width:100%; height:auto; display:block; font-family:inherit; }
+.cap { color:var(--muted); font-size:13.5px; margin:6px 2px 0; } .cap b { color:var(--text); }
+.tbl { overflow-x:auto; border:1px solid var(--line); border-radius:10px; margin:10px 0; }
+table { width:100%; border-collapse:collapse; font-size:14.5px; }
+th, td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+th { background:#f3f4f7; font-weight:600; color:var(--muted); } td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+tr.hl td { background:var(--hl); }
+.note { border-left:4px solid #e9c27a; background:#fff6e6; border-radius:0 8px 8px 0; padding:10px 14px; margin:12px 0; font-size:14.5px; }
+code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; background:#f3f4f7; padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:#f3f4f7; border-radius:8px; padding:10px 12px; overflow-x:auto; font-size:13px; }
+.head { font-size:15px; font-weight:700; fill:#14181f; } .lbl { font-size:13.5px; fill:#14181f; } .m { fill:#5b6577; } .b { font-weight:700; }
+.box { fill:#fff; stroke:#cfd5de; stroke-width:1.2; } .shared { fill:#eaf1ff; stroke:#9fb8ec; stroke-width:1.2; }
+.pos { fill:#e3f5ea; stroke:#56b886; } .neg { fill:#f3f4f7; stroke:#cfd5de; } .faded { opacity:.35; }
+.arr { stroke:#5b6577; stroke-width:2; fill:none; }
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#5b6577"/></marker></defs></svg>
+<main>
+
+<h1>공개 TIGER를 우리 모델과 같은 설정으로 돌리기</h1>
+<p class="sub">EB-NeRD v2 · 11/26 랩미팅 요청 ②: "공개 TIGER는 하이퍼파라미터가 우리 모델과 완전히 같아야 한다" · 2026-11-26</p>
+
+<div class="box1"><b>한 줄 요약</b> — 데이터 · 평가 · 모델 크기 · 학습 설정은 우리 Transformer와 똑같이 맞췄고, <b>"무엇을 배우나"(손실)만 다르게</b> 남겼다. 그래서 결과 차이는 학습 방식(정답 SID 생성 vs 후보 중 정답 고르기)에서 온다고 말할 수 있다. 공개 모델 코드 구조 때문에 맞출 수 없는 작은 차이가 두 가지 있다(3-2절).</div>
+
+<h2>1. 두 모델을 한 그림으로</h2>
+<div class="fig">
+<svg viewBox="0 0 780 340" class="chart" role="img" aria-label="공개 TIGER와 우리 Transformer의 같은 부분과 다른 손실">
+  <text x="20" y="24" class="head">같은 부분: 입력 · 인코더–디코더 · 채점</text>
+  <rect x="20" y="40" width="200" height="70" rx="10" class="box"/>
+  <text x="34" y="64" class="lbl b">history 최근 50개</text>
+  <text x="34" y="86" class="lbl m">기사마다 SID 토큰</text>
+  <path d="M224 75 H262" class="arr" marker-end="url(#ah)"/>
+  <rect x="268" y="40" width="250" height="70" rx="10" class="shared"/>
+  <text x="282" y="64" class="lbl b">T5 인코더–디코더</text>
+  <text x="282" y="86" class="lbl m">d256 · 8 head · 2층 · dropout 0</text>
+  <path d="M522 75 H560" class="arr" marker-end="url(#ah)"/>
+  <rect x="566" y="40" width="194" height="70" rx="10" class="box"/>
+  <text x="580" y="64" class="lbl b">[BOS, c1, c2] →</text>
+  <text x="580" y="86" class="lbl m">P(c1), P(c2|c1), P(c3|c1,c2)</text>
+
+  <text x="20" y="152" class="head">다른 부분: 학습할 때 무엇을 맞추나</text>
+  <text x="20" y="182" class="lbl b" style="fill:#c26a1f">공개 TIGER: 정답 SID 생성</text>
+  <rect x="20" y="194" width="56" height="30" rx="6" class="pos"/><text x="48" y="214" class="lbl b" text-anchor="middle">정답</text>
+  <g class="faded"><rect x="82" y="194" width="56" height="30" rx="6" class="neg"/><text x="110" y="214" class="lbl" text-anchor="middle">오답</text>
+  <rect x="144" y="194" width="56" height="30" rx="6" class="neg"/><text x="172" y="214" class="lbl" text-anchor="middle">오답</text>
+  <rect x="206" y="194" width="56" height="30" rx="6" class="neg"/><text x="234" y="214" class="lbl" text-anchor="middle">오답</text>
+  <rect x="268" y="194" width="56" height="30" rx="6" class="neg"/><text x="296" y="214" class="lbl" text-anchor="middle">오답</text></g>
+  <text x="20" y="248" class="lbl">손실 = −log P(c1) − log P(c2|c1) − log P(c3|c1,c2)</text>
+  <text x="20" y="268" class="lbl m">정답 SID만 맞힘, 오답은 안 봄</text>
+
+  <text x="420" y="182" class="lbl b" style="fill:#2a78d6">우리 Transformer: 후보 중 정답 고르기</text>
+  <rect x="420" y="194" width="56" height="30" rx="6" class="pos"/><text x="448" y="214" class="lbl b" text-anchor="middle">정답</text>
+  <rect x="482" y="194" width="56" height="30" rx="6" class="neg"/><text x="510" y="214" class="lbl" text-anchor="middle">오답</text>
+  <rect x="544" y="194" width="56" height="30" rx="6" class="neg"/><text x="572" y="214" class="lbl" text-anchor="middle">오답</text>
+  <rect x="606" y="194" width="56" height="30" rx="6" class="neg"/><text x="634" y="214" class="lbl" text-anchor="middle">오답</text>
+  <rect x="668" y="194" width="56" height="30" rx="6" class="neg"/><text x="696" y="214" class="lbl" text-anchor="middle">오답</text>
+  <text x="420" y="248" class="lbl">손실 = 후보 5개 점수 → softmax → −log P(정답)</text>
+  <text x="420" y="268" class="lbl m">정답과 오답 4개를 비교함</text>
+
+  <text x="20" y="304" class="lbl b">채점은 둘 다 같다</text>
+  <text x="20" y="324" class="lbl m">test 후보 5개마다 log P(c1) + log P(c2|c1) + log P(c3|c1,c2) → 가장 높은 후보가 1등</text>
+</svg>
+</div>
+<p class="cap">파란 상자(인코더–디코더)의 크기와 학습 설정, 입력 데이터, 채점 방식은 같다. 학습할 때 오답 후보를 보느냐 마느냐만 다르다.</p>
+
+<h2>2. 같은 것</h2>
+<h3>2-1. 데이터 · 평가</h3>
+<div class="tbl"><table><thead><tr><th>항목</th><th>둘 다</th></tr></thead><tbody>
+<tr><td>학습 데이터</td><td>train 1pos4neg 파일 (H 233,304행)</td></tr>
+<tr><td>best epoch 고르기</td><td>validation 앞 절반 Top-1</td></tr>
+<tr><td>test</td><td>같은 test 1pos4neg (H 122,680행), 같은 후보 5개</td></tr>
+<tr><td>history</td><td>그 노출 이전에 읽은 기사의 최근 50개, history가 빈 행은 제외</td></tr>
+<tr><td>SID</td><td>같은 SID 파일 (H, R, V1)</td></tr>
+<tr><td>채점</td><td>후보마다 log P(c1) + log P(c2|c1) + log P(c3|c1,c2), 가장 높은 후보가 1등</td></tr>
+<tr><td>지표</td><td>Top-1 · AUC · MRR · nDCG@5 (같은 정의)</td></tr>
+</tbody></table></div>
+
+<h3>2-2. 모델 크기 · 학습 설정</h3>
+<div class="tbl"><table><thead><tr><th>항목</th><th>둘 다</th><th>공개 TIGER 원래 설정 (참고)</th></tr></thead><tbody>
+<tr><td>구조</td><td>T5 인코더–디코더</td><td>같음</td></tr>
+<tr><td>d_model / head / head당 차원</td><td>256 / 8 / 32</td><td>384 / 6 / 64</td></tr>
+<tr><td>d_ff / 층 수</td><td>1024 / 인코더 2층 + 디코더 2층</td><td>1024 / 4층 + 4층</td></tr>
+<tr><td>dropout</td><td>0</td><td>0.1</td></tr>
+<tr><td>SEP 토큰</td><td>없음</td><td>있음</td></tr>
+<tr><td>디코더 입력</td><td>[BOS, c1, c2] → c1, c2, c3를 차례로 예측</td><td>같음</td></tr>
+<tr><td>optimizer</td><td>AdamW, lr 5e-5, weight decay 0</td><td>AdamW, lr 1e-3, weight decay 1e-4</td></tr>
+<tr><td>batch / lr 스케줄 / gradient clip</td><td>128 / 없음(고정) / 1.0</td><td>640 / inverse-sqrt (warmup 10,000) / 없음</td></tr>
+<tr><td>history 길이</td><td>최근 50개</td><td>최근 20개</td></tr>
+<tr><td>학습 데이터</td><td>train 1pos4neg의 정답</td><td>1pos4neg 이전 train 시퀀스의 클릭 전부</td></tr>
+<tr><td>정밀도 · epoch</td><td>fp32, 최대 30 epoch, 5번 연속 못 넘으면 조기 종료</td><td>같음</td></tr>
+<tr><td>seed</td><td>42</td><td>42</td></tr>
+</tbody></table></div>
+<p class="cap">"공개 TIGER 원래 설정"은 11/23에 돌린 첫 비교(test Top-1 16.7~17.8%)의 설정이다. 이번에는 이 열을 모두 가운데 열 값으로 바꿨다.</p>
+
+<h2>3. 다른 것</h2>
+<h3>3-1. 손실: 무엇을 배우나 (핵심 차이, 일부러 남긴 것)</h3>
+<div class="tbl"><table><thead><tr><th></th><th>공개 TIGER</th><th>우리 Transformer</th></tr></thead><tbody>
+<tr><td>학습 행에서 쓰는 것</td><td>정답 기사 1개만 (오답 4개는 안 봄)</td><td>후보 5개 전부</td></tr>
+<tr><td>손실</td><td>정답 SID를 <b>생성</b>하는 CE: c1 맞히기 + c2 맞히기 + c3 맞히기 (teacher forcing)</td><td>후보 5개 점수 → softmax → <b>정답 고르기</b> CE</td></tr>
+<tr><td>배우는 것</td><td>"이 사용자 다음엔 이런 SID가 나온다"</td><td>"이 화면의 5개 중 이게 정답이다"</td></tr>
+</tbody></table></div>
+<p>교수님이 확인하려는 게 바로 이 차이다. 나머지를 다 같게 만들었으니, 결과 차이는 이 학습 방식에서 온다고 말할 수 있다.</p>
+
+<h3>3-2. 모델 코드가 달라서 생기는 작은 차이 (하이퍼파라미터가 아니라 구조)</h3>
+<div class="tbl"><table><thead><tr><th></th><th>공개 TIGER</th><th>우리 (여민 코드)</th></tr></thead><tbody>
+<tr><td>history 기사 하나의 토큰</td><td>c1, c2, c3 (3개, c4는 모델이 뺌) → 50개 × 3 = 150토큰</td><td>c1, c2, c3, c4 (4개) → 50개 × 4 = 200토큰</td></tr>
+<tr><td>SID 임베딩 표</td><td>자리마다 512칸 (c1 · c2도 512칸, 남는 칸은 안 쓰임)</td><td>자리마다 실제 크기 (SID 최댓값 + 1)</td></tr>
+<tr><td>출력 head</td><td>자리마다 512개 중 고르기</td><td>자리마다 실제 크기 중 고르기</td></tr>
+</tbody></table></div>
+<ul>
+<li><b>c4</b>: 우리 모델은 history에 c4(같은 SID 안 구분 번호)를 넣는다. TIGER는 공개 구현 방식대로 뺀다. 채점에는 둘 다 c4를 안 쓴다.</li>
+<li><b>512칸</b>: TIGER의 c1 head는 25개 대신 512개 중에서 고른다. 안 쓰이는 코드에도 확률이 조금 가지만, 학습하면 거의 0이 된다.</li>
+<li>이 둘은 공개 모델 코드를 고치지 않으면 맞출 수 없는 부분이다. 교수님이 "하이퍼파라미터를 같게"라고 하셔서 모델 코드는 그대로 두고, 바꿀 수 있는 설정은 전부 맞췄다. 영향은 작을 것으로 본다.</li>
+</ul>
+
+<h2>4. 어떻게 맞췄나 (코드)</h2>
+<ul>
+<li><code>experiments/eventc2_tiger_reference_v1/run_reference.py</code>: d_model · head · d_kv · d_ff · 층 수 · dropout · SEP · lr 스케줄 · gradient clip을 옵션으로 받게 했다. <b>기본값은 공개 구현 설정 그대로</b>라, 옵션 없이 돌리면 예전 실행과 같다.</li>
+<li>head당 차원(d_kv)과 dropout은 공개 모델의 생성자 인자가 아니다. <b>모델 파일은 고치지 않고</b>, 그 파일이 쓰는 T5 설정의 기본값만 바꿔 넣었다 (d_kv 64 → 32, dropout 0.1 → 0).</li>
+<li><code>experiments/v2_yeomin_rerun/7_tiger_reference.sh</code>: <code>CFG=v1</code>이면 위 설정과 학습 데이터(train 1pos4neg)를 넣는다. 결과 폴더는 <code>$V2/tiger/&lt;RUN&gt;_seed42_v1cfg</code>로 따로 둔다.</li>
+<li>확인: 이 컨테이너에서 작은 데이터로 1 epoch을 돌려, 저장된 설정이 d_model 256 · head 8 · d_kv 32 · 2층 · dropout 0 · SEP 없음 · history 50 · lr 5e-5 · wd 0 · batch 128 · 스케줄 없음 · clip 1.0인 것을 확인했다 (2026-11-26).</li>
+</ul>
+<pre>nohup bash -c 'for R in h r v1; do CFG=v1 RUN=$R SEED=42 CUDA_VISIBLE_DEVICES=0 bash experiments/v2_yeomin_rerun/7_tiger_reference.sh; done' &gt; ~/minji/v2_tiger_v1cfg_s42.log 2&gt;&amp;1 &amp;
+grep "모델 설정" ~/minji/v2_tiger_v1cfg_s42.log      # 설정이 맞게 들어갔는지</pre>
+
+<h2>5. 결과 (seed 42, test Top-1)</h2>
+<div class="tbl"><table><thead><tr><th></th><th class=n>H</th><th class=n>R</th><th class=n>V1</th></tr></thead><tbody>
+<tr><td>공개 TIGER (공개 구현 설정)</td><td class=n>17.30%</td><td class=n>17.77%</td><td class=n>16.69%</td></tr>
+<tr class="hl"><td>공개 TIGER (우리 설정)</td><td class=n>실행 중</td><td class=n>실행 중</td><td class=n>실행 중</td></tr>
+<tr><td>우리 Transformer</td><td class=n>27.51%</td><td class=n>27.67%</td><td class=n>26.16%</td></tr>
+<tr><td>(참고) 무작위</td><td class=n>20%</td><td class=n>20%</td><td class=n>20%</td></tr>
+</tbody></table></div>
+<p class="cap">공개 구현 설정의 TIGER는 셋 다 epoch 1이 최고였고, 학습 전(약 20%)보다 학습 후가 더 낮았다(AUC 0.45 안팎). 우리 설정으로도 20% 아래면, 낮은 이유는 설정이 아니라 생성 학습 방식이라고 말할 수 있다.</p>
+
+<div class="note"><b>참고</b> — TIGER 논문: S. Rajput 외, <i>Recommender Systems with Generative Retrieval</i>, NeurIPS 2023 (arXiv:2305.05065), 공식 코드 없음. 사용한 구현: EdoardoBotta/RQ-VAE-Recommender @ 957d32b (MIT, 비공식 재현). 우리 Transformer: 여민 코드 22028ba + V1 설정.</div>
+</main></body></html>
