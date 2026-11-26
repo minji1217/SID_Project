@@ -14,7 +14,11 @@
   - 정답 · 오답 기사 나이 분위수, 정답 기사 클릭이 노출 몇 시간 전에 있었나 (48시간 안, 누적 비율)
   - 창별: 정답 · 오답 클릭 0 비율, 인기만 Top-1, 인기 + 나이 (Transformer 없음), Transformer + 인기 + 나이 (seed별 · 평균)
 입력 (읽기만): 1pos4neg split (validation 절반, test), Transformer 예측 <V2>/transformer/<run>_seed<seed>/{val,test}_candidate_scores.parquet, 원본 behaviors · articles
-결과: 화면 + <V2>/analysis/popularity_window.json (이미 있으면 _2, _3 …)
+결과: 화면 + <V2>/analysis/popularity_window/ (이미 있으면 popularity_window_2/ …) 안에
+  <run>_click_timing.csv  노출 전 0~6시간 15분 단위 · 6~72시간 1시간 단위, 정답 · 오답 기사 클릭 비율과 누적 비율
+  <run>_windows.csv       창별 클릭 0 비율, 인기만, 인기+나이, Transformer+인기+나이 (seed별 · 평균) validation · test 지표
+  <run>_summary.csv       기간, 날짜별 노출 수, 정답 · 오답 기사 나이, 마지막 클릭이 노출 몇 분 전, 3시간/24시간 클릭 비율
+  result.json             위 내용 전체
 """
 import argparse
 import json
@@ -33,10 +37,39 @@ WINDOWS = [0.5, 1, 2, 3, 6, 12, 24, 48, 72]
 BIG = 10 ** 10   # article_id * BIG + 초 (초 < 1e10)
 
 
-def counts(key: np.ndarray, art: np.ndarray, t: np.ndarray, w_hours: float) -> np.ndarray:
-    """[t − w, t) 안 클릭 수. key = 정렬된 article_id * BIG + 클릭 초."""
-    hi = art * BIG + t
-    return np.searchsorted(key, hi, "left") - np.searchsorted(key, hi - int(w_hours * 3600), "left")
+def counts(key: np.ndarray, art: np.ndarray, t: np.ndarray, w_hours: float, from_hours: float = 0.0) -> np.ndarray:
+    """[t − w, t − from) 안 클릭 수 (기본 [t − w, t)). key = 정렬된 article_id * BIG + 클릭 초."""
+    a = art * BIG + t
+    return np.searchsorted(key, a - int(from_hours * 3600), "left") - np.searchsorted(key, a - int(w_hours * 3600), "left")
+
+
+def last_click_minutes(key: np.ndarray, art: np.ndarray, t: np.ndarray) -> np.ndarray:
+    """노출 직전 마지막 클릭이 몇 분 전인가 (없으면 nan)."""
+    i = np.searchsorted(key, art * BIG + t, "left") - 1
+    ic = np.maximum(i, 0)
+    ok = (i >= 0) & (key[ic] // BIG == art)
+    return np.where(ok, (t - key[ic] % BIG) / 60.0, np.nan)
+
+
+TIMING_BINS = [(i / 4, (i + 1) / 4) for i in range(24)] + [(h, h + 1) for h in range(6, 72)]   # 시간
+
+
+def windows_df(rows: list) -> pd.DataFrame:
+    """창별 결과를 한 행씩 펼친 표."""
+    out = []
+    for x in rows:
+        d = {"창(시간)": x["창(시간)"], "정답 클릭 0": x["정답 클릭 0"], "오답 클릭 0": x["오답 클릭 0"],
+             "인기만 val Top-1": x["인기만 val"], "인기만 test Top-1": x["인기만 test"],
+             "인기+나이 λ": x["인기+나이 (λ,μ)"][0], "인기+나이 μ": x["인기+나이 (λ,μ)"][1], "인기+나이 val Top-1": x["인기+나이 val"]}
+        d.update({f"인기+나이 test {m}": v for m, v in x["인기+나이 test"].items()})
+        for seed, y in x["Transformer+인기+나이 seed별"].items():
+            d[f"T+인기+나이 seed{seed} λ"], d[f"T+인기+나이 seed{seed} μ"] = y["λ,μ"]
+            d[f"T+인기+나이 seed{seed} val Top-1"] = y["val"]
+            d.update({f"T+인기+나이 seed{seed} test {m}": v for m, v in y["test"].items()})
+        d["T+인기+나이 val Top-1 평균"] = x["Transformer+인기+나이 val 평균"]
+        d["T+인기+나이 test Top-1 평균"] = x["Transformer+인기+나이 test 평균"]
+        out.append(d)
+    return pd.DataFrame(out)
 
 
 def best(score_fn, grid, Yv):
@@ -65,7 +98,7 @@ def main():
     pub = dict(zip(arts.article_id.astype(np.int64), to_s(arts.published_time)))
     grid_pa = [(l, m) for l in LAMBDAS for m in MUS if l != 0]
 
-    res = {}
+    res, outputs = {}, {}
     for run in a.runs:
         D = {}   # seed → {split: p}
         for seed in a.seeds:
@@ -97,11 +130,33 @@ def main():
              "기사 나이 분위수 (시간, 10/25/50/75/90%)": {
                  "정답": np.percentile(Ft["age_h"][pos_t], [10, 25, 50, 75, 90]).round(1).tolist(),
                  "오답": np.percentile(Ft["age_h"][~pos_t], [10, 25, 50, 75, 90]).round(1).tolist()}}
-        # 정답 기사 클릭이 노출 몇 시간 전에 있었나 (48시간 안)
+        # 정답 · 오답 기사 클릭이 노출 몇 시간 전에 있었나 (72시간 안, 15분 / 1시간 단위)
+        timing = []
+        for name, m in [("정답", pos_t), ("오답", ~pos_t)]:
+            aa, tt = Ft["art"][m], Ft["t"][m]
+            tot = np.array([counts(key, aa, tt, hi, lo).sum() for lo, hi in TIMING_BINS], dtype=float)
+            timing.append((name, tot / max(tot.sum(), 1)))
+        tdf = pd.DataFrame({"노출 전 시작(분)": [lo * 60 for lo, _ in TIMING_BINS], "노출 전 끝(분)": [hi * 60 for _, hi in TIMING_BINS]})
+        for name, sh in timing:
+            tdf[f"{name} 클릭 비율"] = sh
+            tdf[f"{name} 누적 비율"] = np.cumsum(sh)
+        cum = tdf["정답 누적 비율"].to_numpy()
+        ends = tdf["노출 전 끝(분)"].to_numpy()
+        r["정답 클릭 누적 비율 (노출 전 1·3·6·12·24시간)"] = {h: float(cum[ends == h * 60][0]) for h in (1, 3, 6, 12, 24)}
         pa, ptt = Ft["art"][pos_t], Ft["t"][pos_t]
-        by_h = np.array([(counts(key, pa, ptt, h + 1) - counts(key, pa, ptt, h)).sum() for h in range(48)], dtype=float)
-        cum = np.cumsum(by_h) / by_h.sum()
-        r["정답 클릭 누적 비율 (노출 전 1·3·6·12·24시간)"] = {h: float(cum[h - 1]) for h in (1, 3, 6, 12, 24)}
+        lc = last_click_minutes(key, pa, ptt)
+        c3, c24 = counts(key, pa, ptt, 3), counts(key, pa, ptt, 24)
+        ratio = np.where(c24 > 0, c3 / np.maximum(c24, 1), np.nan)
+        days = pd.Series(pd.to_datetime(Ft["t"][pos_t], unit="s").date).value_counts().sort_index()
+        summ = [("기간", s, f"{v[0]} ~ {v[1]}") for s, v in r["기간"].items()]
+        summ += [("행", s, v) for s, v in r["행"].items()]
+        summ += [("test 날짜별 노출", str(d), int(n)) for d, n in days.items()]
+        qs = [10, 25, 50, 75, 90]
+        for k, v in r["기사 나이 분위수 (시간, 10/25/50/75/90%)"].items():
+            summ += [(f"{k} 기사 나이(시간)", f"{q}%", x) for q, x in zip(qs, v)]
+        summ += [("정답 기사 마지막 클릭(분 전)", f"{q}%", float(x)) for q, x in zip(qs, np.nanpercentile(lc, qs).round(2))]
+        summ += [("정답 기사 3시간/24시간 클릭 비율", f"{q}%", float(x)) for q, x in zip(qs, np.nanpercentile(ratio, qs).round(3))]
+        summ += [("정답 클릭 없음(노출 전 전체)", "비율", float(np.isnan(lc).mean()))]
 
         rows = []
         for w in a.windows:
@@ -126,6 +181,7 @@ def main():
             rows.append(row)
         r["창별"] = rows
         res[run.upper()] = r
+        outputs[run] = {"timing": tdf, "summary": pd.DataFrame(summ, columns=["항목", "구분", "값"]), "windows": windows_df(rows)}
 
         print(f"\n===== {run.upper()} (seed {', '.join(D)}) =====")
         print("기간: " + " · ".join(f"{s} {v[0]} ~ {v[1]} ({r['행'][s]:,}행)" for s, v in r["기간"].items()))
@@ -141,13 +197,15 @@ def main():
 
     if not res:
         sys.exit("입력을 찾지 못했습니다")
-    out = v2 / "analysis"
-    out.mkdir(parents=True, exist_ok=True)
-    f, k = out / "popularity_window.json", 2
-    while f.exists():
-        f, k = out / f"popularity_window_{k}.json", k + 1
-    f.write_text(json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-    print(f"\n저장: {f}")
+    out, k = v2 / "analysis" / "popularity_window", 2
+    while out.exists():
+        out, k = v2 / "analysis" / f"popularity_window_{k}", k + 1
+    out.mkdir(parents=True)
+    for run, o in outputs.items():
+        for name, df in o.items():
+            df.to_csv(out / f"{run}_{'click_timing' if name == 'timing' else name}.csv", index=False, encoding="utf-8-sig")
+    (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    print(f"\n저장: {out}/ ({', '.join(sorted(p.name for p in out.iterdir()))})")
 
 
 if __name__ == "__main__":
