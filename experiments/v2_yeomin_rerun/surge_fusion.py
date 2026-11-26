@@ -36,6 +36,7 @@ popularity_fusion.py (모델 + λ·인기 + μ·나이) 를 그대로 기준으�
   SID    v1 : ~/minji/uni_post_rqvae/article_semantic_ids.parquet,  h,r: <V2>/sid/<run>/article_semantic_ids.parquet
   원본   <raw>/{train,validation}/behaviors.parquet, validation/history.parquet, articles.parquet
 결과: <V2>/analysis/surge_fusion_seed<seed>.json, .csv (이미 있으면 멈춤). --max-history 를 바꾸면 이름 끝에 _hist<N>/_histall,
+  --idea1-variants 면 아이디어 1 개선 (① 자기 클릭 뺀 사건 인기, ④ 사건 인기 × 매칭): B1 (A 위), F1 · F4 · F14 (C 위), 이름 끝에 _i1v.
   --split-history 면 E (최근 N개 매칭 + 그 이전 history 매칭, 가중치 따로) 를 더하고 이름 끝에 _split.
   --wide-grid 면 _wide (τ 336h·720h·∞, ν 0.5·0.75·1, c 32·64·128 추가)
 """
@@ -248,6 +249,8 @@ def main():
     ap.add_argument("--exp-prefix", default="v2_")
     ap.add_argument("--max-history", type=int, default=50, help="매칭에 쓸 history 마지막 N개 (Transformer V1 = 50). 0 = 전체")
     ap.add_argument("--window-hours", type=float, default=WINDOW_H, help="기사 · 사건 인기도를 셀 직전 시간 (기본 24)")
+    ap.add_argument("--idea1-variants", action="store_true",
+                    help="아이디어 1 개선: ① 자기 클릭 뺀 사건 인기도, ④ 사건 인기도 × 매칭. A 위 (B1) 와 C 위 (F1 · F4 · F14) 에 더해 봄")
     ap.add_argument("--split-history", action="store_true",
                     help="E 추가: 최근 --max-history 개 매칭과 그 이전 history 매칭을 따로 더함 (가중치 따로)")
     ap.add_argument("--wide-grid", action="store_true", help="τ, ν, c 후보를 바깥쪽으로 넓힘 (기본 격자는 그대로 포함)")
@@ -261,7 +264,7 @@ def main():
     v2 = Path(a.v2).expanduser() if a.v2 else pre / "v2"
     raw = Path(a.raw).expanduser()
     out_dir = v2 / "analysis"
-    tag = f"seed{a.seed}" + ("" if a.max_history == 50 else f"_hist{a.max_history or 'all'}") + ("_wide" if a.wide_grid else "") + ("" if a.window_hours == WINDOW_H else f"_w{a.window_hours:g}") + ("_split" if a.split_history else "")
+    tag = f"seed{a.seed}" + ("" if a.max_history == 50 else f"_hist{a.max_history or 'all'}") + ("_wide" if a.wide_grid else "") + ("" if a.window_hours == WINDOW_H else f"_w{a.window_hours:g}") + ("_split" if a.split_history else "") + ("_i1v" if a.idea1_variants else "")
     jpath, cpath = out_dir / f"surge_fusion_{tag}.json", out_dir / f"surge_fusion_{tag}.csv"
     if jpath.exists() or cpath.exists():
         sys.exit(f"멈춤: {jpath} 가 이미 있습니다 (덮어쓰지 않음)")
@@ -345,6 +348,25 @@ def main():
                     for c in C_MATCH:
                         gD[(l, m, le, tau, nu, c)] = top1_fast(b2 + c * M, Yv)
         bD = pick(gD)
+        if a.idea1_variants:
+            # ① 같은 사건 "다른" 기사들의 인기 = 사건 클릭 − 자기 클릭 (같은 창)
+            def other(P):
+                return np.log1p(np.clip(np.expm1(P["logepop"]) - np.expm1(P["logpop"]), 0, None))
+            V["logother"], Tt["logother"] = other(V), other(Tt)
+            gB1 = {(l, m, le): top1_fast(sv + l * V["logpop"] + m * V["logage"] + le * V["logother"], Yv)
+                   for l in LAMBDAS for m in MUS for le in LAMBDA_E}
+            bB1 = pick(gB1)
+            # C 위에: C 의 λ, μ, τ, ν, c 를 두고 새 항의 가중치만 고른다
+            lC, mC, tC, nC, cC = bC
+            baseC_v = sv + lC * V["logpop"] + mC * V["logage"] + cC * Mv[(tC, nC)]
+            baseC_t = st + lC * Tt["logpop"] + mC * Tt["logage"] + cC * Mt[(tC, nC)]
+            NEW = {"F1": ("① 다른 기사 사건 인기", V["logother"], Tt["logother"]),
+                   "F4": ("④ 사건 인기 × 매칭", V["logepop"] * Mv[(tC, nC)], Tt["logepop"] * Mt[(tC, nC)]),
+                   "F14": ("①④ 다른 기사 사건 인기 × 매칭", V["logother"] * Mv[(tC, nC)], Tt["logother"] * Mt[(tC, nC)])}
+            GF = {}
+            for k, (_, xv, _x) in NEW.items():
+                g = {(w,): top1_fast(baseC_v + w * xv, Yv) for w in LAMBDA_E + [8, 16]}
+                GF[k] = (g, pick(g))
         if a.split_history:   # E: C 의 λ, μ 를 두고 최근 N개 매칭 (c1) + 그 이전 history 매칭 (c2) 을 따로 고른다
             Ov = {(tau, nu): matching(OLD["val"][tau], nu) for tau in TAUS for nu in NUS}
             Ot = {(tau, nu): matching(OLD["test"][tau], nu) for tau in TAUS for nu in NUS}
@@ -375,6 +397,12 @@ def main():
             l, m, tau, nu, c1, c2 = bE
             test[f"E 최근{a.max_history}+이전 매칭 (λ={l}, μ={m}, τ={tau:g}h, ν={nu}, c최근={c1}, c이전={c2})"] = metrics(
                 pt_, st + l * Tt["logpop"] + m * Tt["logage"] + c1 * Mt[(tau, nu)] + c2 * Ot[(tau, nu)])
+        if a.idea1_variants:
+            l, m, le = bB1
+            test[f"B1 A+① 다른 기사 사건 인기 (λ={l}, μ={m}, λo={le})"] = metrics(pt_, st + l * Tt["logpop"] + m * Tt["logage"] + le * Tt["logother"])
+            for k, (name, _xv, xt) in NEW.items():
+                (w,) = GF[k][1]
+                test[f"{k} C+{name} (가중치={w})"] = metrics(pt_, baseC_t + w * xt)
         test["참고: 사건 인기도만"] = metrics(pt_, Tt["logepop"])
         test["참고: 매칭만 (τ=48h, ν=0.2)"] = metrics(pt_, Mt[(48.0, 0.2)])
 
@@ -383,8 +411,10 @@ def main():
                 + (edge_warn("E", bE[2:], [TAUS, NUS, C_MATCH, C_MATCH]) if a.split_history else []))
         r = {"run": run, "seed": a.seed, "max_history": a.max_history, "wide_grid": a.wide_grid, "window_hours": a.window_hours,
              "grid": {"TAUS": TAUS, "NUS": NUS, "C_MATCH": C_MATCH}, "info": info, "grid_edge_warnings": warn,
-             "val_top1": {"A": gA[bA], "B": gB[bB], "C": gC[bC], "D": gD[bD], **({"E": gE[bE]} if a.split_history else {})},
-             "best": {"A": bA, "B": bB, "C": bC, "D": bD, **({"E": bE} if a.split_history else {})}, "split_history": a.split_history, "test": test}
+             "val_top1": {"A": gA[bA], "B": gB[bB], "C": gC[bC], "D": gD[bD], **({"E": gE[bE]} if a.split_history else {}),
+                          **({"B1": gB1[bB1], **{k: g[b] for k, (g, b) in GF.items()}} if a.idea1_variants else {})},
+             "best": {"A": bA, "B": bB, "C": bC, "D": bD, **({"E": bE} if a.split_history else {}),
+                      **({"B1": bB1, **{k: b for k, (g, b) in GF.items()}} if a.idea1_variants else {})}, "split_history": a.split_history, "test": test}
         results.append(r)
         print(f"\n===== {run.upper()} (seed {a.seed}, 매칭 history {'전체' if a.max_history == 0 else f'마지막 {a.max_history}개'}, 인기도 창 {a.window_hours:g}시간) =====")
         print(f"SID 없어 건너뛴 클릭 {skipped:.2%} · " + " · ".join(
