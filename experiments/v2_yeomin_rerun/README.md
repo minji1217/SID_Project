@@ -116,3 +116,20 @@ python experiments/v2_yeomin_rerun/add_candidate_features.py --run h        # �
 RUN=h SEED=42 CUDA_VISIBLE_DEVICES=0 nohup bash experiments/v2_yeomin_rerun/8_transformer_features.sh > ~/minji/v2_tffeat_h_s42.log 2>&1 &
 ```
 결과: `$V2/transformer_feat/<RUN>_seed<SEED>/test_metrics.json`. 재학습 없는 결합(`popularity_fusion.py --with-age`)의 "결합+나이"와 비교한다.
+
+## SURGE 아이디어 1·2 결합 (재학습 없음)
+
+`surge_fusion.py`: 지금 결합(모델 + λ·인기 + μ·나이)에 아이디어 1(사건 인기도), 아이디어 2(매칭)를 더해 test Top-1·AUC·MRR·nDCG@5를 네 줄(A 지금 / B +1 / C +2 / D 둘 다)로 출력한다. 설명은 `reports/SURGE_우리연구_적용_아이디어.html`.
+
+- 사건 인기도: train + validation behaviors의 클릭에 SID (c1, c2)를 붙여, 후보와 (c1, c2)가 같은 클릭을 노출 직전 24시간 안에서 센다.
+- 매칭: 그 행 history로 비율표 R(사건별 w 합 ÷ 전체 w 합, w = exp(−경과 시간/τ))을 만들고, 후보 (c1, c2) 칸이 있으면 그 값, 없으면 ν × (c1이 같은 칸 합).
+- 매칭에 쓰는 history는 기본으로 Transformer 입력과 같게 마지막 50개(V1 설정)다. `--max-history 0`이면 전체를 쓰고 결과 파일 이름 끝에 `_histall`이 붙는다. 둘을 비교하면 "사건으로 묶은 효과"와 "더 긴 history 효과"를 나눠 볼 수 있다.
+- history 시각은 1pos4neg에 없어서 validation history.parquet와 behaviors로 (사용자, 기사)별로 복원한다. 못 찾은 비율을 출력한다.
+- 가중치(λ, μ, λe, τ, ν, c)는 validation 앞 절반에서 고르고 test에 한 번 적용한다. 고른 값이 격자 끝이면 "주의"를 출력한다.
+- 필요: `val_candidate_scores.parquet`(5_predict_val.sh)와 `test_candidate_scores.parquet`(4_transformer.sh). 없는 run은 건너뛴다.
+
+```bash
+python experiments/v2_yeomin_rerun/surge_fusion.py --runs v1 h r --seed 42                    # 매칭 history = 마지막 50개
+python experiments/v2_yeomin_rerun/surge_fusion.py --runs v1 h r --seed 42 --max-history 0    # 비교: 전체 history
+```
+결과: `$V2/analysis/surge_fusion_seed<SEED>.json, .csv` (이미 있으면 멈춤). 이 컨테이너에서는 원본 데이터 + 가짜 Transformer 점수로 끝까지 도는 것과, 실제 예시 노출(사용자 2096218)의 매칭이 문서 그림 9·10의 손 계산(0.750, 0.241, 0.2, 0, 0)과 같은 것만 확인했다(2026-11-26).
