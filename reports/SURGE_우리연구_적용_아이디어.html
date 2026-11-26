@@ -309,6 +309,15 @@ ev_pop  = art_pop.join(sid, on="article_id").group_by(["c1", "c2"]).agg(pl.col("
     <div class="f">w<sub>E</sub> = Σ<sub>i ∈ 기록(마지막 50개), 사건(i) = E</sub> exp(−(t − t<sub>i</sub>) / τ),&nbsp;&nbsp; R<sub>E</sub> = w<sub>E</sub> / Σ<sub>E′</sub> w<sub>E′</sub>,&nbsp;&nbsp; 매칭(후보) = R<sub>사건(후보)</sub> (그 칸이 있으면),&nbsp; 없으면 ν · Σ<sub>E: c1(E) = c1(후보)</sub> R<sub>E</sub></div>
     <div class="k"><b>말로 하면:</b> 사건 E의 w<sub>E</sub>는 그 사건 클릭들의 합인데, 오래된 클릭일수록 작게 쳐요(τ = 반감 속도). 전체 합이 1이 되게 나눈 표를 <b>비율표 R</b>이라고 불러요. 사건마다 칸이 하나 있고, SURGE의 덩어리 중요도 γ*와 같은 모양이에요. 매칭은 후보 사건의 R 칸 값이에요. 그 칸이 없을 때만 같은 카테고리(c1) 칸들의 합에 ν를 곱해 <b>대신</b> 써요. 둘 다 없으면 0이에요. 기록은 Transformer 입력과 같게 그 행 running history의 <b>마지막 50개</b>를 써요(Transformer V1 설정이 history 50).</div>
   </div>
+  <div class="note">
+    <p><b>기록을 몇 개 쓰나: 마지막 50개(기본)와 전체(비교).</b> running history는 전처리에서 자르지 않고 계속 쌓여 있고(1pos4neg 파일의 history는 중앙값 236개), Transformer가 파일을 읽을 때만 마지막 50개로 잘라요. 그래서 <b>Transformer 입력은 두 경우 모두 마지막 50개 그대로</b> 두고, 매칭의 비율표 R을 만드는 재료만 바꿔 두 번 계산해요. 학습이나 예측을 다시 하지 않아요.</p>
+    <div class="tbl" style="margin:6px 0"><table>
+      <tr><th></th><th>Transformer 입력</th><th>R을 만드는 재료 (w를 매기는 기록)</th><th>오르면 무엇 덕분인가</th></tr>
+      <tr><td><b>기본</b></td><td>마지막 50개</td><td><b>마지막 50개</b> (보통 최근 5.5일)</td><td>같은 기록을 사건 단위로 묶은 효과 (SURGE 아이디어)</td></tr>
+      <tr><td><b>비교</b></td><td>마지막 50개 (그대로)</td><td><b>running history 전체</b></td><td>위 효과 + Transformer가 못 보는 오래된 관심의 효과</td></tr>
+    </table></div>
+    <p class="small muted" style="margin:0">두 경우 모두 그 행의 노출 시각 기준으로 w를 매기고, 같은 방식으로 매칭 → c × 매칭을 더해요. 기록이 길어도 w가 오래된 클릭을 거의 0으로 만들어서, τ = 48시간이면 50개 밖 클릭의 w 비중은 중앙값 10%(사람에 따라 최대 1/3 이상)예요. 그래서 차이는 성능보다 해석에서 나요. 기본이 50개인 건 "같은 입력에서 묶기만 해서 얻은 개선"이라고 말할 수 있기 때문이에요.</p>
+  </div>
   <div class="fig">
     <div class="scroll"><svg class="w640" id="idea2Concept" viewBox="0 0 780 270" role="img" aria-label="사용자마다 사건 비율이 다르고, 후보의 매칭 점수도 사람마다 다름">
       <text x="195" y="26" text-anchor="middle" font-size="13" font-weight="700">① 사용자마다 읽어 온 사건 비율</text>
