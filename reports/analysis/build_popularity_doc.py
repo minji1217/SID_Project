@@ -254,6 +254,41 @@ def fig_joint():
     return svg(W, 270, "".join(b), "학습 중 softmax 확률 두 경우")
 
 
+def fig_datastart():
+    """장부가 5/18 07:00부터라 train 첫날 행만 24시간을 다 못 센다."""
+    W, L, R_ = 760, 150, 740
+    X = lambda h: L + h / 96 * (R_ - L)          # 5/17 00:00 = 0시간 ~ 5/21 00:00 = 96시간
+    S = 31                                        # 5/18 07:00
+    b = [t(20, 22, "장부(클릭 기록)는 5/18 07:00부터만 있다 — 세는 구간이 그 앞으로 넘어가면 그만큼 못 센다", "head")]
+    b.append(f'<rect x="{X(0):.1f}" y="40" width="{X(S) - X(0):.1f}" height="196" fill="#eceef2"/>')
+    b.append(t((X(0) + X(S)) / 2, 58, "데이터 없음", "lbl b gray", "middle"))
+    b.append(f'<line x1="{X(S):.1f}" x2="{X(S):.1f}" y1="40" y2="236" stroke="{INK}" stroke-width="2"/>')
+    b.append(t(X(S) + 6, 58, "장부 시작 5/18 07:00", "lbl b"))
+    rows = [("train 행 ①", 36, "T = 5/18 12:00 (첫날)"), ("train 행 ②", 87, "T = 5/20 15:00")]
+    for i, (name, T, lab) in enumerate(rows):
+        y = 92 + i * 74
+        b.append(t(L - 10, y + 16, name, "lbl b", "end"))
+        lo = T - 24
+        if lo < S:
+            b.append(f'<rect x="{X(lo):.1f}" y="{y}" width="{X(S) - X(lo):.1f}" height="24" rx="4" class="band red"/>')
+            b.append(t((X(lo) + X(S)) / 2, y + 17, "기록 없음 → 못 셈", "lbl b red", "middle"))
+            b.append(f'<rect x="{X(S):.1f}" y="{y}" width="{X(T) - X(S):.1f}" height="24" rx="4" fill="{BLUE}"/>')
+            b.append(t(X(T) + 8, y + 17, "5시간치만 셈 → 인기가 작게 나옴", "lbl b blue"))
+        else:
+            b.append(f'<rect x="{X(lo):.1f}" y="{y}" width="{X(T) - X(lo):.1f}" height="24" rx="4" fill="{BLUE}"/>')
+            b.append(t((X(lo) + X(T)) / 2, y + 17, "24시간 다 셈", "lbl b", "middle", 'style="fill:#fff"'))
+        b.append(f'<line x1="{X(T):.1f}" x2="{X(T):.1f}" y1="{y - 6}" y2="{y + 30}" stroke="{INK}" stroke-width="2"/>')
+        b.append(t(X(lo), y + 44, "T − 24시간", "lbl m", "middle"))
+        b.append(t(X(T) + 6 if lo < S else X(T), y + 44, lab, "lbl m", "start" if lo < S else "middle"))
+    b.append(f'<line x1="{L}" x2="{R_}" y1="236" y2="236" class="axis"/>')
+    for h, lab in [(0, "5/17"), (24, "5/18"), (48, "5/19"), (72, "5/20"), (96, "5/21")]:
+        b.append(f'<line x1="{X(h):.1f}" x2="{X(h):.1f}" y1="232" y2="240" class="axis"/>')
+        b.append(t(X(h), 256, lab, "lbl m", "middle"))
+    b.append(t(20, 284, "validation · test 행은 T가 5/25 07:00 이후 → 직전 24시간이 항상 장부 안 → 항상 다 센다", "lbl b"))
+    b.append(t(20, 304, "기사의 발행 시각과는 상관없다. 그 행의 노출 시각 T가 5/19 07:00 이전인지만 중요하다", "lbl m"))
+    return svg(W, 316, "".join(b), "데이터 시작 시점 때문에 train 첫날 행만 인기가 작게 세지는 그림")
+
+
 DEFS = f'''<svg width="0" height="0" style="position:absolute"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="{MUTED}"/></marker></defs></svg>'''
 
 html = f"""<!doctype html>
@@ -365,6 +400,10 @@ code {{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; backg
               for n, (a, b_, c) in JOINT.items()) + f"""
 </tbody></table></div>
 <p class="cap">w도 같이 학습하게 두면 epoch 1에 인기 가중치가 5 → 0.78로 줄며 더 나빠졌다 (train에서는 SID가 외워서 맞히므로 인기에 덜 기댄다). 그래서 <b>비율은 test와 비슷한 validation에서 정하는 지금 방식</b>을 쓴다.</p>
+
+<h3>6-1. train 첫날 행의 인기 값 (데이터 시작 시점)</h3>
+<div class="fig">{fig_datastart()}</div>
+<p class="cap">학습에 넣기만 train 행을 쓰므로 이 실험에만 해당한다 (train 1주 중 첫 24시간). 학습에 넣기가 안 된 <b>주된 이유는 위의 "기사 외우기"</b>이고, 이건 작은 부수 한계다. 나중에 더하기는 validation · test 행만 써서 상관없다.</p>
 
 <h2>7. 정리</h2>
 <div class="tbl"><table><thead><tr><th></th><th>나중에 더하기 (최종)</th><th>학습에 넣기</th></tr></thead><tbody>
