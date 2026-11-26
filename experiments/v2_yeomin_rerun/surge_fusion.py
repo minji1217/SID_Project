@@ -36,6 +36,7 @@ popularity_fusion.py (모델 + λ·인기 + μ·나이) 를 그대로 기준으�
   SID    v1 : ~/minji/uni_post_rqvae/article_semantic_ids.parquet,  h,r: <V2>/sid/<run>/article_semantic_ids.parquet
   원본   <raw>/{train,validation}/behaviors.parquet, validation/history.parquet, articles.parquet
 결과: <V2>/analysis/surge_fusion_seed<seed>.json, .csv (이미 있으면 멈춤). --max-history 를 바꾸면 이름 끝에 _hist<N>/_histall,
+  --split-history 면 E (최근 N개 매칭 + 그 이전 history 매칭, 가중치 따로) 를 더하고 이름 끝에 _split.
   --wide-grid 면 _wide (τ 336h·720h·∞, ν 0.5·0.75·1, c 32·64·128 추가)
 """
 import argparse
@@ -171,9 +172,10 @@ def load_split(pred_path: Path, seq_path: Path) -> tuple:
     return p, seq
 
 
-def match_features(p: pd.DataFrame, seq, ht: HistoryTimes, taus: list, max_history: int = 50) -> dict:
+def match_features(p: pd.DataFrame, seq, ht: HistoryTimes, taus: list, max_history: int = 50, older_only: bool = False) -> dict:
     """τ 마다 후보별 (자기 칸 값, 자기 칸 있음, 같은 c1 칸 합). 시각 못 찾은 비율도 반환.
-    max_history > 0 이면 행마다 history 의 마지막 max_history 개만 쓴다 (Transformer 입력과 같게)."""
+    max_history > 0 이면 행마다 history 의 마지막 max_history 개만 쓴다 (Transformer 입력과 같게).
+    older_only 이면 반대로 마지막 max_history 개를 뺀 나머지 (그보다 이전 클릭) 만 쓴다."""
     lens = pc.list_value_length(seq.column("history_c1").combine_chunks()).to_numpy(zero_copy_only=False).astype(np.int64)
     row = np.repeat(np.arange(seq.num_rows), lens)
     hc1 = pc.list_flatten(seq.column("history_c1").combine_chunks()).to_numpy(zero_copy_only=False).astype(np.int64)
@@ -184,9 +186,9 @@ def match_features(p: pd.DataFrame, seq, ht: HistoryTimes, taus: list, max_histo
     if max_history > 0:
         start = np.repeat(np.cumsum(lens) - lens, lens)            # 행의 첫 원소 위치
         from_end = np.repeat(lens, lens) - (np.arange(len(row)) - start)   # 뒤에서 몇 번째 (1 = 마지막)
-        keep = from_end <= max_history
+        keep = (from_end > max_history) if older_only else (from_end <= max_history)
         row, hc1, hc2, ha = row[keep], hc1[keep], hc2[keep], ha[keep]
-        lens = np.minimum(lens, max_history)
+        lens = np.maximum(lens - max_history, 0) if older_only else np.minimum(lens, max_history)
     user = seq.column("user_id").to_numpy().astype(np.int64)[row]
     T = to_s(seq.column("impression_time").to_numpy())[row]
     ht_s = ht.query(user, ha, T)
@@ -246,8 +248,12 @@ def main():
     ap.add_argument("--exp-prefix", default="v2_")
     ap.add_argument("--max-history", type=int, default=50, help="매칭에 쓸 history 마지막 N개 (Transformer V1 = 50). 0 = 전체")
     ap.add_argument("--window-hours", type=float, default=WINDOW_H, help="기사 · 사건 인기도를 셀 직전 시간 (기본 24)")
+    ap.add_argument("--split-history", action="store_true",
+                    help="E 추가: 최근 --max-history 개 매칭과 그 이전 history 매칭을 따로 더함 (가중치 따로)")
     ap.add_argument("--wide-grid", action="store_true", help="τ, ν, c 후보를 바깥쪽으로 넓힘 (기본 격자는 그대로 포함)")
     a = ap.parse_args()
+    if a.split_history and a.max_history <= 0:
+        sys.exit("--split-history 는 --max-history > 0 일 때만 (최근 N개 / 그 이전으로 나눔)")
     global TAUS, NUS, C_MATCH
     if a.wide_grid:
         TAUS, NUS, C_MATCH = TAUS + WIDE["TAUS"], NUS + WIDE["NUS"], C_MATCH + WIDE["C_MATCH"]
@@ -255,7 +261,7 @@ def main():
     v2 = Path(a.v2).expanduser() if a.v2 else pre / "v2"
     raw = Path(a.raw).expanduser()
     out_dir = v2 / "analysis"
-    tag = f"seed{a.seed}" + ("" if a.max_history == 50 else f"_hist{a.max_history or 'all'}") + ("_wide" if a.wide_grid else "") + ("" if a.window_hours == WINDOW_H else f"_w{a.window_hours:g}")
+    tag = f"seed{a.seed}" + ("" if a.max_history == 50 else f"_hist{a.max_history or 'all'}") + ("_wide" if a.wide_grid else "") + ("" if a.window_hours == WINDOW_H else f"_w{a.window_hours:g}") + ("_split" if a.split_history else "")
     jpath, cpath = out_dir / f"surge_fusion_{tag}.json", out_dir / f"surge_fusion_{tag}.csv"
     if jpath.exists() or cpath.exists():
         sys.exit(f"멈춤: {jpath} 가 이미 있습니다 (덮어쓰지 않음)")
@@ -285,7 +291,7 @@ def main():
         ok = cev.notna().to_numpy()
         by_ev = sorted_times_by(cev[ok].astype(np.int64).to_numpy(), clicks.t.to_numpy()[ok])
 
-        D, info = {}, {"clicks_without_sid": skipped}
+        D, OLD, info = {}, {}, {"clicks_without_sid": skipped}
         for split in ["val", "test"]:
             log(f"[{run}] {split} 읽기·특징 계산")
             p, seq = load_split(P["pred"][split], P["seq"][split])
@@ -303,6 +309,10 @@ def main():
             info[split]["오답 후보 사건이 R 에 있음"] = float(f48[1][~pos].mean())
             info[split]["정답 자기 클릭 < 10"] = float((np.expm1(p.logpop.to_numpy()[pos]) < 10).mean())
             D[split] = (p, mf)
+            if a.split_history:
+                OLD[split] = match_features(p, seq, ht, TAUS, a.max_history, older_only=True)
+                info[split]["이전 history 항목"] = OLD[split]["history_items"]
+                info[split]["이전 history 없는 행"] = OLD[split]["rows_without_history"]
 
         (pv, mv), (pt_, mt) = D["val"], D["test"]
         Yv, Yt = pv.label.to_numpy(), pt_.label.to_numpy()
@@ -335,6 +345,18 @@ def main():
                     for c in C_MATCH:
                         gD[(l, m, le, tau, nu, c)] = top1_fast(b2 + c * M, Yv)
         bD = pick(gD)
+        if a.split_history:   # E: C 의 λ, μ 를 두고 최근 N개 매칭 (c1) + 그 이전 history 매칭 (c2) 을 따로 고른다
+            Ov = {(tau, nu): matching(OLD["val"][tau], nu) for tau in TAUS for nu in NUS}
+            Ot = {(tau, nu): matching(OLD["test"][tau], nu) for tau in TAUS for nu in NUS}
+            l, m = bC[0], bC[1]
+            base = sv + l * V["logpop"] + m * V["logage"]
+            gE = {}
+            for (tau, nu), M in Mv.items():
+                for c1 in C_MATCH:
+                    b1 = base + c1 * M
+                    for c2 in C_MATCH:
+                        gE[(l, m, tau, nu, c1, c2)] = top1_fast(b1 + c2 * Ov[(tau, nu)], Yv)
+            bE = pick(gE)
 
         l, m = bA
         test = {
@@ -349,15 +371,20 @@ def main():
         test[f"D +둘 다 (λ={l}, μ={m}, λe={le}, τ={tau:g}h, ν={nu}, c={c})"] = metrics(
             pt_, st + l * Tt["logpop"] + m * Tt["logage"] + le * Tt["logepop"] + c * Mt[(tau, nu)])
         # 참고: 각 항 하나만
+        if a.split_history:
+            l, m, tau, nu, c1, c2 = bE
+            test[f"E 최근{a.max_history}+이전 매칭 (λ={l}, μ={m}, τ={tau:g}h, ν={nu}, c최근={c1}, c이전={c2})"] = metrics(
+                pt_, st + l * Tt["logpop"] + m * Tt["logage"] + c1 * Mt[(tau, nu)] + c2 * Ot[(tau, nu)])
         test["참고: 사건 인기도만"] = metrics(pt_, Tt["logepop"])
         test["참고: 매칭만 (τ=48h, ν=0.2)"] = metrics(pt_, Mt[(48.0, 0.2)])
 
         warn = (edge_warn("A", bA, [LAMBDAS, MUS]) + edge_warn("B", bB, [LAMBDAS, MUS, LAMBDA_E])
-                + edge_warn("C", bC, [LAMBDAS, MUS, TAUS, NUS, C_MATCH]) + edge_warn("D", bD[2:], [LAMBDA_E, TAUS, NUS, C_MATCH]))
+                + edge_warn("C", bC, [LAMBDAS, MUS, TAUS, NUS, C_MATCH]) + edge_warn("D", bD[2:], [LAMBDA_E, TAUS, NUS, C_MATCH])
+                + (edge_warn("E", bE[2:], [TAUS, NUS, C_MATCH, C_MATCH]) if a.split_history else []))
         r = {"run": run, "seed": a.seed, "max_history": a.max_history, "wide_grid": a.wide_grid, "window_hours": a.window_hours,
              "grid": {"TAUS": TAUS, "NUS": NUS, "C_MATCH": C_MATCH}, "info": info, "grid_edge_warnings": warn,
-             "val_top1": {"A": gA[bA], "B": gB[bB], "C": gC[bC], "D": gD[bD]},
-             "best": {"A": bA, "B": bB, "C": bC, "D": bD}, "test": test}
+             "val_top1": {"A": gA[bA], "B": gB[bB], "C": gC[bC], "D": gD[bD], **({"E": gE[bE]} if a.split_history else {})},
+             "best": {"A": bA, "B": bB, "C": bC, "D": bD, **({"E": bE} if a.split_history else {})}, "split_history": a.split_history, "test": test}
         results.append(r)
         print(f"\n===== {run.upper()} (seed {a.seed}, 매칭 history {'전체' if a.max_history == 0 else f'마지막 {a.max_history}개'}, 인기도 창 {a.window_hours:g}시간) =====")
         print(f"SID 없어 건너뛴 클릭 {skipped:.2%} · " + " · ".join(
