@@ -14,6 +14,7 @@
   - 정답 · 오답 기사 나이 분위수, 정답 기사 클릭이 노출 몇 시간 전에 있었나 (48시간 안, 누적 비율)
   - 창별: 정답 · 오답 클릭 0 비율, 인기만 Top-1, 인기 + 나이 (Transformer 없음), Transformer + 인기 + 나이 (seed별 · 평균)
 입력 (읽기만): 1pos4neg split (validation 절반, test), Transformer 예측 <V2>/transformer/<run>_seed<seed>/{val,test}_candidate_scores.parquet, 원본 behaviors · articles
+다른 모델 (예: NRMS) 의 점수로 보려면 --pred-template 과 --out-name. 아래 표의 'Transformer' 는 그 모델을 뜻한다.
 결과: 화면 + <V2>/analysis/popularity_window/ (이미 있으면 popularity_window_2/ …) 안에
   <run>_click_timing.csv  노출 전 0~6시간 15분 단위 · 6~72시간 1시간 단위, 정답 · 오답 기사 클릭 비율과 누적 비율
   <run>_windows.csv       창별 클릭 0 비율, 인기만, 인기+나이, Transformer+인기+나이 (seed별 · 평균) validation · test 지표
@@ -87,6 +88,10 @@ def main():
     ap.add_argument("--raw", default=str(REPO / "data/raw"))
     ap.add_argument("--exp-prefix", default="v2_")
     ap.add_argument("--windows", nargs="+", type=float, default=WINDOWS)
+    ap.add_argument("--pred-template", default=None,
+                    help="모델 점수 파일 위치 (기본 Transformer). 예: '{v2}/nrms/{run}/final/lr0.0001_do0.2_seed{seed}/{split}_candidate_scores.parquet'"
+                         " ({split} = val | test). NRMS + 인기 + 나이 를 볼 때 씀")
+    ap.add_argument("--out-name", default="popularity_window", help="결과 폴더 이름 (<V2>/analysis/<이름>/)")
     a = ap.parse_args()
     pre = Path(a.pre).expanduser()
     v2 = Path(a.v2).expanduser() if a.v2 else pre / "v2"
@@ -103,6 +108,8 @@ def main():
         D = {}   # seed → {split: p}
         for seed in a.seeds:
             P = paths(run, pre, v2, a.exp_prefix, seed)
+            if a.pred_template:
+                P["pred"] = {s: Path(a.pred_template.format(v2=v2, run=run, seed=seed, split=s)).expanduser() for s in ("val", "test")}
             miss = [str(x) for x in [*P["seq"].values(), *P["pred"].values()] if not x.exists()]
             if miss:
                 print(f"[{run} seed {seed}] 입력 없음 → 건너뜀: {miss}")
@@ -197,9 +204,9 @@ def main():
 
     if not res:
         sys.exit("입력을 찾지 못했습니다")
-    out, k = v2 / "analysis" / "popularity_window", 2
+    out, k = v2 / "analysis" / a.out_name, 2
     while out.exists():
-        out, k = v2 / "analysis" / f"popularity_window_{k}", k + 1
+        out, k = v2 / "analysis" / f"{a.out_name}_{k}", k + 1
     out.mkdir(parents=True)
     for run, o in outputs.items():
         for name, df in o.items():
