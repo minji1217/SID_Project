@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>아이디어 2의 τ</title>
+<style>
+:root { --bg:#fff; --text:#14181f; --muted:#5b6577; --line:#e3e6eb; --surface:#f8f9fb; --hl:#eef4ff; --hl-line:#9fb8ec; --blue:#2a78d6; --orange:#d9792b; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Pretendard","Segoe UI",sans-serif; font-size:15.5px; line-height:1.7; word-break:keep-all; }
+main { max-width:880px; margin:0 auto; padding:32px 16px 72px; }
+h1 { font-size:25px; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 20px; font-size:14px; }
+h2 { font-size:20px; margin:40px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--line); }
+h3 { font-size:16.5px; margin:22px 0 6px; }
+.box1 { border:1.5px solid var(--hl-line); background:var(--hl); border-radius:12px; padding:14px 18px; }
+.fig { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; margin:12px 0; }
+.chart { width:100%; height:auto; display:block; font-family:inherit; }
+.cap { color:var(--muted); font-size:13.5px; margin:6px 2px 0; } .cap b { color:var(--text); }
+.tbl { overflow-x:auto; border:1px solid var(--line); border-radius:10px; margin:10px 0; }
+table { width:100%; border-collapse:collapse; font-size:14.5px; }
+th, td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+th { background:#f3f4f7; font-weight:600; color:var(--muted); } td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+tr.hl td { background:var(--hl); }
+.note { border-left:4px solid #e9c27a; background:#fff6e6; border-radius:0 8px 8px 0; padding:10px 14px; margin:12px 0; font-size:14.5px; }
+code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; background:#f3f4f7; padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:#f3f4f7; border-radius:8px; padding:10px 12px; overflow-x:auto; font-size:13px; line-height:1.55; }
+.head { font-size:15px; font-weight:700; fill:#14181f; } .lbl { font-size:13.5px; fill:#14181f; } .sm { font-size:12px; } .m { fill:#5b6577; } .b { font-weight:700; }
+.box { fill:#fff; stroke:#cfd5de; stroke-width:1.2; } .shared { fill:#eaf1ff; stroke:#9fb8ec; stroke-width:1.2; }
+.user { fill:#fff1e4; stroke:#e7b17f; stroke-width:1.2; } .ours { fill:#f1ecfb; stroke:#b9a6e3; stroke-width:1.2; }
+.pos { fill:#e3f5ea; stroke:#56b886; } .neg { fill:#f3f4f7; stroke:#cfd5de; }
+.arr { stroke:#5b6577; stroke-width:2; fill:none; } .arrb { stroke:#2a78d6; stroke-width:2; fill:none; }
+.vec { fill:#9fb8ec; } .vec2 { fill:#e7b17f; }
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#5b6577"/></marker>
+<marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2a78d6"/></marker>
+</defs></svg>
+<main>
+
+<h1>아이디어 2의 τ(타우): 실제 사용자 한 명으로 보기</h1>
+<p class="sub">EB-NeRD v2 · SURGE 아이디어 2 (history 사건 매칭) · 2026-11-26</p>
+
+<div class="box1"><b>한 줄 요약</b> — τ는 <b>"예전 클릭을 얼마나 오래 기억해 줄지"</b>이다. τ가 작으면 최근 클릭만 보고(요즘 관심사), 크면 예전 클릭도 똑같이 본다(꾸준한 취향).
+validation에서 τ = 720시간(H), ∞(R)가 뽑혔다. EB-NeRD 사용자는 <b>꾸준히 보던 주제</b>를 더 많이 클릭한다는 뜻이다.</div>
+
+<h2>1. τ가 하는 일</h2>
+<p>아이디어 2는 사용자가 클릭했던 기사(history 최근 50개)로 "이 사람은 어떤 사건을 얼마나 보는 사람인가" 비율표를 만든다. 이때 클릭마다 가중치를 준다.</p>
+<pre>가중치 w = exp( −(노출 시각 − 클릭 시각) / τ )</pre>
+<p>방금 한 클릭은 1에 가깝고, 오래된 클릭일수록 0에 가까워진다. <b>τ가 그 줄어드는 속도</b>를 정한다.</p>
+<div class="tbl"><table>
+<tr><th>클릭한 지</th><th class="n">τ = 24시간</th><th class="n">τ = 168시간 (7일)</th><th class="n">τ = 720시간 (30일)</th><th class="n">τ = ∞</th></tr>
+<tr><td>3시간 전</td><td class="n">0.88</td><td class="n">0.98</td><td class="n">1.00</td><td class="n">1</td></tr>
+<tr><td>1일 전</td><td class="n">0.37</td><td class="n">0.87</td><td class="n">0.97</td><td class="n">1</td></tr>
+<tr><td>4일 전</td><td class="n">0.02</td><td class="n">0.56</td><td class="n">0.88</td><td class="n">1</td></tr>
+<tr><td>7일 전</td><td class="n">0.001</td><td class="n">0.37</td><td class="n">0.79</td><td class="n">1</td></tr>
+<tr><td>11일 전</td><td class="n">≈ 0</td><td class="n">0.21</td><td class="n">0.69</td><td class="n">1</td></tr>
+</table></div>
+<p>비유하면 τ = 24시간은 <b>어제 일만 기억하는 금붕어</b>, τ = 720시간은 <b>한 달 전 일도 기억하는 코끼리</b>, τ = ∞는 <b>날짜를 아예 안 보고 클릭 수만 세는 것</b>이다.</p>
+
+<h2>2. 실제 사용자 한 명</h2>
+<p>test 노출 373893754 (2023-05-28 20:17)의 사용자이다. τ의 효과가 잘 보이는 행을 골랐다. 이 사람의 최근 클릭 50개를 시간 순으로 찍으면 아래와 같다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 470" class="chart" role="img" aria-label="실제 사용자의 마지막 50개 클릭 시각과 τ별 가중치 곡선">
+<text x="20" y="22" class="head">위: τ별 가중치 (클릭이 오래될수록 얼마나 쳐주나)</text>
+<line x1="90" y1="210" x2="750" y2="210" stroke="#e3e6eb"/>
+<text x="82" y="214" class="lbl sm m" text-anchor="end">0</text>
+<line x1="90" y1="135.0" x2="750" y2="135.0" stroke="#e3e6eb"/>
+<text x="82" y="139.0" class="lbl sm m" text-anchor="end">0.5</text>
+<line x1="90" y1="60" x2="750" y2="60" stroke="#e3e6eb"/>
+<text x="82" y="64" class="lbl sm m" text-anchor="end">1</text>
+<text x="82" y="48" class="lbl sm m" text-anchor="end">가중치</text>
+<polyline points="750.0,60.0 743.4,77.6 736.8,93.2 730.2,106.9 723.6,119.0 717.0,129.7 710.4,139.1 703.8,147.5 697.2,154.8 690.6,161.3 684.0,167.0 677.4,172.1 670.8,176.5 664.2,180.5 657.6,183.9 651.0,187.0 644.4,189.7 637.8,192.1 631.2,194.2 624.6,196.0 618.0,197.7 611.4,199.1 604.8,200.4 598.2,201.5 591.6,202.5 585.0,203.4 578.4,204.2 571.8,204.9 565.2,205.5 558.6,206.0 552.0,206.5 545.4,206.9 538.8,207.3 532.2,207.6 525.6,207.9 519.0,208.1 512.4,208.3 505.8,208.5 499.2,208.7 492.6,208.9 486.0,209.0 479.4,209.1 472.8,209.2 466.2,209.3 459.6,209.4 453.0,209.5 446.4,209.5 439.8,209.6 433.2,209.6 426.6,209.7 420.0,209.7 413.4,209.7 406.8,209.8 400.2,209.8 393.6,209.8 387.0,209.8 380.4,209.9 373.8,209.9 367.2,209.9 360.6,209.9 354.0,209.9 347.4,209.9 340.8,209.9 334.2,209.9 327.6,209.9 321.0,210.0 314.4,210.0 307.8,210.0 301.2,210.0 294.6,210.0 288.0,210.0 281.4,210.0 274.8,210.0 268.2,210.0 261.6,210.0 255.0,210.0 248.4,210.0 241.8,210.0 235.2,210.0 228.6,210.0 222.0,210.0 215.4,210.0 208.8,210.0 202.2,210.0 195.6,210.0 189.0,210.0 182.4,210.0 175.8,210.0 169.2,210.0 162.6,210.0 156.0,210.0 149.4,210.0 142.8,210.0 136.2,210.0 129.6,210.0 123.0,210.0 116.4,210.0 109.8,210.0 103.2,210.0 96.6,210.0 90.0,210.0" fill="none" stroke="#d14b3b" stroke-width="2.2"/>
+<polyline points="750.0,60.0 743.4,62.7 736.8,65.3 730.2,67.8 723.6,70.3 717.0,72.8 710.4,75.2 703.8,77.6 697.2,80.0 690.6,82.3 684.0,84.5 677.4,86.8 670.8,88.9 664.2,91.1 657.6,93.2 651.0,95.2 644.4,97.3 637.8,99.3 631.2,101.2 624.6,103.2 618.0,105.0 611.4,106.9 604.8,108.7 598.2,110.5 591.6,112.3 585.0,114.0 578.4,115.7 571.8,117.4 565.2,119.0 558.6,120.6 552.0,122.2 545.4,123.8 538.8,125.3 532.2,126.8 525.6,128.3 519.0,129.7 512.4,131.1 505.8,132.5 499.2,133.9 492.6,135.2 486.0,136.6 479.4,137.9 472.8,139.1 466.2,140.4 459.6,141.6 453.0,142.8 446.4,144.0 439.8,145.2 433.2,146.3 426.6,147.5 420.0,148.6 413.4,149.7 406.8,150.7 400.2,151.8 393.6,152.8 387.0,153.8 380.4,154.8 373.8,155.8 367.2,156.8 360.6,157.7 354.0,158.6 347.4,159.5 340.8,160.4 334.2,161.3 327.6,162.2 321.0,163.0 314.4,163.8 307.8,164.7 301.2,165.5 294.6,166.2 288.0,167.0 281.4,167.8 274.8,168.5 268.2,169.3 261.6,170.0 255.0,170.7 248.4,171.4 241.8,172.1 235.2,172.7 228.6,173.4 222.0,174.1 215.4,174.7 208.8,175.3 202.2,175.9 195.6,176.5 189.0,177.1 182.4,177.7 175.8,178.3 169.2,178.8 162.6,179.4 156.0,179.9 149.4,180.5 142.8,181.0 136.2,181.5 129.6,182.0 123.0,182.5 116.4,183.0 109.8,183.5 103.2,183.9 96.6,184.4 90.0,184.8" fill="none" stroke="#d9792b" stroke-width="2.2"/>
+<polyline points="750.0,60.0 743.4,60.6 736.8,61.2 730.2,61.9 723.6,62.5 717.0,63.1 710.4,63.7 703.8,64.3 697.2,64.9 690.6,65.5 684.0,66.1 677.4,66.7 670.8,67.3 664.2,67.9 657.6,68.5 651.0,69.1 644.4,69.7 637.8,70.3 631.2,70.8 624.6,71.4 618.0,72.0 611.4,72.6 604.8,73.1 598.2,73.7 591.6,74.3 585.0,74.8 578.4,75.4 571.8,76.0 565.2,76.5 558.6,77.1 552.0,77.6 545.4,78.2 538.8,78.7 532.2,79.3 525.6,79.8 519.0,80.4 512.4,80.9 505.8,81.4 499.2,82.0 492.6,82.5 486.0,83.0 479.4,83.6 472.8,84.1 466.2,84.6 459.6,85.1 453.0,85.6 446.4,86.2 439.8,86.7 433.2,87.2 426.6,87.7 420.0,88.2 413.4,88.7 406.8,89.2 400.2,89.7 393.6,90.2 387.0,90.7 380.4,91.2 373.8,91.7 367.2,92.2 360.6,92.7 354.0,93.2 347.4,93.7 340.8,94.1 334.2,94.6 327.6,95.1 321.0,95.6 314.4,96.1 307.8,96.5 301.2,97.0 294.6,97.5 288.0,97.9 281.4,98.4 274.8,98.9 268.2,99.3 261.6,99.8 255.0,100.3 248.4,100.7 241.8,101.2 235.2,101.6 228.6,102.1 222.0,102.5 215.4,103.0 208.8,103.4 202.2,103.9 195.6,104.3 189.0,104.7 182.4,105.2 175.8,105.6 169.2,106.0 162.6,106.5 156.0,106.9 149.4,107.3 142.8,107.8 136.2,108.2 129.6,108.6 123.0,109.0 116.4,109.5 109.8,109.9 103.2,110.3 96.6,110.7 90.0,111.1" fill="none" stroke="#2a78d6" stroke-width="2.2"/>
+<polyline points="750.0,60.0 743.4,60.0 736.8,60.0 730.2,60.0 723.6,60.0 717.0,60.0 710.4,60.0 703.8,60.0 697.2,60.0 690.6,60.0 684.0,60.0 677.4,60.0 670.8,60.0 664.2,60.0 657.6,60.0 651.0,60.0 644.4,60.0 637.8,60.0 631.2,60.0 624.6,60.0 618.0,60.0 611.4,60.0 604.8,60.0 598.2,60.0 591.6,60.0 585.0,60.0 578.4,60.0 571.8,60.0 565.2,60.0 558.6,60.0 552.0,60.0 545.4,60.0 538.8,60.0 532.2,60.0 525.6,60.0 519.0,60.0 512.4,60.0 505.8,60.0 499.2,60.0 492.6,60.0 486.0,60.0 479.4,60.0 472.8,60.0 466.2,60.0 459.6,60.0 453.0,60.0 446.4,60.0 439.8,60.0 433.2,60.0 426.6,60.0 420.0,60.0 413.4,60.0 406.8,60.0 400.2,60.0 393.6,60.0 387.0,60.0 380.4,60.0 373.8,60.0 367.2,60.0 360.6,60.0 354.0,60.0 347.4,60.0 340.8,60.0 334.2,60.0 327.6,60.0 321.0,60.0 314.4,60.0 307.8,60.0 301.2,60.0 294.6,60.0 288.0,60.0 281.4,60.0 274.8,60.0 268.2,60.0 261.6,60.0 255.0,60.0 248.4,60.0 241.8,60.0 235.2,60.0 228.6,60.0 222.0,60.0 215.4,60.0 208.8,60.0 202.2,60.0 195.6,60.0 189.0,60.0 182.4,60.0 175.8,60.0 169.2,60.0 162.6,60.0 156.0,60.0 149.4,60.0 142.8,60.0 136.2,60.0 129.6,60.0 123.0,60.0 116.4,60.0 109.8,60.0 103.2,60.0 96.6,60.0 90.0,60.0" fill="none" stroke="#14181f" stroke-width="2.2" stroke-dasharray="6 4"/>
+<text x="98.39999999999998" y="206.0" class="lbl sm b" fill="#d14b3b">τ = 24시간</text>
+<text x="98.39999999999998" y="175.7" class="lbl sm b" fill="#d9792b">τ = 168시간</text>
+<text x="98.39999999999998" y="102.3" class="lbl sm b" fill="#2a78d6">τ = 720시간</text>
+<text x="98.39999999999998" y="54.0" class="lbl sm b" fill="#14181f">τ = ∞</text>
+<text x="20" y="242" class="head">아래: 이 사용자의 실제 클릭 50개 (가로 = 노출보다 몇 시간 전)</text>
+<text x="82" y="267" class="lbl sm" text-anchor="end">뉴스</text>
+<line x1="90" y1="262" x2="750" y2="262" stroke="#eef0f3"/>
+<text x="82" y="301" class="lbl sm" text-anchor="end">스포츠</text>
+<line x1="90" y1="296" x2="750" y2="296" stroke="#eef0f3"/>
+<text x="82" y="335" class="lbl sm" text-anchor="end">범죄</text>
+<line x1="90" y1="330" x2="750" y2="330" stroke="#eef0f3"/>
+<text x="82" y="369" class="lbl sm" text-anchor="end">기타</text>
+<line x1="90" y1="364" x2="750" y2="364" stroke="#eef0f3"/>
+<circle cx="141.3" cy="300.8" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="141.3" cy="367.6" r="5" fill="#9aa3b2" fill-opacity="0.8"/>
+<circle cx="169.9" cy="260.9" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="170.1" cy="326.6" r="5" fill="#d14b3b" fill-opacity="0.8"/>
+<circle cx="211.9" cy="262.2" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="211.9" cy="294.7" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="211.9" cy="300.0" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="224.4" cy="259.2" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="224.4" cy="261.7" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="224.4" cy="263.2" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="224.4" cy="369.7" r="5" fill="#9aa3b2" fill-opacity="0.8"/>
+<circle cx="224.6" cy="364.1" r="5" fill="#9aa3b2" fill-opacity="0.8"/>
+<circle cx="224.6" cy="258.9" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="240.9" cy="265.6" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="266.4" cy="263.7" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="266.4" cy="360.5" r="5" fill="#9aa3b2" fill-opacity="0.8"/>
+<circle cx="266.4" cy="267.7" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="266.4" cy="370.8" r="5" fill="#9aa3b2" fill-opacity="0.8"/>
+<circle cx="268.0" cy="300.3" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="268.0" cy="369.6" r="5" fill="#9aa3b2" fill-opacity="0.8"/>
+<circle cx="268.0" cy="293.3" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="271.7" cy="265.2" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="271.9" cy="267.6" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="271.9" cy="264.6" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="316.4" cy="261.6" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="321.9" cy="256.4" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="321.9" cy="261.1" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="321.9" cy="297.6" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="324.7" cy="267.8" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="326.3" cy="336.5" r="5" fill="#d14b3b" fill-opacity="0.8"/>
+<circle cx="326.3" cy="261.7" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="326.3" cy="335.1" r="5" fill="#d14b3b" fill-opacity="0.8"/>
+<circle cx="326.3" cy="292.6" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="354.7" cy="368.3" r="5" fill="#9aa3b2" fill-opacity="0.8"/>
+<circle cx="354.7" cy="262.7" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="354.7" cy="255.2" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="354.7" cy="265.1" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="354.7" cy="362.6" r="5" fill="#9aa3b2" fill-opacity="0.8"/>
+<circle cx="370.1" cy="300.5" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="372.5" cy="264.4" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="377.3" cy="255.0" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="372.9" cy="329.9" r="5" fill="#d14b3b" fill-opacity="0.8"/>
+<circle cx="373.8" cy="301.1" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="372.9" cy="360.4" r="5" fill="#9aa3b2" fill-opacity="0.8"/>
+<circle cx="373.8" cy="293.6" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="373.8" cy="301.2" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="377.3" cy="257.7" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="377.3" cy="296.9" r="5" fill="#2e9e6a" fill-opacity="0.8"/>
+<circle cx="377.3" cy="258.3" r="5" fill="#2a78d6" fill-opacity="0.8"/>
+<circle cx="743.0" cy="336.5" r="5" fill="#d14b3b" fill-opacity="0.8"/>
+<line x1="90" y1="400" x2="750" y2="400" stroke="#5b6577"/>
+<line x1="750.0" y1="400" x2="750.0" y2="405" stroke="#5b6577"/>
+<text x="750.0" y="420" class="lbl sm m" text-anchor="end">지금</text>
+<line x1="750.0" y1="60" x2="750.0" y2="400" stroke="#e3e6eb" stroke-dasharray="2 4"/>
+<line x1="697.2" y1="400" x2="697.2" y2="405" stroke="#5b6577"/>
+<text x="697.2" y="420" class="lbl sm m" text-anchor="middle">1일 전</text>
+<line x1="697.2" y1="60" x2="697.2" y2="400" stroke="#e3e6eb" stroke-dasharray="2 4"/>
+<line x1="591.6" y1="400" x2="591.6" y2="405" stroke="#5b6577"/>
+<text x="591.6" y="420" class="lbl sm m" text-anchor="middle">3일 전</text>
+<line x1="591.6" y1="60" x2="591.6" y2="400" stroke="#e3e6eb" stroke-dasharray="2 4"/>
+<line x1="380.4" y1="400" x2="380.4" y2="405" stroke="#5b6577"/>
+<text x="380.4" y="420" class="lbl sm m" text-anchor="middle">7일 전</text>
+<line x1="380.4" y1="60" x2="380.4" y2="400" stroke="#e3e6eb" stroke-dasharray="2 4"/>
+<line x1="169.2" y1="400" x2="169.2" y2="405" stroke="#5b6577"/>
+<text x="169.2" y="420" class="lbl sm m" text-anchor="middle">11일 전</text>
+<line x1="169.2" y1="60" x2="169.2" y2="400" stroke="#e3e6eb" stroke-dasharray="2 4"/>
+<text x="733.0" y="316" class="lbl sm b" fill="#d14b3b" text-anchor="end">가장 최근 클릭 하나: 3시간 전</text>
+<text x="266.0" y="444" class="lbl sm m" text-anchor="middle">나머지 49개는 모두 7~11일 전</text>
+</svg>
+<p class="cap"><b>그림 1.</b> 위는 τ별 가중치 곡선, 아래는 실제 클릭 50개(점 하나 = 클릭 하나, 범주는 기사 카테고리). <b>가장 최근 클릭 하나(범죄)만 3시간 전</b>이고 나머지 49개는 7~11일 전이다.
+τ = 24시간 곡선(빨강)은 7일 전부터 거의 0이라, 이 사람의 49개 클릭을 사실상 지운다.</p>
+</div>
+
+<h2>3. τ에 따라 "이 사람"이 달라진다</h2>
+<p>같은 50개 클릭인데, τ에 따라 비율표가 완전히 달라진다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 300" class="chart" role="img" aria-label="τ별로 계산한 이 사용자의 범주 비율">
+<text x="20" y="52" class="lbl b">τ = 24시간</text>
+<rect x="150.0" y="30" width="4.9" height="32" fill="#2a78d6" fill-opacity="0.85"/>
+<rect x="154.9" y="30" width="3.3" height="32" fill="#2e9e6a" fill-opacity="0.85"/>
+<rect x="158.2" y="30" width="580.3" height="32" fill="#d14b3b" fill-opacity="0.85"/>
+<text x="448.3" y="51" class="lbl sm b" fill="#fff" text-anchor="middle">범죄 98%</text>
+<rect x="738.5" y="30" width="1.5" height="32" fill="#9aa3b2" fill-opacity="0.85"/>
+<text x="20" y="114" class="lbl b">τ = 168시간</text>
+<rect x="150.0" y="92" width="270.5" height="32" fill="#2a78d6" fill-opacity="0.85"/>
+<text x="285.2" y="113" class="lbl sm b" fill="#fff" text-anchor="middle">뉴스 46%</text>
+<rect x="420.5" y="92" width="139.1" height="32" fill="#2e9e6a" fill-opacity="0.85"/>
+<text x="490.1" y="113" class="lbl sm b" fill="#fff" text-anchor="middle">스포츠 24%</text>
+<rect x="559.6" y="92" width="83.5" height="32" fill="#d14b3b" fill-opacity="0.85"/>
+<text x="601.4" y="113" class="lbl sm b" fill="#fff" text-anchor="middle">범죄 14%</text>
+<rect x="643.2" y="92" width="96.8" height="32" fill="#9aa3b2" fill-opacity="0.85"/>
+<text x="691.6" y="113" class="lbl sm b" fill="#fff" text-anchor="middle">기타 16%</text>
+<text x="20" y="176" class="lbl b">τ = 720시간</text>
+<rect x="150.0" y="154" width="281.5" height="32" fill="#2a78d6" fill-opacity="0.85"/>
+<text x="290.8" y="175" class="lbl sm b" fill="#fff" text-anchor="middle">뉴스 48%</text>
+<rect x="431.5" y="154" width="141.5" height="32" fill="#2e9e6a" fill-opacity="0.85"/>
+<text x="502.3" y="175" class="lbl sm b" fill="#fff" text-anchor="middle">스포츠 24%</text>
+<rect x="573.0" y="154" width="62.7" height="32" fill="#d14b3b" fill-opacity="0.85"/>
+<text x="604.3" y="175" class="lbl sm b" fill="#fff" text-anchor="middle">범죄 11%</text>
+<rect x="635.7" y="154" width="104.3" height="32" fill="#9aa3b2" fill-opacity="0.85"/>
+<text x="687.8" y="175" class="lbl sm b" fill="#fff" text-anchor="middle">기타 18%</text>
+<text x="20" y="238" class="lbl b">τ = ∞</text>
+<rect x="150.0" y="216" width="283.2" height="32" fill="#2a78d6" fill-opacity="0.85"/>
+<text x="291.6" y="237" class="lbl sm b" fill="#fff" text-anchor="middle">뉴스 48%</text>
+<rect x="433.2" y="216" width="141.6" height="32" fill="#2e9e6a" fill-opacity="0.85"/>
+<text x="504.0" y="237" class="lbl sm b" fill="#fff" text-anchor="middle">스포츠 24%</text>
+<rect x="574.8" y="216" width="59.0" height="32" fill="#d14b3b" fill-opacity="0.85"/>
+<text x="604.3" y="237" class="lbl sm b" fill="#fff" text-anchor="middle">범죄 10%</text>
+<rect x="633.8" y="216" width="106.2" height="32" fill="#9aa3b2" fill-opacity="0.85"/>
+<text x="686.9" y="237" class="lbl sm b" fill="#fff" text-anchor="middle">기타 18%</text>
+<text x="150" y="280" class="lbl sm m">막대 = 이 사용자가 각 범주를 얼마나 보는 사람인지 (합 100%). 파랑 뉴스 · 초록 스포츠 · 빨강 범죄 · 회색 기타</text>
+</svg>
+<p class="cap"><b>그림 2.</b> τ = 24시간이면 3시간 전 범죄 클릭 하나가 98%를 차지해 <b>"범죄 기사 보는 사람"</b>이 된다. τ = 168시간부터는 49개가 살아나 <b>"뉴스 · 스포츠를 꾸준히 보는 사람"</b>이 된다. 720시간과 ∞는 거의 같다.</p>
+</div>
+
+<h2>4. 그래서 어떤 후보를 고르나</h2>
+<p>이 노출에서 뜬 후보 5개에 "사용자 비율표에서 그 범주가 차지하는 비율"을 매칭 점수로 주면 이렇게 된다.</p>
+<div class="tbl"><table>
+<tr><th>후보</th><th>정답?</th><th class="n">τ = 24시간 매칭 점수</th><th class="n">τ = 720시간 매칭 점수</th></tr>
+<tr class="hl"><td>뉴스 기사</td><td>정답 (실제로 누름)</td><td class="n">0.8%</td><td class="n">47.7% ← 1등</td></tr>
+<tr><td>소비 기사</td><td>오답</td><td class="n">0.0%</td><td class="n">0.0%</td></tr>
+<tr><td>성·연애 기사</td><td>오답</td><td class="n">0.1%</td><td class="n">2.1%</td></tr>
+<tr><td>범죄 기사</td><td>오답</td><td class="n">98.3% ← 1등</td><td class="n">10.6%</td></tr>
+<tr><td>연예 기사</td><td>오답</td><td class="n">0.1%</td><td class="n">5.9%</td></tr>
+</table></div>
+<ul>
+<li><b>τ = 24시간:</b> 범죄 기사(오답)가 1등이다. 어제 본 하나에 끌려가서 틀린다.</li>
+<li><b>τ = 720시간:</b> 뉴스 기사(정답)가 1등이다. 꾸준히 보던 주제를 따라가서 맞힌다.</li>
+</ul>
+<div class="note">이 그림과 표는 이해를 위해 <b>카테고리(c1)만으로</b> 계산했다. 실제 아이디어 2는 (c1, c2) <b>사건 단위</b> 비율표를 쓰고, 같은 사건이 없으면 같은 카테고리 비율에 ν를 곱해 준다. 최종 점수는 Transformer + 인기 + 나이에 c × 매칭 점수를 더한 것이다.</div>
+
+<h2>5. 전체 test에서 보면</h2>
+<p>이 컨테이너에 있는 test 1pos4neg 2만 행으로 "최근 50개 클릭이 노출보다 얼마나 전인가"를 쟀다(클릭 시각은 실제 기록).</p>
+<div class="tbl"><table>
+<tr><th>최근 50개 클릭의 나이</th><th class="n">10%</th><th class="n">25%</th><th class="n">중앙값</th><th class="n">75%</th><th class="n">90%</th></tr>
+<tr><td>노출보다 몇 시간 전</td><td class="n">12시간</td><td class="n">38시간</td><td class="n">97시간 (4일)</td><td class="n">162시간 (7일)</td><td class="n">239시간 (10일)</td></tr>
+</table></div>
+<div class="tbl"><table>
+<tr><th>τ</th><th class="n">가중치 0.5 이상으로 살아남는 클릭</th><th>뜻</th></tr>
+<tr><td>24시간</td><td class="n">12%</td><td>50개 중 약 6개만 보고 판단</td></tr>
+<tr><td>168시간</td><td class="n">57%</td><td>절반 정도</td></tr>
+<tr class="hl"><td>720시간 (H에서 뽑힘)</td><td class="n">99%</td><td>거의 50개 모두</td></tr>
+</table></div>
+
+<h2>6. 우리 결과가 말해 주는 것</h2>
+<p>validation에서 고른 값은 <b>H τ = 720시간, R τ = ∞</b>였다. 둘 다 "50개를 거의 똑같이 센다"는 쪽이다.</p>
+<ul>
+<li><b>최근 클릭에 더 큰 가중치를 줘도 도움이 안 됐다.</b> 사용자의 꾸준한 취향이 더 잘 맞았다.</li>
+<li>짐작되는 이유 두 가지:
+  <ul>
+  <li>history를 이미 <b>최근 50개</b>로 잘라서, 그 자체가 최근 위주이다.</li>
+  <li>"지금 뜨는 것"은 <b>인기도 · 나이 항</b>이 이미 잡고 있어서, 아이디어 2는 개인의 오래된 취향을 맡는 편이 낫다.</li>
+  </ul></li>
+</ul>
+<p class="sub">위 2~4절의 행은 효과를 보여 주려고 고른 한 예시이다. 결론은 한 행이 아니라 validation 전체에서 고른 τ로 내린다.</p>
+</main></body></html>

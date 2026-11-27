@@ -131,6 +131,16 @@ def main():
     p.add_argument("--max-history", type=int, default=20)
     p.add_argument("--progress-every", type=int, default=50)
     p.add_argument("--limit", type=int, default=None)
+    # 아래는 기본값 = 공개 구현 설정 (지정하지 않으면 예전 실행과 같음). 우리 Transformer V1 설정과 맞출 때만 바꾼다.
+    p.add_argument("--d-model", type=int, default=384)
+    p.add_argument("--heads", type=int, default=6)
+    p.add_argument("--d-kv", type=int, default=None, help="head 하나의 차원. 기본 None = T5Config 기본 64")
+    p.add_argument("--d-ff", type=int, default=1024)
+    p.add_argument("--layers", type=int, default=4)
+    p.add_argument("--dropout", type=float, default=None, help="기본 None = T5Config 기본 0.1")
+    p.add_argument("--no-sep", action="store_true", help="history 기사 사이 SEP 토큰을 넣지 않음")
+    p.add_argument("--scheduler", choices=["invsqrt", "none"], default="invsqrt")
+    p.add_argument("--grad-clip", type=float, default=0.0, help="0 이면 clip 없음 (공개 구현 기본)")
     a = p.parse_args()
 
     out = a.out_dir
@@ -151,27 +161,39 @@ def main():
             if k in d and int(d[k][..., :N_LAYERS].max()) >= CODEBOOK:
                 raise ValueError("c1..c3 code가 512 이상입니다.")
 
+    # d_kv · dropout 은 공개 모델 생성자 인자가 아니라서, 모델 파일은 그대로 두고 그 파일이 쓰는 T5Config 기본값만 바꾼다
+    overrides = {k: v for k, v in (("d_kv", a.d_kv), ("dropout_rate", a.dropout)) if v is not None}
+    if overrides:
+        import functools
+        import modules.model as _ref_model
+        _ref_model.T5Config = functools.partial(_ref_model.T5Config, **overrides)
+        log(f"  T5Config 기본값 변경: {overrides}")
+
     corpus = torch.unique(torch.cat([train["target_sids"][:, :N_LAYERS],
                                      test["candidate_sids"].reshape(-1, 4)[:, :N_LAYERS]]), dim=0)
     model = EncoderDecoderRetrievalModel(
         codebooks=corpus, num_hierarchies=N_LAYERS, num_embeddings_per_hierarchy=CODEBOOK,
-        t5_d_model=384, t5_num_heads=6, t5_d_ff=1024, t5_num_layers=4,
-        top_k_for_generation=10, should_add_sep_token=True, num_user_bins=None,
+        t5_d_model=a.d_model, t5_num_heads=a.heads, t5_d_ff=a.d_ff, t5_num_layers=a.layers,
+        top_k_for_generation=10, should_add_sep_token=not a.no_sep, num_user_bins=None,
     ).to(device)
+    enc_cfg = model.encoder.config
+    log(f"  모델 설정 d_model {enc_cfg.d_model} · heads {enc_cfg.num_heads} · d_kv {enc_cfg.d_kv} · d_ff {enc_cfg.d_ff} · "
+        f"layers {enc_cfg.num_layers} · dropout {enc_cfg.dropout_rate} · SEP {not a.no_sep}")
     n_params = sum(x.numel() for x in model.parameters())
     log(f"  parameters {n_params:,}")
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=a.weight_decay)
-    sched = InverseSquareRootScheduler(optimizer=opt, warmup_steps=a.warmup_steps)
+    sched = InverseSquareRootScheduler(optimizer=opt, warmup_steps=a.warmup_steps) if a.scheduler == "invsqrt" else None
 
     config = {**{k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()},
               "reference": "EdoardoBotta/RQ-VAE-Recommender@957d32b modules/model.py (unchanged)",
-              "t5_d_model": 384, "t5_num_heads": 6, "t5_d_ff": 1024, "t5_num_layers": 4,
-              "should_add_sep_token": True, "num_user_bins": None, "num_hierarchies": N_LAYERS,
+              "t5_d_model": a.d_model, "t5_num_heads": a.heads, "t5_d_kv": enc_cfg.d_kv, "t5_d_ff": a.d_ff,
+              "t5_num_layers": a.layers, "should_add_sep_token": not a.no_sep, "num_user_bins": None, "num_hierarchies": N_LAYERS,
               "num_embeddings_per_hierarchy": CODEBOOK, "num_parameters": n_params,
               "selection_metric": "val_top1_accuracy",
               # compare_v1_vs_tiger.py 설정 표용 별칭
-              "d_model": 384, "num_heads": 6, "num_layers": 4, "d_ff": 1024,
-              "dropout": "0.1 (T5Config 기본)", "max_history": a.max_history,
+              "d_model": a.d_model, "num_heads": a.heads, "num_layers": a.layers, "d_ff": a.d_ff,
+              "dropout": enc_cfg.dropout_rate, "max_history": a.max_history,
+              "scheduler": a.scheduler, "grad_clip": a.grad_clip,
               "level_sizes": [CODEBOOK, CODEBOOK, CODEBOOK, "dedup(미사용)"]}
     (out / "config.json").write_text(json.dumps(config, indent=2, ensure_ascii=False))
     hist_path = out / "epoch_history.csv"
@@ -194,7 +216,11 @@ def main():
             o = model(to_batch(train, idx, device))
             opt.zero_grad()
             o.loss.backward()
-            opt.step(); sched.step()
+            if a.grad_clip > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), a.grad_clip)
+            opt.step()
+            if sched is not None:
+                sched.step()
             bs = idx.numel(); loss_sum += float(o.loss) * bs; ce_sum += o.loss_d.float().cpu() * bs; seen += bs
             if (bi + 1) % a.progress_every == 0 or bi + 1 == n_batches:
                 el = time.time() - t0

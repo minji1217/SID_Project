@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>test 기사 클릭 수명</title>
+<style>
+:root { --bg:#fff; --text:#14181f; --muted:#5b6577; --line:#e3e6eb; --surface:#f8f9fb; --hl:#eef4ff; --hl-line:#9fb8ec; --blue:#2a78d6; --orange:#d9792b; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Pretendard","Segoe UI",sans-serif; font-size:15.5px; line-height:1.7; word-break:keep-all; }
+main { max-width:880px; margin:0 auto; padding:32px 16px 72px; }
+h1 { font-size:25px; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 20px; font-size:14px; }
+h2 { font-size:20px; margin:40px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--line); }
+h3 { font-size:16.5px; margin:22px 0 6px; }
+.box1 { border:1.5px solid var(--hl-line); background:var(--hl); border-radius:12px; padding:14px 18px; }
+.fig { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; margin:12px 0; }
+.chart { width:100%; height:auto; display:block; font-family:inherit; }
+.cap { color:var(--muted); font-size:13.5px; margin:6px 2px 0; } .cap b { color:var(--text); }
+.tbl { overflow-x:auto; border:1px solid var(--line); border-radius:10px; margin:10px 0; }
+table { width:100%; border-collapse:collapse; font-size:14.5px; }
+th, td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+th { background:#f3f4f7; font-weight:600; color:var(--muted); } td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+tr.hl td { background:var(--hl); }
+.note { border-left:4px solid #e9c27a; background:#fff6e6; border-radius:0 8px 8px 0; padding:10px 14px; margin:12px 0; font-size:14.5px; }
+code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; background:#f3f4f7; padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:#f3f4f7; border-radius:8px; padding:10px 12px; overflow-x:auto; font-size:13px; line-height:1.55; }
+.head { font-size:15px; font-weight:700; fill:#14181f; } .lbl { font-size:13.5px; fill:#14181f; } .sm { font-size:12px; } .m { fill:#5b6577; } .b { font-weight:700; }
+.box { fill:#fff; stroke:#cfd5de; stroke-width:1.2; } .shared { fill:#eaf1ff; stroke:#9fb8ec; stroke-width:1.2; }
+.user { fill:#fff1e4; stroke:#e7b17f; stroke-width:1.2; } .ours { fill:#f1ecfb; stroke:#b9a6e3; stroke-width:1.2; }
+.pos { fill:#e3f5ea; stroke:#56b886; } .neg { fill:#f3f4f7; stroke:#cfd5de; }
+.arr { stroke:#5b6577; stroke-width:2; fill:none; } .arrb { stroke:#2a78d6; stroke-width:2; fill:none; }
+.vec { fill:#9fb8ec; } .vec2 { fill:#e7b17f; }
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#5b6577"/></marker>
+<marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2a78d6"/></marker>
+</defs></svg>
+<main>
+<h1>test 기간 기사들의 클릭 수명</h1>
+<p class="sub">EB-NeRD small 원본 behaviors · 클릭 시각 = 그 노출의 시각 · test = 2023-05-28 21:21:57 이후 노출 · 2026-11-26</p>
+
+<div class="box1"><b>한 줄 요약</b> — EB-NeRD 기사는 <b>아주 짧게 산다</b>. 발행 후 3시간 안에 평생 클릭의 절반, 12시간 안에 91%를 받는다.
+test 정답은 대부분 <b>발행된 지 몇 시간 안 된, 지금 막 클릭이 몰리는 기사</b>이다(정답 기사 나이 중앙값 3.2시간, 마지막 클릭이 노출 0.9분 전).
+그래서 인기도 창은 기사 수명에 맞춘 <b>12시간</b>이 가장 잘 맞았다(3시간은 너무 짧고, 24시간은 이미 식은 기사까지 센다).</div>
+
+<h2>1. 기간과 노출량</h2>
+<div class="fig"><svg viewBox="0 0 760 250" class="chart" role="img">
+<rect x="56.0" y="18" width="321.1" height="198" fill="#f3f4f7"/>
+<text x="216.5" y="32" class="lbl sm m" text-anchor="middle">train (7일)</text>
+<rect x="377.1" y="18" width="178.4" height="198" fill="#f3f4f7"/>
+<text x="466.3" y="32" class="lbl sm m" text-anchor="middle">validation 절반</text>
+<rect x="555.5" y="18" width="188.5" height="198" fill="#f3f4f7"/>
+<text x="649.7" y="32" class="lbl sm m" text-anchor="middle">test (3.4일)</text>
+<line x1="56" y1="216.0" x2="744" y2="216.0" stroke="#e3e6eb"/>
+<text x="50" y="220.0" class="lbl sm m" text-anchor="end">0천</text>
+<line x1="56" y1="166.5" x2="744" y2="166.5" stroke="#e3e6eb"/>
+<text x="50" y="170.5" class="lbl sm m" text-anchor="end">12천</text>
+<line x1="56" y1="117.0" x2="744" y2="117.0" stroke="#e3e6eb"/>
+<text x="50" y="121.0" class="lbl sm m" text-anchor="end">24천</text>
+<line x1="56" y1="67.5" x2="744" y2="67.5" stroke="#e3e6eb"/>
+<text x="50" y="71.5" class="lbl sm m" text-anchor="end">36천</text>
+<line x1="56" y1="18.0" x2="744" y2="18.0" stroke="#e3e6eb"/>
+<text x="50" y="22.0" class="lbl sm m" text-anchor="end">48천</text>
+<rect x="57.0" y="101.9" width="43.9" height="114.1" rx="2" fill="#2a78d6"><title>2023-05-18: 노출 27,649개</title></rect>
+<rect x="102.9" y="64.2" width="43.9" height="151.8" rx="2" fill="#2a78d6"><title>2023-05-19: 노출 36,797개</title></rect>
+<rect x="148.7" y="93.7" width="43.9" height="122.3" rx="2" fill="#2a78d6"><title>2023-05-20: 노출 29,648개</title></rect>
+<rect x="194.6" y="86.1" width="43.9" height="129.9" rx="2" fill="#2a78d6"><title>2023-05-21: 노출 31,482개</title></rect>
+<rect x="240.5" y="71.6" width="43.9" height="144.4" rx="2" fill="#2a78d6"><title>2023-05-22: 노출 35,010개</title></rect>
+<rect x="286.3" y="82.8" width="43.9" height="133.2" rx="2" fill="#2a78d6"><title>2023-05-23: 노출 32,298개</title></rect>
+<rect x="332.2" y="83.1" width="43.9" height="132.9" rx="2" fill="#2a78d6"><title>2023-05-24: 노출 32,225개</title></rect>
+<rect x="378.1" y="85.3" width="43.9" height="130.7" rx="2" fill="#2a78d6"><title>2023-05-25: 노출 31,684개</title></rect>
+<rect x="423.9" y="70.7" width="43.9" height="145.3" rx="2" fill="#2a78d6"><title>2023-05-26: 노출 35,225개</title></rect>
+<rect x="469.8" y="90.2" width="43.9" height="125.8" rx="2" fill="#2a78d6"><title>2023-05-27: 노출 30,503개</title></rect>
+<rect x="515.7" y="72.7" width="43.9" height="143.3" rx="2" fill="#2a78d6"><title>2023-05-28: 노출 34,730개</title></rect>
+<rect x="561.5" y="68.5" width="43.9" height="147.5" rx="2" fill="#2a78d6"><title>2023-05-29: 노출 35,748개</title></rect>
+<rect x="607.4" y="57.8" width="43.9" height="158.2" rx="2" fill="#2a78d6"><title>2023-05-30: 노출 38,342개</title></rect>
+<rect x="653.3" y="61.3" width="43.9" height="154.7" rx="2" fill="#2a78d6"><title>2023-05-31: 노출 37,499개</title></rect>
+<rect x="699.1" y="180.1" width="43.9" height="35.9" rx="2" fill="#2a78d6"><title>2023-06-01: 노출 8,694개</title></rect>
+<line x1="56" y1="216.0" x2="744" y2="216.0" stroke="#5b6577"/>
+<text x="78.9" y="238" class="lbl sm m" text-anchor="middle">05/18</text>
+<text x="170.7" y="238" class="lbl sm m" text-anchor="middle">05/20</text>
+<text x="262.4" y="238" class="lbl sm m" text-anchor="middle">05/22</text>
+<text x="354.1" y="238" class="lbl sm m" text-anchor="middle">05/24</text>
+<text x="445.9" y="238" class="lbl sm m" text-anchor="middle">05/26</text>
+<text x="537.6" y="238" class="lbl sm m" text-anchor="middle">05/28</text>
+<text x="629.3" y="238" class="lbl sm m" text-anchor="middle">05/30</text>
+<text x="721.1" y="238" class="lbl sm m" text-anchor="end">06/01</text>
+<text x="56" y="12" class="lbl sm m">하루 노출 수</text>
+</svg>
+<p class="cap"><b>그림 1.</b> 날짜별 노출 수. train 7일(05-18 07:00 ~ 05-25 07:00), validation 절반 약 3.6일(~ 05-28 21:21), test 약 3.4일(~ 06-01 07:00). 06-01은 07시까지라 적다. 막대에 마우스를 올리면 값이 보인다.</p></div>
+<div class="tbl"><table>
+<tr><th>test 기간</th><th class="n">값</th></tr>
+<tr><td>노출에서 나온 클릭 수</td><td class="n">123,141</td></tr>
+<tr><td>클릭된 기사 수</td><td class="n">1,312</td></tr>
+<tr><td>train 기간에 한 번이라도 클릭된 기사에 대한 클릭</td><td class="n">1.7%</td></tr>
+</table></div>
+<p>test 클릭의 98%는 train 기간에 한 번도 클릭되지 않은 기사에 대한 것이다. 우리 보고서의 "test 정답 98%가 새 기사"와 같은 이야기이다.</p>
+<div class="tbl"><table>
+<tr><th>test 클릭이 향한 기사는 언제 발행됐나 (클릭 기준)</th><th class="n">비율</th></tr>
+<tr><td>test 기간에 발행</td><td class="n">85.8%</td></tr><tr><td>validation 절반 기간에 발행</td><td class="n">11.3%</td></tr><tr><td>train 기간에 발행</td><td class="n">0.7%</td></tr><tr><td>데이터 시작 전에 발행</td><td class="n">2.2%</td></tr>
+</table></div>
+
+<h2>2. 기사는 발행 후 얼마 동안 클릭되나</h2>
+<p>발행 후 72시간이 데이터 안에 모두 들어 있고 클릭이 20개 이상인 기사 1,180개로 계산했다(데이터 끝에 발행돼 수명이 잘린 기사는 뺐다).</p>
+<div class="fig"><svg viewBox="0 0 760 260" class="chart" role="img">
+<line x1="56" y1="226.0" x2="744" y2="226.0" stroke="#e3e6eb"/>
+<text x="50" y="230.0" class="lbl sm m" text-anchor="end">0.0%</text>
+<line x1="56" y1="174.0" x2="744" y2="174.0" stroke="#e3e6eb"/>
+<text x="50" y="178.0" class="lbl sm m" text-anchor="end">6.0%</text>
+<line x1="56" y1="122.0" x2="744" y2="122.0" stroke="#e3e6eb"/>
+<text x="50" y="126.0" class="lbl sm m" text-anchor="end">12.0%</text>
+<line x1="56" y1="70.0" x2="744" y2="70.0" stroke="#e3e6eb"/>
+<text x="50" y="74.0" class="lbl sm m" text-anchor="end">18.0%</text>
+<line x1="56" y1="18.0" x2="744" y2="18.0" stroke="#e3e6eb"/>
+<text x="50" y="22.0" class="lbl sm m" text-anchor="end">24.0%</text>
+<rect x="57.0" y="140.6" width="5.2" height="85.4" rx="2" fill="#2a78d6"><title>발행 후 0분~15분: 시간당 9.9%</title></rect>
+<rect x="64.2" y="94.2" width="5.2" height="131.8" rx="2" fill="#2a78d6"><title>발행 후 15분~30분: 시간당 15.2%</title></rect>
+<rect x="71.3" y="77.0" width="5.2" height="149.0" rx="2" fill="#2a78d6"><title>발행 후 30분~45분: 시간당 17.2%</title></rect>
+<rect x="78.5" y="59.3" width="5.2" height="166.7" rx="2" fill="#2a78d6"><title>발행 후 45분~1시간: 시간당 19.2%</title></rect>
+<rect x="85.7" y="49.8" width="5.2" height="176.2" rx="2" fill="#2a78d6"><title>발행 후 1시간~1.25시간: 시간당 20.3%</title></rect>
+<rect x="92.8" y="46.6" width="5.2" height="179.4" rx="2" fill="#2a78d6"><title>발행 후 1.25시간~1.5시간: 시간당 20.7%</title></rect>
+<rect x="100.0" y="47.8" width="5.2" height="178.2" rx="2" fill="#2a78d6"><title>발행 후 1.5시간~1.75시간: 시간당 20.6%</title></rect>
+<rect x="107.2" y="56.4" width="5.2" height="169.6" rx="2" fill="#2a78d6"><title>발행 후 1.75시간~2시간: 시간당 19.6%</title></rect>
+<rect x="114.3" y="70.2" width="5.2" height="155.8" rx="2" fill="#2a78d6"><title>발행 후 2시간~2.25시간: 시간당 18.0%</title></rect>
+<rect x="121.5" y="81.6" width="5.2" height="144.4" rx="2" fill="#2a78d6"><title>발행 후 2.25시간~2.5시간: 시간당 16.7%</title></rect>
+<rect x="128.7" y="98.3" width="5.2" height="127.7" rx="2" fill="#2a78d6"><title>발행 후 2.5시간~2.75시간: 시간당 14.7%</title></rect>
+<rect x="135.8" y="111.8" width="5.2" height="114.2" rx="2" fill="#2a78d6"><title>발행 후 2.75시간~3시간: 시간당 13.2%</title></rect>
+<rect x="143.0" y="124.4" width="5.2" height="101.6" rx="2" fill="#2a78d6"><title>발행 후 3시간~3.25시간: 시간당 11.7%</title></rect>
+<rect x="150.2" y="136.0" width="5.2" height="90.0" rx="2" fill="#2a78d6"><title>발행 후 3.25시간~3.5시간: 시간당 10.4%</title></rect>
+<rect x="157.3" y="145.0" width="5.2" height="81.0" rx="2" fill="#2a78d6"><title>발행 후 3.5시간~3.75시간: 시간당 9.3%</title></rect>
+<rect x="164.5" y="154.0" width="5.2" height="72.0" rx="2" fill="#2a78d6"><title>발행 후 3.75시간~4시간: 시간당 8.3%</title></rect>
+<rect x="171.7" y="162.4" width="5.2" height="63.6" rx="2" fill="#2a78d6"><title>발행 후 4시간~4.25시간: 시간당 7.3%</title></rect>
+<rect x="178.8" y="169.2" width="5.2" height="56.8" rx="2" fill="#2a78d6"><title>발행 후 4.25시간~4.5시간: 시간당 6.6%</title></rect>
+<rect x="186.0" y="175.2" width="5.2" height="50.8" rx="2" fill="#2a78d6"><title>발행 후 4.5시간~4.75시간: 시간당 5.9%</title></rect>
+<rect x="193.2" y="179.5" width="5.2" height="46.5" rx="2" fill="#2a78d6"><title>발행 후 4.75시간~5시간: 시간당 5.4%</title></rect>
+<rect x="200.3" y="183.8" width="5.2" height="42.2" rx="2" fill="#2a78d6"><title>발행 후 5시간~5.25시간: 시간당 4.9%</title></rect>
+<rect x="207.5" y="186.9" width="5.2" height="39.1" rx="2" fill="#2a78d6"><title>발행 후 5.25시간~5.5시간: 시간당 4.5%</title></rect>
+<rect x="214.7" y="189.7" width="5.2" height="36.3" rx="2" fill="#2a78d6"><title>발행 후 5.5시간~5.75시간: 시간당 4.2%</title></rect>
+<rect x="221.8" y="191.8" width="5.2" height="34.2" rx="2" fill="#2a78d6"><title>발행 후 5.75시간~6시간: 시간당 3.9%</title></rect>
+<rect x="229.0" y="194.2" width="26.7" height="31.8" rx="2" fill="#2a78d6"><title>발행 후 6시간~7시간: 시간당 3.7%</title></rect>
+<rect x="257.7" y="194.9" width="26.7" height="31.1" rx="2" fill="#2a78d6"><title>발행 후 7시간~8시간: 시간당 3.6%</title></rect>
+<rect x="286.3" y="195.2" width="26.7" height="30.8" rx="2" fill="#2a78d6"><title>발행 후 8시간~9시간: 시간당 3.6%</title></rect>
+<rect x="315.0" y="197.6" width="26.7" height="28.4" rx="2" fill="#2a78d6"><title>발행 후 9시간~10시간: 시간당 3.3%</title></rect>
+<rect x="343.7" y="201.8" width="26.7" height="24.2" rx="2" fill="#2a78d6"><title>발행 후 10시간~11시간: 시간당 2.8%</title></rect>
+<rect x="372.3" y="207.6" width="26.7" height="18.4" rx="2" fill="#2a78d6"><title>발행 후 11시간~12시간: 시간당 2.1%</title></rect>
+<rect x="401.0" y="212.6" width="26.7" height="13.4" rx="2" fill="#2a78d6"><title>발행 후 12시간~13시간: 시간당 1.5%</title></rect>
+<rect x="429.7" y="217.0" width="26.7" height="9.0" rx="2" fill="#2a78d6"><title>발행 후 13시간~14시간: 시간당 1.0%</title></rect>
+<rect x="458.3" y="220.0" width="26.7" height="6.0" rx="2" fill="#2a78d6"><title>발행 후 14시간~15시간: 시간당 0.7%</title></rect>
+<rect x="487.0" y="222.1" width="26.7" height="3.9" rx="2" fill="#2a78d6"><title>발행 후 15시간~16시간: 시간당 0.5%</title></rect>
+<rect x="515.7" y="223.0" width="26.7" height="3.0" rx="2" fill="#2a78d6"><title>발행 후 16시간~17시간: 시간당 0.3%</title></rect>
+<rect x="544.3" y="223.7" width="26.7" height="2.3" rx="2" fill="#2a78d6"><title>발행 후 17시간~18시간: 시간당 0.3%</title></rect>
+<rect x="573.0" y="223.9" width="26.7" height="2.1" rx="2" fill="#2a78d6"><title>발행 후 18시간~19시간: 시간당 0.2%</title></rect>
+<rect x="601.7" y="224.1" width="26.7" height="1.9" rx="2" fill="#2a78d6"><title>발행 후 19시간~20시간: 시간당 0.2%</title></rect>
+<rect x="630.3" y="224.0" width="26.7" height="2.0" rx="2" fill="#2a78d6"><title>발행 후 20시간~21시간: 시간당 0.2%</title></rect>
+<rect x="659.0" y="223.9" width="26.7" height="2.1" rx="2" fill="#2a78d6"><title>발행 후 21시간~22시간: 시간당 0.2%</title></rect>
+<rect x="687.7" y="224.0" width="26.7" height="2.0" rx="2" fill="#2a78d6"><title>발행 후 22시간~23시간: 시간당 0.2%</title></rect>
+<rect x="716.3" y="224.1" width="26.7" height="1.9" rx="2" fill="#2a78d6"><title>발행 후 23시간~24시간: 시간당 0.2%</title></rect>
+<line x1="56" y1="226.0" x2="744" y2="226.0" stroke="#5b6577"/>
+<text x="56.0" y="248" class="lbl sm m" text-anchor="middle">0시간</text>
+<text x="142.0" y="248" class="lbl sm m" text-anchor="middle">3시간</text>
+<text x="228.0" y="248" class="lbl sm m" text-anchor="middle">6시간</text>
+<text x="400.0" y="248" class="lbl sm m" text-anchor="middle">12시간</text>
+<text x="572.0" y="248" class="lbl sm m" text-anchor="middle">18시간</text>
+<text x="744.0" y="248" class="lbl sm m" text-anchor="end">24시간</text>
+<text x="56" y="12" class="lbl sm m">시간당 클릭 비율 (발행 후)</text>
+</svg>
+<p class="cap"><b>그림 2.</b> 발행 후 시간대별 클릭 비율(0~6시간은 15분 단위, 그 뒤 1시간 단위, 높이 = 시간당 비율이라 폭이 달라도 비교 가능). 발행 후 1~2시간에 가장 많고, 그 뒤 빠르게 줄어든다.</p></div>
+<div class="tbl"><table>
+<tr><th>발행 후</th><th class="n">1시간</th><th class="n">3시간</th><th class="n">6시간</th><th class="n">12시간</th><th class="n">24시간</th><th class="n">48시간</th></tr>
+<tr><td>평생(72시간) 클릭 중 누적</td><td class="n">15%</td><td class="n">51%</td><td class="n">72%</td><td class="n">91%</td><td class="n">97%</td><td class="n">99%</td></tr>
+</table></div>
+<div class="tbl"><table>
+<tr><th>기사 하나하나 (분위수)</th><th class="n">10%</th><th class="n">25%</th><th class="n">중앙값</th><th class="n">75%</th><th class="n">90%</th></tr>
+<tr><td>첫 클릭까지 (발행 후)</td><td class="n">2.5분</td><td class="n">3.7분</td><td class="n">5.5분</td><td class="n">8.7분</td><td class="n">13.4분</td></tr>
+<tr><td>클릭 절반을 받을 때까지 (반감기)</td><td class="n">1.4시간</td><td class="n">1.7시간</td><td class="n">2.3시간</td><td class="n">3.5시간</td><td class="n">7.5시간</td></tr>
+<tr><td>클릭 90%를 받을 때까지</td><td class="n">4.1시간</td><td class="n">4.9시간</td><td class="n">6.5시간</td><td class="n">11.4시간</td><td class="n">16.9시간</td></tr>
+<tr><td>평생 클릭 수</td><td class="n">122</td><td class="n">180</td><td class="n">262</td><td class="n">383</td><td class="n">533</td></tr>
+</table></div>
+<h3>카테고리별 반감기</h3>
+<div class="tbl"><table>
+<tr><th>카테고리</th><th class="n">기사 수</th><th class="n">반감기 중앙값</th></tr>
+<tr><td>스포츠</td><td class="n">364</td><td class="n">1.9시간</td></tr><tr><td>돈·경제</td><td class="n">53</td><td class="n">2.3시간</td></tr><tr><td>범죄</td><td class="n">140</td><td class="n">2.4시간</td></tr><tr><td>뉴스</td><td class="n">354</td><td class="n">2.5시간</td></tr><tr><td>연예</td><td class="n">166</td><td class="n">2.5시간</td></tr><tr><td>국내 시사</td><td class="n">31</td><td class="n">2.7시간</td></tr><tr><td>음악</td><td class="n">37</td><td class="n">3.2시간</td></tr>
+</table></div>
+<p>스포츠 기사가 가장 빨리 식고(경기 결과), 음악 · 국내 시사는 조금 더 오래 간다. 그래도 모두 몇 시간 단위이다.</p>
+
+<h2>3. test 정답 기사: 노출 직전 클릭이 언제 있었나</h2>
+<div class="fig"><svg viewBox="0 0 760 260" class="chart" role="img">
+<line x1="56" y1="226.0" x2="744" y2="226.0" stroke="#e3e6eb"/>
+<text x="50" y="230.0" class="lbl sm m" text-anchor="end">0.0%</text>
+<line x1="56" y1="174.0" x2="744" y2="174.0" stroke="#e3e6eb"/>
+<text x="50" y="178.0" class="lbl sm m" text-anchor="end">8.0%</text>
+<line x1="56" y1="122.0" x2="744" y2="122.0" stroke="#e3e6eb"/>
+<text x="50" y="126.0" class="lbl sm m" text-anchor="end">16.0%</text>
+<line x1="56" y1="70.0" x2="744" y2="70.0" stroke="#e3e6eb"/>
+<text x="50" y="74.0" class="lbl sm m" text-anchor="end">24.0%</text>
+<line x1="56" y1="18.0" x2="744" y2="18.0" stroke="#e3e6eb"/>
+<text x="50" y="22.0" class="lbl sm m" text-anchor="end">32.0%</text>
+<rect x="57.0" y="42.8" width="5.2" height="183.2" rx="2" fill="#2a78d6"><title>노출 0분~15분 전: 시간당 28.2%</title></rect>
+<rect x="64.2" y="57.3" width="5.2" height="168.7" rx="2" fill="#2a78d6"><title>노출 15분~30분 전: 시간당 26.0%</title></rect>
+<rect x="71.3" y="70.8" width="5.2" height="155.2" rx="2" fill="#2a78d6"><title>노출 30분~45분 전: 시간당 23.9%</title></rect>
+<rect x="78.5" y="84.8" width="5.2" height="141.2" rx="2" fill="#2a78d6"><title>노출 45분~1시간 전: 시간당 21.7%</title></rect>
+<rect x="85.7" y="98.4" width="5.2" height="127.6" rx="2" fill="#2a78d6"><title>노출 1시간~1.25시간 전: 시간당 19.6%</title></rect>
+<rect x="92.8" y="111.2" width="5.2" height="114.8" rx="2" fill="#2a78d6"><title>노출 1.25시간~1.5시간 전: 시간당 17.7%</title></rect>
+<rect x="100.0" y="123.3" width="5.2" height="102.7" rx="2" fill="#2a78d6"><title>노출 1.5시간~1.75시간 전: 시간당 15.8%</title></rect>
+<rect x="107.2" y="134.8" width="5.2" height="91.2" rx="2" fill="#2a78d6"><title>노출 1.75시간~2시간 전: 시간당 14.0%</title></rect>
+<rect x="114.3" y="145.8" width="5.2" height="80.2" rx="2" fill="#2a78d6"><title>노출 2시간~2.25시간 전: 시간당 12.3%</title></rect>
+<rect x="121.5" y="154.7" width="5.2" height="71.3" rx="2" fill="#2a78d6"><title>노출 2.25시간~2.5시간 전: 시간당 11.0%</title></rect>
+<rect x="128.7" y="162.9" width="5.2" height="63.1" rx="2" fill="#2a78d6"><title>노출 2.5시간~2.75시간 전: 시간당 9.7%</title></rect>
+<rect x="135.8" y="170.0" width="5.2" height="56.0" rx="2" fill="#2a78d6"><title>노출 2.75시간~3시간 전: 시간당 8.6%</title></rect>
+<rect x="143.0" y="176.5" width="5.2" height="49.5" rx="2" fill="#2a78d6"><title>노출 3시간~3.25시간 전: 시간당 7.6%</title></rect>
+<rect x="150.2" y="181.7" width="5.2" height="44.3" rx="2" fill="#2a78d6"><title>노출 3.25시간~3.5시간 전: 시간당 6.8%</title></rect>
+<rect x="157.3" y="186.1" width="5.2" height="39.9" rx="2" fill="#2a78d6"><title>노출 3.5시간~3.75시간 전: 시간당 6.1%</title></rect>
+<rect x="164.5" y="190.0" width="5.2" height="36.0" rx="2" fill="#2a78d6"><title>노출 3.75시간~4시간 전: 시간당 5.5%</title></rect>
+<rect x="171.7" y="193.0" width="5.2" height="33.0" rx="2" fill="#2a78d6"><title>노출 4시간~4.25시간 전: 시간당 5.1%</title></rect>
+<rect x="178.8" y="195.9" width="5.2" height="30.1" rx="2" fill="#2a78d6"><title>노출 4.25시간~4.5시간 전: 시간당 4.6%</title></rect>
+<rect x="186.0" y="198.0" width="5.2" height="28.0" rx="2" fill="#2a78d6"><title>노출 4.5시간~4.75시간 전: 시간당 4.3%</title></rect>
+<rect x="193.2" y="199.8" width="5.2" height="26.2" rx="2" fill="#2a78d6"><title>노출 4.75시간~5시간 전: 시간당 4.0%</title></rect>
+<rect x="200.3" y="201.7" width="5.2" height="24.3" rx="2" fill="#2a78d6"><title>노출 5시간~5.25시간 전: 시간당 3.7%</title></rect>
+<rect x="207.5" y="203.1" width="5.2" height="22.9" rx="2" fill="#2a78d6"><title>노출 5.25시간~5.5시간 전: 시간당 3.5%</title></rect>
+<rect x="214.7" y="204.2" width="5.2" height="21.8" rx="2" fill="#2a78d6"><title>노출 5.5시간~5.75시간 전: 시간당 3.4%</title></rect>
+<rect x="221.8" y="205.1" width="5.2" height="20.9" rx="2" fill="#2a78d6"><title>노출 5.75시간~6시간 전: 시간당 3.2%</title></rect>
+<rect x="229.0" y="205.9" width="26.7" height="20.1" rx="2" fill="#2a78d6"><title>노출 6시간~7시간 전: 시간당 3.1%</title></rect>
+<rect x="257.7" y="206.1" width="26.7" height="19.9" rx="2" fill="#2a78d6"><title>노출 7시간~8시간 전: 시간당 3.1%</title></rect>
+<rect x="286.3" y="207.1" width="26.7" height="18.9" rx="2" fill="#2a78d6"><title>노출 8시간~9시간 전: 시간당 2.9%</title></rect>
+<rect x="315.0" y="209.7" width="26.7" height="16.3" rx="2" fill="#2a78d6"><title>노출 9시간~10시간 전: 시간당 2.5%</title></rect>
+<rect x="343.7" y="213.2" width="26.7" height="12.8" rx="2" fill="#2a78d6"><title>노출 10시간~11시간 전: 시간당 2.0%</title></rect>
+<rect x="372.3" y="216.7" width="26.7" height="9.3" rx="2" fill="#2a78d6"><title>노출 11시간~12시간 전: 시간당 1.4%</title></rect>
+<rect x="401.0" y="219.0" width="26.7" height="7.0" rx="2" fill="#2a78d6"><title>노출 12시간~13시간 전: 시간당 1.1%</title></rect>
+<rect x="429.7" y="220.3" width="26.7" height="5.7" rx="2" fill="#2a78d6"><title>노출 13시간~14시간 전: 시간당 0.9%</title></rect>
+<rect x="458.3" y="220.9" width="26.7" height="5.1" rx="2" fill="#2a78d6"><title>노출 14시간~15시간 전: 시간당 0.8%</title></rect>
+<rect x="487.0" y="221.4" width="26.7" height="4.6" rx="2" fill="#2a78d6"><title>노출 15시간~16시간 전: 시간당 0.7%</title></rect>
+<rect x="515.7" y="221.7" width="26.7" height="4.3" rx="2" fill="#2a78d6"><title>노출 16시간~17시간 전: 시간당 0.7%</title></rect>
+<rect x="544.3" y="222.0" width="26.7" height="4.0" rx="2" fill="#2a78d6"><title>노출 17시간~18시간 전: 시간당 0.6%</title></rect>
+<rect x="573.0" y="222.3" width="26.7" height="3.7" rx="2" fill="#2a78d6"><title>노출 18시간~19시간 전: 시간당 0.6%</title></rect>
+<rect x="601.7" y="222.4" width="26.7" height="3.6" rx="2" fill="#2a78d6"><title>노출 19시간~20시간 전: 시간당 0.5%</title></rect>
+<rect x="630.3" y="222.7" width="26.7" height="3.3" rx="2" fill="#2a78d6"><title>노출 20시간~21시간 전: 시간당 0.5%</title></rect>
+<rect x="659.0" y="222.9" width="26.7" height="3.1" rx="2" fill="#2a78d6"><title>노출 21시간~22시간 전: 시간당 0.5%</title></rect>
+<rect x="687.7" y="223.0" width="26.7" height="3.0" rx="2" fill="#2a78d6"><title>노출 22시간~23시간 전: 시간당 0.5%</title></rect>
+<rect x="716.3" y="223.1" width="26.7" height="2.9" rx="2" fill="#2a78d6"><title>노출 23시간~24시간 전: 시간당 0.4%</title></rect>
+<line x1="56" y1="226.0" x2="744" y2="226.0" stroke="#5b6577"/>
+<text x="56.0" y="248" class="lbl sm m" text-anchor="middle">0시간 전</text>
+<text x="142.0" y="248" class="lbl sm m" text-anchor="middle">3시간 전</text>
+<text x="228.0" y="248" class="lbl sm m" text-anchor="middle">6시간 전</text>
+<text x="400.0" y="248" class="lbl sm m" text-anchor="middle">12시간 전</text>
+<text x="572.0" y="248" class="lbl sm m" text-anchor="middle">18시간 전</text>
+<text x="744.0" y="248" class="lbl sm m" text-anchor="end">24시간 전</text>
+<text x="56" y="12" class="lbl sm m">시간당 클릭 비율 (노출 전)</text>
+</svg>
+<p class="cap"><b>그림 3.</b> test 정답 기사가 노출 전 72시간 동안 받은 클릭이 노출 몇 시간 전에 있었나(시간당 비율). 노출 직전이 가장 많다.</p></div>
+<div class="tbl"><table>
+<tr><th>노출 전</th><th class="n">1시간</th><th class="n">3시간</th><th class="n">6시간</th><th class="n">12시간</th><th class="n">24시간</th><th class="n">48시간</th></tr>
+<tr><td>72시간 클릭 중 누적</td><td class="n">25%</td><td class="n">52%</td><td class="n">67%</td><td class="n">82%</td><td class="n">89%</td><td class="n">96%</td></tr>
+</table></div>
+<div class="tbl"><table>
+<tr><th>test 정답 기사 (분위수)</th><th class="n">10%</th><th class="n">25%</th><th class="n">중앙값</th><th class="n">75%</th><th class="n">90%</th></tr>
+<tr><td>노출 시점의 기사 나이</td><td class="n">0.7시간</td><td class="n">1.5시간</td><td class="n">3.2시간</td><td class="n">8.2시간</td><td class="n">19.0시간</td></tr>
+<tr><td>마지막 클릭이 노출 몇 분 전</td><td class="n">0.1분</td><td class="n">0.3분</td><td class="n">0.9분</td><td class="n">2.6분</td><td class="n">8.8분</td></tr>
+</table></div>
+
+<h2>4. test 노출은 하루 중 언제</h2>
+<div class="fig"><svg viewBox="0 0 760 230" class="chart" role="img">
+<line x1="56" y1="196.0" x2="744" y2="196.0" stroke="#e3e6eb"/>
+<text x="50" y="200.0" class="lbl sm m" text-anchor="end">0천</text>
+<line x1="56" y1="151.5" x2="744" y2="151.5" stroke="#e3e6eb"/>
+<text x="50" y="155.5" class="lbl sm m" text-anchor="end">2.5천</text>
+<line x1="56" y1="107.0" x2="744" y2="107.0" stroke="#e3e6eb"/>
+<text x="50" y="111.0" class="lbl sm m" text-anchor="end">5천</text>
+<line x1="56" y1="62.5" x2="744" y2="62.5" stroke="#e3e6eb"/>
+<text x="50" y="66.5" class="lbl sm m" text-anchor="end">7.5천</text>
+<line x1="56" y1="18.0" x2="744" y2="18.0" stroke="#e3e6eb"/>
+<text x="50" y="22.0" class="lbl sm m" text-anchor="end">10천</text>
+<rect x="57.0" y="181.3" width="26.7" height="14.7" rx="2" fill="#2a78d6"><title>0시: 824개</title></rect>
+<rect x="85.7" y="180.2" width="26.7" height="15.8" rx="2" fill="#2a78d6"><title>1시: 885개</title></rect>
+<rect x="114.3" y="166.8" width="26.7" height="29.2" rx="2" fill="#2a78d6"><title>2시: 1,642개</title></rect>
+<rect x="143.0" y="123.8" width="26.7" height="72.2" rx="2" fill="#2a78d6"><title>3시: 4,056개</title></rect>
+<rect x="171.7" y="53.8" width="26.7" height="142.2" rx="2" fill="#2a78d6"><title>4시: 7,986개</title></rect>
+<rect x="200.3" y="26.7" width="26.7" height="169.3" rx="2" fill="#2a78d6"><title>5시: 9,511개</title></rect>
+<rect x="229.0" y="21.7" width="26.7" height="174.3" rx="2" fill="#2a78d6"><title>6시: 9,793개</title></rect>
+<rect x="257.7" y="83.0" width="26.7" height="113.0" rx="2" fill="#2a78d6"><title>7시: 6,346개</title></rect>
+<rect x="286.3" y="105.8" width="26.7" height="90.2" rx="2" fill="#2a78d6"><title>8시: 5,068개</title></rect>
+<rect x="315.0" y="101.8" width="26.7" height="94.2" rx="2" fill="#2a78d6"><title>9시: 5,290개</title></rect>
+<rect x="343.7" y="88.5" width="26.7" height="107.5" rx="2" fill="#2a78d6"><title>10시: 6,039개</title></rect>
+<rect x="372.3" y="102.2" width="26.7" height="93.8" rx="2" fill="#2a78d6"><title>11시: 5,268개</title></rect>
+<rect x="401.0" y="91.9" width="26.7" height="104.1" rx="2" fill="#2a78d6"><title>12시: 5,851개</title></rect>
+<rect x="429.7" y="96.2" width="26.7" height="99.8" rx="2" fill="#2a78d6"><title>13시: 5,604개</title></rect>
+<rect x="458.3" y="100.4" width="26.7" height="95.6" rx="2" fill="#2a78d6"><title>14시: 5,371개</title></rect>
+<rect x="487.0" y="93.7" width="26.7" height="102.3" rx="2" fill="#2a78d6"><title>15시: 5,749개</title></rect>
+<rect x="515.7" y="101.6" width="26.7" height="94.4" rx="2" fill="#2a78d6"><title>16시: 5,304개</title></rect>
+<rect x="544.3" y="88.9" width="26.7" height="107.1" rx="2" fill="#2a78d6"><title>17시: 6,015개</title></rect>
+<rect x="573.0" y="82.4" width="26.7" height="113.6" rx="2" fill="#2a78d6"><title>18시: 6,381개</title></rect>
+<rect x="601.7" y="86.7" width="26.7" height="109.3" rx="2" fill="#2a78d6"><title>19시: 6,142개</title></rect>
+<rect x="630.3" y="89.9" width="26.7" height="106.1" rx="2" fill="#2a78d6"><title>20시: 5,962개</title></rect>
+<rect x="659.0" y="114.5" width="26.7" height="81.5" rx="2" fill="#2a78d6"><title>21시: 4,580개</title></rect>
+<rect x="687.7" y="154.0" width="26.7" height="42.0" rx="2" fill="#2a78d6"><title>22시: 2,357개</title></rect>
+<rect x="716.3" y="176.1" width="26.7" height="19.9" rx="2" fill="#2a78d6"><title>23시: 1,117개</title></rect>
+<line x1="56" y1="196.0" x2="744" y2="196.0" stroke="#5b6577"/>
+<text x="70.3" y="218" class="lbl sm m" text-anchor="middle">0시</text>
+<text x="156.3" y="218" class="lbl sm m" text-anchor="middle">3시</text>
+<text x="242.3" y="218" class="lbl sm m" text-anchor="middle">6시</text>
+<text x="328.3" y="218" class="lbl sm m" text-anchor="middle">9시</text>
+<text x="414.3" y="218" class="lbl sm m" text-anchor="middle">12시</text>
+<text x="500.3" y="218" class="lbl sm m" text-anchor="middle">15시</text>
+<text x="586.3" y="218" class="lbl sm m" text-anchor="middle">18시</text>
+<text x="672.3" y="218" class="lbl sm m" text-anchor="middle">21시</text>
+<text x="56" y="12" class="lbl sm m">test 노출 수 (시각별)</text>
+</svg>
+<p class="cap"><b>그림 4.</b> test 노출의 시각별 분포(데이터에 적힌 시각 기준). 이른 아침(4~6시)에 가장 많고 밤(22~2시)에 적다. 인기도를 "직전 몇 시간"으로 세면 밤 사이에는 클릭 수 자체가 적어진다.</p></div>
+
+<h2>5. 인기도 창에 주는 뜻</h2>
+<div class="tbl"><table>
+<tr><th>창</th><th>기사 수명에서 보면</th><th>결과 (AWS 실제 test, Transformer + 인기 + 나이, seed 평균)</th></tr>
+<tr><td>3시간</td><td>평생 클릭의 절반만 담고, 클릭 수가 작아 동점 · 0이 많다</td><td>H 43.12% · R 43.21%</td></tr>
+<tr class="hl"><td>12시간</td><td>평생 클릭의 91%를 담고, 하루 지난 기사는 거의 안 센다</td><td><b>H 44.78% · R 44.86%</b> (validation 최고)</td></tr>
+<tr><td>24시간 (예전)</td><td>이미 식은 어제 기사까지 점수를 준다</td><td>H 44.24% · R 44.23%</td></tr>
+</table></div>
+<p class="sub">1~4절은 이 저장소의 원본 데이터로 계산했다(위 스크립트). 5절 숫자는 AWS의 popularity_window.py 결과이다.</p>
+</main></body></html>

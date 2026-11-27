@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NRMS 동작 방식</title>
+<style>
+:root { --bg:#fff; --text:#14181f; --muted:#5b6577; --line:#e3e6eb; --surface:#f8f9fb; --hl:#eef4ff; --hl-line:#9fb8ec; --blue:#2a78d6; --orange:#d9792b; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Pretendard","Segoe UI",sans-serif; font-size:15.5px; line-height:1.7; word-break:keep-all; }
+main { max-width:880px; margin:0 auto; padding:32px 16px 72px; }
+h1 { font-size:25px; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 20px; font-size:14px; }
+h2 { font-size:20px; margin:40px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--line); }
+h3 { font-size:16.5px; margin:22px 0 6px; }
+.box1 { border:1.5px solid var(--hl-line); background:var(--hl); border-radius:12px; padding:14px 18px; }
+.fig { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; margin:12px 0; }
+.chart { width:100%; height:auto; display:block; font-family:inherit; }
+.cap { color:var(--muted); font-size:13.5px; margin:6px 2px 0; } .cap b { color:var(--text); }
+.tbl { overflow-x:auto; border:1px solid var(--line); border-radius:10px; margin:10px 0; }
+table { width:100%; border-collapse:collapse; font-size:14.5px; }
+th, td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+th { background:#f3f4f7; font-weight:600; color:var(--muted); } td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+tr.hl td { background:var(--hl); }
+.note { border-left:4px solid #e9c27a; background:#fff6e6; border-radius:0 8px 8px 0; padding:10px 14px; margin:12px 0; font-size:14.5px; }
+code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; background:#f3f4f7; padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:#f3f4f7; border-radius:8px; padding:10px 12px; overflow-x:auto; font-size:13px; line-height:1.55; }
+.head { font-size:15px; font-weight:700; fill:#14181f; } .lbl { font-size:13.5px; fill:#14181f; } .sm { font-size:12px; } .m { fill:#5b6577; } .b { font-weight:700; }
+.box { fill:#fff; stroke:#cfd5de; stroke-width:1.2; } .shared { fill:#eaf1ff; stroke:#9fb8ec; stroke-width:1.2; }
+.user { fill:#fff1e4; stroke:#e7b17f; stroke-width:1.2; } .ours { fill:#f1ecfb; stroke:#b9a6e3; stroke-width:1.2; }
+.pos { fill:#e3f5ea; stroke:#56b886; } .neg { fill:#f3f4f7; stroke:#cfd5de; }
+.arr { stroke:#5b6577; stroke-width:2; fill:none; } .arrb { stroke:#2a78d6; stroke-width:2; fill:none; }
+.vec { fill:#9fb8ec; } .vec2 { fill:#e7b17f; }
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#5b6577"/></marker>
+<marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2a78d6"/></marker>
+</defs></svg>
+<main>
+
+<h1>NRMS는 어떻게 동작하고, 우리 데이터로 어떻게 돌리나</h1>
+<p class="sub">EB-NeRD v2 · 11/26 랩미팅 요청 ①: "오리지널 NRMS로 EB-NeRD 돌려보기" · 2026-11-26 · 학습 설정은 교수님 답을 기다리는 중</p>
+
+<div class="box1"><b>한 줄 요약</b> — NRMS는 <b>사용자가 예전에 읽은 기사들의 제목을 읽고, 지금 화면에 뜬 기사 5개 중 무엇을 클릭할지 맞히는</b> 뉴스 추천의 표준 모델이다(Wu et al., EMNLP 2019).
+우리는 Microsoft Recommenders에 공개된 NRMS를 쓰고, 우리 train / validation 절반 / test 행을 그 입력 형식으로 바꿔서 넣는다.
+그러면 우리 Transformer · TIGER와 <b>같은 행, 같은 지표</b>로 비교할 수 있다. 인기도 · 최신성은 붙이지 않는다.</div>
+
+<p><b>이 문서 읽는 순서</b> — 1~3절은 NRMS가 <b>어떻게 생각하는지</b>를 예시로 따라간다. 4절은 우리 모델과의 차이, 5절은 <b>우리 데이터로 실제로 돌리는 방법</b>, 6~9절은 공개 코드 선택 · 설정 · 남은 일이다. 모르는 용어는 맨 아래 <a href="#terms">용어 정리</a>에 있다.</p>
+
+<h2>1. NRMS가 푸는 문제</h2>
+<p>문제는 하나다. <b>"이 사람이 지금 뜬 기사 5개 중 무엇을 누를까?"</b> 우리 1pos4neg 한 행이 바로 이 문제 하나이다. 5개 중 1개는 실제로 누른 기사(정답), 4개는 보고도 안 누른 기사(오답)이다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 300" class="chart" role="img" aria-label="NRMS가 푸는 문제: 읽은 기사를 보고 후보 5개 중 클릭할 기사 맞히기">
+  <text x="20" y="24" class="head">사용자 A가 예전에 읽은 기사</text>
+  <rect x="20" y="40" width="330" height="32" rx="7" class="box"/><text x="34" y="61" class="lbl">축구팀 공격수 이적설</text>
+  <rect x="20" y="78" width="330" height="32" rx="7" class="box"/><text x="34" y="99" class="lbl">이적 시장 마감 소식</text>
+  <rect x="20" y="116" width="330" height="32" rx="7" class="box"/><text x="34" y="137" class="lbl">축구팀 새 감독 선임</text>
+  <rect x="20" y="154" width="330" height="32" rx="7" class="box"/><text x="34" y="175" class="lbl">주말 비 소식</text>
+  <rect x="20" y="192" width="330" height="32" rx="7" class="box"/><text x="34" y="213" class="lbl">총선 여론조사</text>
+  <text x="185" y="246" class="lbl sm m" text-anchor="middle">… history 최근 50개</text>
+
+  <path d="M358 132 H418" class="arr" marker-end="url(#ah)"/>
+  <text x="388" y="120" class="head" text-anchor="middle">?</text>
+
+  <text x="430" y="24" class="head">지금 화면에 뜬 후보 5개</text>
+  <rect x="430" y="40" width="330" height="32" rx="7" class="pos"/><text x="444" y="61" class="lbl b">공격수 영입 임박</text><text x="748" y="61" class="lbl sm" text-anchor="end" fill="#2e8a5a">실제로 누름 (정답)</text>
+  <rect x="430" y="78" width="330" height="32" rx="7" class="neg"/><text x="444" y="99" class="lbl">금리 동결</text>
+  <rect x="430" y="116" width="330" height="32" rx="7" class="neg"/><text x="444" y="137" class="lbl">새 스마트폰 출시</text>
+  <rect x="430" y="154" width="330" height="32" rx="7" class="neg"/><text x="444" y="175" class="lbl">주말 날씨</text>
+  <rect x="430" y="192" width="330" height="32" rx="7" class="neg"/><text x="444" y="213" class="lbl">파스타 레시피</text>
+  <text x="595" y="246" class="lbl sm m" text-anchor="middle">오답 4개 = 보고도 안 누른 기사</text>
+
+  <rect x="20" y="262" width="740" height="30" rx="8" fill="#eaf1ff" stroke="#9fb8ec"/>
+  <text x="390" y="282" class="lbl" text-anchor="middle"><tspan class="b">NRMS의 일:</tspan> 후보 5개에 점수를 매기고, 정답이 1등이 되도록 배운다 (= 우리 1pos4neg 한 행)</text>
+</svg>
+<p class="cap"><b>그림 1.</b> 설명용 예시(실제 EB-NeRD는 덴마크어 기사). 사람이라면 "축구 이적 기사를 많이 읽었으니 축구 이적 기사를 누르겠다"고 짐작한다. NRMS는 이 짐작을 <b>숫자 계산</b>으로 한다.</p>
+</div>
+
+<h2>2. 먼저 알아 둘 것: 글을 "위치"로 바꾼다</h2>
+<p>컴퓨터는 글자를 이해하지 못하고 숫자만 계산한다. 그래서 단어와 기사를 <b>숫자 목록(벡터)</b>으로 바꾼다. 벡터는 <b>"의미 지도 위의 위치"</b>라고 생각하면 쉽다.
+뜻이 비슷한 것은 가까이, 다른 것은 멀리 놓인다. NRMS가 하는 일은 결국 <b>기사와 사용자를 이 지도에 찍고, 사용자와 가까운 기사를 고르는 것</b>이다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 330" class="chart" role="img" aria-label="의미 지도: 비슷한 단어와 기사는 가까이 놓이고 사용자와 가까운 후보가 높은 점수">
+  <rect x="20" y="14" width="740" height="300" rx="10" fill="#fff" stroke="#e3e6eb"/>
+  <g class="lbl sm m">
+    <circle cx="110" cy="70" r="5" fill="#9fb8ec"/><text x="120" y="74">축구</text>
+    <circle cx="200" cy="56" r="5" fill="#9fb8ec"/><text x="210" y="60">골</text>
+    <circle cx="96" cy="128" r="5" fill="#9fb8ec"/><text x="106" y="132">이적</text>
+    <circle cx="200" cy="112" r="5" fill="#9fb8ec"/><text x="210" y="116">감독</text>
+    <circle cx="560" cy="60" r="5" fill="#9fb8ec"/><text x="570" y="64">비</text>
+    <circle cx="650" cy="76" r="5" fill="#9fb8ec"/><text x="660" y="80">기온</text>
+    <circle cx="470" cy="236" r="5" fill="#9fb8ec"/><text x="480" y="240">금리</text>
+    <circle cx="560" cy="270" r="5" fill="#9fb8ec"/><text x="570" y="274">주식</text>
+    <circle cx="650" cy="236" r="5" fill="#9fb8ec"/><text x="660" y="240">환율</text>
+    <circle cx="250" cy="268" r="5" fill="#9fb8ec"/><text x="260" y="272">레시피</text>
+    <circle cx="330" cy="290" r="5" fill="#9fb8ec"/><text x="340" y="294">파스타</text>
+  </g>
+  <text x="70" y="36" class="lbl sm b" fill="#2a78d6">축구 쪽</text>
+  <text x="590" y="36" class="lbl sm b" fill="#2a78d6">날씨 쪽</text>
+  <text x="640" y="300" class="lbl sm b" fill="#2a78d6">경제 쪽</text>
+  <text x="170" y="306" class="lbl sm b" fill="#2a78d6">요리 쪽</text>
+
+  <path d="M190 190 L152 170" stroke="#2e8a5a" stroke-width="2" stroke-dasharray="5 4"/>
+  <path d="M196 190 L598 112" stroke="#9aa3b2" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <path d="M196 196 L498 208" stroke="#9aa3b2" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <rect x="140" y="160" width="14" height="14" fill="#56b886"/>
+  <text x="40" y="160" class="lbl sm b" fill="#2e8a5a">후보: 공격수 영입</text>
+  <rect x="598" y="104" width="14" height="14" fill="#cfd5de" stroke="#9aa3b2"/>
+  <text x="618" y="116" class="lbl sm">후보: 주말 날씨</text>
+  <rect x="498" y="200" width="14" height="14" fill="#cfd5de" stroke="#9aa3b2"/>
+  <text x="518" y="212" class="lbl sm">후보: 금리 동결</text>
+  <text x="196" y="200" font-size="22" fill="#d9792b" text-anchor="middle">★</text>
+  <text x="214" y="206" class="lbl b" fill="#c26a1f">사용자 A</text>
+  <text x="300" y="86" class="lbl sm" fill="#2e8a5a">초록 점선: 가깝다 → 점수 높음</text>
+  <text x="300" y="106" class="lbl sm m">회색 점선: 멀다 → 점수 낮음</text>
+</svg>
+<p class="cap"><b>그림 2.</b> 의미 지도(설명용 2차원 그림). 실제로는 단어 하나가 숫자 300개(300차원), 기사 · 사용자 하나가 숫자 400개(400차원, 원 논문 설정이면 256)로 된 위치이다. 사용자(★)가 축구 쪽에 있으니 축구 기사가 가장 가깝다.</p>
+</div>
+
+<h2>3. NRMS 안에서 일어나는 일, 차례대로</h2>
+<p>전체 흐름은 아래 그림과 같다. 아래 3-1부터 3-7까지 한 단계씩 따라간다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 430" class="chart" role="img" aria-label="NRMS 전체 구조: 뉴스 인코더, 사용자 인코더, 내적 점수">
+  <text x="20" y="22" class="head">사용자 쪽: 읽은 기사들 → 사용자 벡터</text>
+  <rect x="20" y="40" width="150" height="34" rx="7" class="box"/><text x="32" y="62" class="lbl">읽은 기사 1의 제목</text>
+  <rect x="20" y="82" width="150" height="34" rx="7" class="box"/><text x="32" y="104" class="lbl">읽은 기사 2의 제목</text>
+  <text x="95" y="136" class="lbl m" text-anchor="middle">⋮</text>
+  <rect x="20" y="146" width="150" height="34" rx="7" class="box"/><text x="32" y="168" class="lbl">읽은 기사 50의 제목</text>
+  <text x="20" y="200" class="lbl sm m">history 최근 50개</text>
+
+  <path d="M174 110 H206" class="arr" marker-end="url(#ah)"/>
+  <rect x="212" y="40" width="132" height="140" rx="10" class="shared"/>
+  <text x="278" y="100" class="lbl b" text-anchor="middle">뉴스 인코더</text>
+  <text x="278" y="122" class="lbl sm m" text-anchor="middle">제목 → 기사 벡터</text>
+  <text x="278" y="140" class="lbl sm m" text-anchor="middle">(2절)</text>
+
+  <path d="M348 110 H380" class="arr" marker-end="url(#ah)"/>
+  <rect x="386" y="48" width="58" height="12" rx="2" class="vec"/>
+  <rect x="386" y="68" width="58" height="12" rx="2" class="vec"/>
+  <text x="415" y="102" class="lbl m" text-anchor="middle">⋮</text>
+  <rect x="386" y="112" width="58" height="12" rx="2" class="vec"/>
+  <text x="415" y="148" class="lbl sm m" text-anchor="middle">기사 벡터</text>
+  <text x="415" y="164" class="lbl sm m" text-anchor="middle">50개</text>
+
+  <path d="M450 110 H482" class="arr" marker-end="url(#ah)"/>
+  <rect x="488" y="40" width="132" height="140" rx="10" class="user"/>
+  <text x="554" y="100" class="lbl b" text-anchor="middle">사용자 인코더</text>
+  <text x="554" y="122" class="lbl sm m" text-anchor="middle">기사 벡터들 →</text>
+  <text x="554" y="140" class="lbl sm m" text-anchor="middle">사용자 벡터 (3절)</text>
+
+  <path d="M624 110 H656" class="arr" marker-end="url(#ah)"/>
+  <rect x="662" y="92" width="98" height="36" rx="8" class="user"/>
+  <text x="711" y="115" class="lbl b" text-anchor="middle">사용자 벡터</text>
+
+  <text x="20" y="246" class="head">후보 쪽: 후보 5개 → 후보 벡터</text>
+  <rect x="20" y="262" width="26" height="30" rx="5" class="pos"/><rect x="51" y="262" width="26" height="30" rx="5" class="neg"/>
+  <rect x="82" y="262" width="26" height="30" rx="5" class="neg"/><rect x="113" y="262" width="26" height="30" rx="5" class="neg"/>
+  <rect x="144" y="262" width="26" height="30" rx="5" class="neg"/>
+  <text x="20" y="312" class="lbl sm m">후보 제목 5개 (정답 1 + 오답 4)</text>
+  <path d="M174 277 H206" class="arr" marker-end="url(#ah)"/>
+  <rect x="212" y="256" width="132" height="42" rx="10" class="shared"/>
+  <text x="278" y="282" class="lbl b" text-anchor="middle">같은 뉴스 인코더</text>
+  <path d="M348 277 H380" class="arr" marker-end="url(#ah)"/>
+  <rect x="386" y="258" width="58" height="8" rx="2" class="vec"/><rect x="386" y="270" width="58" height="8" rx="2" class="vec"/>
+  <rect x="386" y="282" width="58" height="8" rx="2" class="vec"/><rect x="386" y="294" width="58" height="8" rx="2" class="vec"/>
+  <rect x="386" y="306" width="58" height="8" rx="2" class="vec"/>
+  <text x="415" y="332" class="lbl sm m" text-anchor="middle">후보 벡터 5개</text>
+
+  <path d="M450 285 H482" class="arr" marker-end="url(#ah)"/>
+  <path d="M711 132 V250 H624" class="arr" marker-end="url(#ah)"/>
+  <rect x="488" y="240" width="132" height="90" rx="10" class="box"/>
+  <text x="554" y="268" class="lbl b" text-anchor="middle">점수 5개</text>
+  <text x="554" y="290" class="lbl sm m" text-anchor="middle">사용자 벡터 · 후보 벡터</text>
+  <text x="554" y="308" class="lbl sm m" text-anchor="middle">(내적)</text>
+
+  <rect x="20" y="356" width="740" height="56" rx="10" class="box"/>
+  <text x="36" y="380" class="lbl"><tspan class="b">학습:</tspan> 점수 5개에 softmax → 정답 후보의 확률이 커지도록 (정답 1 + 오답 4, 원 논문 K = 4 = 우리 1pos4neg)</text>
+  <text x="36" y="401" class="lbl"><tspan class="b">추천:</tspan> 점수가 가장 높은 후보를 고른다. 뉴스 인코더는 history 쪽과 후보 쪽이 같은 것 하나를 같이 쓴다</text>
+</svg>
+<p class="cap"><b>그림 3.</b> 전체 흐름. 파란 상자(뉴스 인코더)는 <b>하나</b>이다. 읽은 기사 50개와 후보 5개를 모두 같은 방법으로 위치(벡터)로 바꾼다. 그래서 처음 보는 새 기사도 제목만 있으면 위치를 정할 수 있다.</p>
+</div>
+
+<h3>3-1. 단어 → 위치: 사전 찾기</h3>
+<p>제목을 단어로 자른다(소문자로 바꾸고 단어 · 문장부호 단위로, 최대 30개). 그리고 단어마다 <b>단어 사전</b>에서 위치(숫자 300개)를 꺼낸다.</p>
+<div class="tbl"><table>
+<tr><th>제목의 단어</th><th>사전에서 꺼낸 위치 (숫자 300개, 앞 3개만 표시)</th></tr>
+<tr><td>natascha</td><td><code>[ 0.12, −0.40, 0.05, … ]</code></td></tr>
+<tr><td>var</td><td><code>[ −0.03, 0.21, 0.11, … ]</code></td></tr>
+<tr><td>⋯</td><td>⋯</td></tr>
+</table></div>
+<ul>
+<li>이 사전이 <b>fastText</b>이다. 덴마크어 글을 아주 많이 읽고 단어마다 위치를 미리 정해 둔 공개 사전이다(숫자는 설명용).</li>
+<li>원 논문은 영어 데이터라 같은 종류의 영어 사전 <b>GloVe</b>를 썼다. 우리는 언어만 바꾼 셈이다.</li>
+<li>사전의 위치는 출발점이다. 학습하면서 뉴스 추천에 맞게 조금씩 같이 조정된다.</li>
+</ul>
+<div class="note"><b>"숫자 N개" = N차원</b> — 이 문서에서 쉽게 "숫자 300개"라고 쓴 것은 <b>300차원 벡터</b>를 뜻한다. <code>[0.12, −0.40, 0.05, …]</code>처럼 숫자 300개가 한 줄로 나열된 것이다. 논문과 코드에서는 이것을 "300차원(dimension)"이라고 부른다.</div>
+
+<h3>3-2. 문맥 반영: 단어끼리 서로 참고 (self-attention)</h3>
+<p>사전의 위치는 단어마다 하나뿐이다. 그런데 같은 단어도 <b>옆 단어에 따라 뜻이 달라진다</b>. 사람은 옆 단어를 보고 뜻을 알아챈다. NRMS도 똑같이 한다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 270" class="chart" role="img" aria-label="같은 단어 애플이 옆 단어를 참고해 회사 또는 과일 쪽으로 옮겨 가는 예시">
+  <text x="20" y="18" class="head">문장 1: "애플 신제품 발표"</text>
+  <path d="M85 70 Q140 30 195 70" class="arrb" marker-end="url(#ahb)"/>
+  <path d="M85 70 Q195 -6 305 70" class="arrb" marker-end="url(#ahb)"/>
+  <text x="140" y="65" class="lbl sm b" fill="#2a78d6" text-anchor="middle">60%</text>
+  <text x="250" y="33" class="lbl sm b" fill="#2a78d6" text-anchor="middle">30%</text>
+  <rect x="40" y="72" width="90" height="34" rx="7" class="shared"/><text x="85" y="94" class="lbl b" text-anchor="middle">애플</text>
+  <rect x="150" y="72" width="90" height="34" rx="7" class="box"/><text x="195" y="94" class="lbl" text-anchor="middle">신제품</text>
+  <rect x="260" y="72" width="90" height="34" rx="7" class="box"/><text x="305" y="94" class="lbl" text-anchor="middle">발표</text>
+  <text x="85" y="124" class="lbl sm m" text-anchor="middle">자기 자신 10%</text>
+  <path d="M362 89 H410" class="arr" marker-end="url(#ah)"/>
+  <rect x="416" y="70" width="344" height="40" rx="9" class="shared"/>
+  <text x="432" y="95" class="lbl">새 "애플" 위치 → <tspan class="b">회사 · 전자제품 쪽</tspan>으로 이동</text>
+
+  <text x="20" y="160" class="head">문장 2: "애플 파이 레시피"</text>
+  <path d="M85 212 Q140 172 195 212" class="arrb" marker-end="url(#ahb)"/>
+  <path d="M85 212 Q195 136 305 212" class="arrb" marker-end="url(#ahb)"/>
+  <text x="140" y="207" class="lbl sm b" fill="#2a78d6" text-anchor="middle">70%</text>
+  <text x="250" y="175" class="lbl sm b" fill="#2a78d6" text-anchor="middle">20%</text>
+  <rect x="40" y="214" width="90" height="34" rx="7" class="shared"/><text x="85" y="236" class="lbl b" text-anchor="middle">애플</text>
+  <rect x="150" y="214" width="90" height="34" rx="7" class="box"/><text x="195" y="236" class="lbl" text-anchor="middle">파이</text>
+  <rect x="260" y="214" width="90" height="34" rx="7" class="box"/><text x="305" y="236" class="lbl" text-anchor="middle">레시피</text>
+  <text x="85" y="266" class="lbl sm m" text-anchor="middle">자기 자신 10%</text>
+  <path d="M362 231 H410" class="arr" marker-end="url(#ah)"/>
+  <rect x="416" y="212" width="344" height="40" rx="9" class="shared"/>
+  <text x="432" y="237" class="lbl">새 "애플" 위치 → <tspan class="b">과일 · 요리 쪽</tspan>으로 이동</text>
+</svg>
+<p class="cap"><b>그림 4.</b> 각 단어가 다른 단어를 <b>얼마나 참고할지 비율</b>을 정하고(합은 항상 100%), 그 비율대로 섞어 새 위치를 만든다. 그러면 "애플"이 문장에 따라 회사 쪽, 과일 쪽으로 옮겨 간다. 비율은 사람이 정하지 않고 학습으로 정해진다.</p>
+</div>
+<p>실제 EB-NeRD 제목 "Natascha var ikke den første"(단어 5개, 각 300차원)로 보면, 단어 5개가 서로를 얼마나 참고하는지 5 × 5 표가 생기고 <b>가로 한 줄이 한 단어의 참고 비율</b>(합 1)이다(아래 "뉴스 인코더의 네 단계" 그림의 ③).
+그 비율은 다음처럼 계산한다.</p>
+
+<h4>3-2-1. 비율을 어떻게 정하나: Q · K · V</h4>
+<p>self-attention 안에는 <b>head</b>가 여러 개 있다. head 하나는 단어 벡터(300차원)를 학습으로 정해지는 변환표 세 개(각 300 → 20)에 곱해 단어마다 벡터 세 개를 만든다.</p>
+<div class="tbl"><table>
+<tr><th>벡터</th><th class="n">크기</th><th>역할 (비유)</th></tr>
+<tr><td>Q (query)</td><td class="n">20차원</td><td>"나는 어떤 정보가 필요해?" — 질문</td></tr>
+<tr><td>K (key)</td><td class="n">20차원</td><td>"나는 이런 정보를 갖고 있어" — 이름표</td></tr>
+<tr><td>V (value)</td><td class="n">20차원</td><td>"내가 실제로 건네줄 내용" — 메모</td></tr>
+</table></div>
+<ol>
+<li><b>점수:</b> natascha의 Q를 다섯 단어(자기 자신 포함)의 K와 하나씩 내적한다. 질문과 이름표가 잘 맞을수록 점수가 크다. (코드에서는 √20으로 나눈다.)</li>
+<li><b>비율:</b> 점수 5개에 softmax → 합이 1인 비율 5개. 이것이 5 × 5 표의 natascha 줄이다.</li>
+<li><b>섞기:</b> 비율대로 다섯 단어의 V를 더한다 → natascha의 새 표현(20차원).</li>
+<li>다섯 단어 모두에 대해 똑같이 한다 → 단어마다 20차원 결과가 하나씩.</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 780 430" class="chart" role="img" aria-label="head 하나에서 natascha가 다섯 단어를 얼마나 참고하는지 계산하는 과정">
+<text x="20" y="22" class="head">head 하나에서: natascha가 다섯 단어를 얼마나 참고할까</text>
+<text x="210" y="50" class="lbl sm m">단어</text><text x="300" y="50" class="lbl sm m">K (이름표)</text>
+<text x="380" y="50" class="lbl sm m">점수 Q·K</text><text x="470" y="50" class="lbl sm m">비율 (softmax, 합 1)</text>
+<text x="680" y="50" class="lbl sm m">V (내용)</text>
+<rect x="20" y="150" width="150" height="70" rx="10" class="user"/>
+<text x="95" y="178" class="lbl b" text-anchor="middle">natascha의 Q</text>
+<text x="95" y="198" class="lbl sm m" text-anchor="middle">질문 · 20차원</text>
+<path d="M172 185 L292 77" stroke="#e7b17f" stroke-width="1.5" fill="none"/>
+<text x="210" y="82" class="lbl b">natascha</text>
+<rect x="296" y="64" width="56" height="26" rx="6" class="shared"/><text x="324" y="82" class="lbl sm" text-anchor="middle">K</text>
+<text x="380" y="82" class="lbl">2.1</text>
+<rect x="470" y="68" width="154.3" height="18" rx="3" fill="#2a78d6"/>
+<text x="628.3" y="82" class="lbl sm b">0.47</text>
+<rect x="676" y="64" width="56" height="26" rx="6" class="box"/><text x="704" y="82" class="lbl sm" text-anchor="middle">V</text>
+<path d="M172 185 L292 127" stroke="#e7b17f" stroke-width="1.5" fill="none"/>
+<text x="210" y="132" class="lbl b">var</text>
+<rect x="296" y="114" width="56" height="26" rx="6" class="shared"/><text x="324" y="132" class="lbl sm" text-anchor="middle">K</text>
+<text x="380" y="132" class="lbl">0.2</text>
+<rect x="470" y="118" width="23.1" height="18" rx="3" fill="#2a78d6"/>
+<text x="497.1" y="132" class="lbl sm b">0.07</text>
+<rect x="676" y="114" width="56" height="26" rx="6" class="box"/><text x="704" y="132" class="lbl sm" text-anchor="middle">V</text>
+<path d="M172 185 L292 177" stroke="#e7b17f" stroke-width="1.5" fill="none"/>
+<text x="210" y="182" class="lbl b">ikke</text>
+<rect x="296" y="164" width="56" height="26" rx="6" class="shared"/><text x="324" y="182" class="lbl sm" text-anchor="middle">K</text>
+<text x="380" y="182" class="lbl">0.7</text>
+<rect x="470" y="168" width="38.1" height="18" rx="3" fill="#2a78d6"/>
+<text x="512.1" y="182" class="lbl sm b">0.12</text>
+<rect x="676" y="164" width="56" height="26" rx="6" class="box"/><text x="704" y="182" class="lbl sm" text-anchor="middle">V</text>
+<path d="M172 185 L292 227" stroke="#e7b17f" stroke-width="1.5" fill="none"/>
+<text x="210" y="232" class="lbl b">den</text>
+<rect x="296" y="214" width="56" height="26" rx="6" class="shared"/><text x="324" y="232" class="lbl sm" text-anchor="middle">K</text>
+<text x="380" y="232" class="lbl">0.1</text>
+<rect x="470" y="218" width="20.9" height="18" rx="3" fill="#2a78d6"/>
+<text x="494.9" y="232" class="lbl sm b">0.06</text>
+<rect x="676" y="214" width="56" height="26" rx="6" class="box"/><text x="704" y="232" class="lbl sm" text-anchor="middle">V</text>
+<path d="M172 185 L292 277" stroke="#e7b17f" stroke-width="1.5" fill="none"/>
+<text x="210" y="282" class="lbl b">første</text>
+<rect x="296" y="264" width="56" height="26" rx="6" class="shared"/><text x="324" y="282" class="lbl sm" text-anchor="middle">K</text>
+<text x="380" y="282" class="lbl">1.6</text>
+<rect x="470" y="268" width="93.6" height="18" rx="3" fill="#2a78d6"/>
+<text x="567.6" y="282" class="lbl sm b">0.28</text>
+<rect x="676" y="264" width="56" height="26" rx="6" class="box"/><text x="704" y="282" class="lbl sm" text-anchor="middle">V</text>
+<rect x="20" y="330" width="740" height="84" rx="10" class="box"/>
+<text x="36" y="354" class="lbl b">natascha의 새 표현 (이 head)</text>
+<text x="36" y="378" class="lbl">= 0.47·V(natascha) + 0.07·V(var) + 0.12·V(ikke) + 0.06·V(den) + 0.28·V(første)</text>
+<text x="36" y="401" class="lbl sm m">비율의 합이 1인 가중 평균 → 20차원. 점수가 클수록(질문과 이름표가 잘 맞을수록) 그 단어의 내용을 많이 가져온다.</text>
+</svg>
+<p class="cap"><b>그림 5.</b> head 하나에서 natascha 한 단어의 계산(숫자는 설명용). 질문(Q)이 다섯 단어의 이름표(K)와 얼마나 맞는지 점수를 매기고, softmax 비율로 내용(V)을 섞는다. 변환표(Q · K · V를 만드는 행렬)는 처음엔 무작위이고 정답을 잘 맞히는 쪽으로 학습된다.</p>
+</div>
+
+<h4>3-2-2. head 여러 개와 차원: 300 → 400</h4>
+<p>head마다 변환표가 달라서 <b>서로 다른 관계</b>를 본다(어떤 head는 "누가 주인공인가", 다른 head는 "무슨 사건인가"). head 결과를 <b>옆으로 이어 붙이면</b> 단어 하나의 새 벡터가 된다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 330" class="chart" role="img" aria-label="300차원 단어 벡터가 head 20개를 거쳐 400차원으로 이어 붙여지는 과정">
+<text x="20" y="22" class="head">단어 하나의 차원 변화 (지금 설정: head 20개 × head당 20차원)</text>
+<rect x="30" y="60" width="40" height="200" rx="4" fill="#9fb8ec"/>
+<text x="50" y="282" class="lbl b" text-anchor="middle">natascha</text>
+<text x="50" y="300" class="lbl sm m" text-anchor="middle">300차원</text>
+<path d="M74 160 L146 80" class="arr" marker-end="url(#ah)"/>
+<rect x="150" y="60" width="200" height="44" rx="8" class="shared"/>
+<text x="250" y="79" class="lbl b" text-anchor="middle">head 1</text>
+<text x="250" y="96" class="lbl sm m" text-anchor="middle">300 → 20차원 · 단어끼리 참고</text>
+<path d="M354 82 H384" class="arr" marker-end="url(#ah)"/>
+<rect x="388" y="74" width="40" height="16" rx="2" fill="#e7b17f"/>
+<text x="436" y="87" class="lbl sm m">20</text>
+<path d="M74 160 L146 138" class="arr" marker-end="url(#ah)"/>
+<rect x="150" y="118" width="200" height="44" rx="8" class="shared"/>
+<text x="250" y="137" class="lbl b" text-anchor="middle">head 2</text>
+<text x="250" y="154" class="lbl sm m" text-anchor="middle">300 → 20차원 · 단어끼리 참고</text>
+<path d="M354 140 H384" class="arr" marker-end="url(#ah)"/>
+<rect x="388" y="132" width="40" height="16" rx="2" fill="#e7b17f"/>
+<text x="436" y="145" class="lbl sm m">20</text>
+<text x="250" y="186" class="lbl m" text-anchor="middle">⋮</text>
+<path d="M74 160 L146 234" class="arr" marker-end="url(#ah)"/>
+<rect x="150" y="214" width="200" height="44" rx="8" class="shared"/>
+<text x="250" y="233" class="lbl b" text-anchor="middle">head 20</text>
+<text x="250" y="250" class="lbl sm m" text-anchor="middle">300 → 20차원 · 단어끼리 참고</text>
+<path d="M354 236 H384" class="arr" marker-end="url(#ah)"/>
+<rect x="388" y="228" width="40" height="16" rx="2" fill="#e7b17f"/>
+<text x="436" y="241" class="lbl sm m">20</text>
+<path d="M462 160 H498" class="arr" marker-end="url(#ah)"/>
+<rect x="504.0" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="516.8" y="140" width="12" height="40" fill="#d9a06b"/>
+<rect x="529.6" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="542.4" y="140" width="12" height="40" fill="#d9a06b"/>
+<rect x="555.2" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="568.0" y="140" width="12" height="40" fill="#d9a06b"/>
+<rect x="580.8" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="593.6" y="140" width="12" height="40" fill="#d9a06b"/>
+<rect x="606.4" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="619.2" y="140" width="12" height="40" fill="#d9a06b"/>
+<rect x="632.0" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="644.8" y="140" width="12" height="40" fill="#d9a06b"/>
+<rect x="657.6" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="670.4" y="140" width="12" height="40" fill="#d9a06b"/>
+<rect x="683.2" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="696.0" y="140" width="12" height="40" fill="#d9a06b"/>
+<rect x="708.8" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="721.6" y="140" width="12" height="40" fill="#d9a06b"/>
+<rect x="734.4" y="140" width="12" height="40" fill="#e7b17f"/>
+<rect x="747.2" y="140" width="12" height="40" fill="#d9a06b"/>
+<text x="632" y="128" class="lbl sm m" text-anchor="middle">head1 | head2 | … | head20 을 옆으로 이어 붙임</text>
+<text x="632" y="204" class="lbl b" text-anchor="middle">400차원 벡터 (숫자 400개가 한 줄)</text>
+<text x="632" y="226" class="lbl sm m" text-anchor="middle">20 × 20 은 "개수 계산" · 표(행렬)가 아니다</text>
+<rect x="504" y="250" width="256" height="50" rx="8" class="box"/>
+<text x="632" y="271" class="lbl sm" text-anchor="middle">원 논문: head 16개 × 16차원 = 256차원</text>
+<text x="632" y="290" class="lbl sm" text-anchor="middle">공개 코드 기본값(지금 실행): 20 × 20 = 400</text>
+</svg>
+<p class="cap"><b>그림 6.</b> 단어 하나(300차원)를 20개의 서로 다른 "렌즈"(head)로 보고, 렌즈마다 20차원씩 적어 이어 붙이면 400차원 벡터 한 줄이 된다. 20 × 20은 개수 계산이지 20 × 20 표(행렬)가 아니다.</p>
+</div>
+<div class="tbl"><table>
+<tr><th>설정</th><th class="n">head 수 × head당 차원</th><th class="n">단어 하나의 결과</th></tr>
+<tr><td>원 논문</td><td class="n">16 × 16</td><td class="n">256차원</td></tr>
+<tr class="hl"><td>Microsoft Recommenders 기본값 (지금 실행)</td><td class="n">20 × 20</td><td class="n">400차원</td></tr>
+</table></div>
+<p>정리: <b>입력</b> 단어 5개 × 300차원 → 단어마다 "5개 단어를 얼마나 참고할지" 정해 섞기를 head 20개가 각자 → <b>출력</b> 단어 5개 × 400차원(문맥이 반영된 단어 표현).</p>
+
+<h3>3-3. 중요한 단어 고르기 (additive attention)</h3>
+<p>제목의 단어가 모두 똑같이 중요하지는 않다. "var(였다)", "den(그)" 같은 단어보다 이름이나 핵심 단어가 기사의 내용을 더 잘 말해 준다.
+NRMS는 단어마다 <b>"이 제목에서 얼마나 중요한가" 점수</b> 하나를 매기고(합 1), 그 비율로 단어 벡터들을 가중 평균해 <b>기사 벡터 하나</b>(400차원)를 만든다.</p>
+<ol>
+<li><b>점수:</b> 단어 벡터 v(400차원)마다 <code>점수 = q · tanh(W·v + b)</code>. W는 400 → 200 변환표(공개 코드의 attention_hidden_dim = 200), tanh는 값을 −1 ~ 1로 눌러 주는 함수, q는 200차원 <b>"중요한 단어란 이런 것" 기준 벡터</b> 하나이다.</li>
+<li><b>비율:</b> 점수 5개에 softmax → 합 1.</li>
+<li><b>가중합:</b> 기사 벡터 = Σ 비율 × 단어 벡터. 비율 합이 1이라 가중 평균이고 크기는 400차원 그대로이다.</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 780 360" class="chart" role="img" aria-label="additive attention이 단어마다 중요도 점수를 매겨 기사 벡터를 만드는 과정">
+<text x="20" y="22" class="head">additive attention: 단어마다 중요도 점수 하나 → 가중 평균</text>
+<text x="20" y="62" class="lbl sm m">단어 벡터 (400차원)</text>
+<text x="20" y="122" class="lbl sm m">점수 = q · tanh(W·v + b)</text>
+<text x="20" y="186" class="lbl sm m">비율 (softmax, 합 1)</text>
+<rect x="202" y="44" width="96" height="30" rx="6" class="shared"/>
+<text x="250" y="64" class="lbl sm b" text-anchor="middle">natascha</text>
+<path d="M250 76 V100" class="arr" marker-end="url(#ah)"/>
+<text x="250" y="122" class="lbl b" text-anchor="middle">+1.2</text>
+<path d="M250 130 V150" class="arr" marker-end="url(#ah)"/>
+<rect x="236" y="189.6" width="28" height="46.4" rx="3" class="vec2"/>
+<text x="250" y="254" class="lbl sm b" text-anchor="middle">0.42</text>
+<rect x="312" y="44" width="96" height="30" rx="6" class="shared"/>
+<text x="360" y="64" class="lbl sm b" text-anchor="middle">var</text>
+<path d="M360 76 V100" class="arr" marker-end="url(#ah)"/>
+<text x="360" y="122" class="lbl b" text-anchor="middle">-1.0</text>
+<path d="M360 130 V150" class="arr" marker-end="url(#ah)"/>
+<rect x="346" y="230.9" width="28" height="5.1" rx="3" class="vec2"/>
+<text x="360" y="254" class="lbl sm b" text-anchor="middle">0.05</text>
+<rect x="422" y="44" width="96" height="30" rx="6" class="shared"/>
+<text x="470" y="64" class="lbl sm b" text-anchor="middle">ikke</text>
+<path d="M470 76 V100" class="arr" marker-end="url(#ah)"/>
+<text x="470" y="122" class="lbl b" text-anchor="middle">+0.1</text>
+<path d="M470 130 V150" class="arr" marker-end="url(#ah)"/>
+<rect x="456" y="220.6" width="28" height="15.4" rx="3" class="vec2"/>
+<text x="470" y="254" class="lbl sm b" text-anchor="middle">0.14</text>
+<rect x="532" y="44" width="96" height="30" rx="6" class="shared"/>
+<text x="580" y="64" class="lbl sm b" text-anchor="middle">den</text>
+<path d="M580 76 V100" class="arr" marker-end="url(#ah)"/>
+<text x="580" y="122" class="lbl b" text-anchor="middle">-1.0</text>
+<path d="M580 130 V150" class="arr" marker-end="url(#ah)"/>
+<rect x="566" y="230.9" width="28" height="5.1" rx="3" class="vec2"/>
+<text x="580" y="254" class="lbl sm b" text-anchor="middle">0.05</text>
+<rect x="642" y="44" width="96" height="30" rx="6" class="shared"/>
+<text x="690" y="64" class="lbl sm b" text-anchor="middle">første</text>
+<path d="M690 76 V100" class="arr" marker-end="url(#ah)"/>
+<text x="690" y="122" class="lbl b" text-anchor="middle">+1.0</text>
+<path d="M690 130 V150" class="arr" marker-end="url(#ah)"/>
+<rect x="676" y="198.1" width="28" height="37.9" rx="3" class="vec2"/>
+<text x="690" y="254" class="lbl sm b" text-anchor="middle">0.34</text>
+<rect x="20" y="276" width="740" height="70" rx="10" class="box"/>
+<text x="36" y="300" class="lbl b">기사 벡터 (400차원) = 0.42×v(natascha) + 0.05×v(var) + 0.14×v(ikke) + 0.05×v(den) + 0.34×v(første)</text>
+<text x="36" y="324" class="lbl sm m">W: 400 → 200 변환표, q: 200차원 "중요한 단어란 이런 것" 기준 벡터 하나. W · b · q 는 학습으로 정해지고 모든 제목에 같은 것을 쓴다.</text>
+<text x="36" y="340" class="lbl sm m">숫자는 설명용 예시. 점수에 softmax 를 한 것이 비율이다.</text>
+</svg>
+<p class="cap"><b>그림 7.</b> additive attention. 이름 · 핵심 단어(natascha, første)는 크게, "var(였다)", "den(그)"은 작게 반영된다. W · b · q는 모든 제목에 같은 것을 쓰며, 정답을 잘 맞히려면 어떤 단어를 봐야 하는지를 학습한다.</p>
+</div>
+<div class="tbl"><table>
+<tr><th></th><th>self-attention (3-2)</th><th>additive attention (3-3)</th></tr>
+<tr><td>하는 일</td><td>단어끼리 서로 참고해 문맥 반영</td><td>중요한 단어를 골라 하나로 요약</td></tr>
+<tr><td>비율표</td><td>5 × 5 (단어마다 한 줄)</td><td><b>1줄</b> (단어마다 점수 하나)</td></tr>
+<tr><td>결과</td><td>단어 5개 × 400차원</td><td><b>기사 1개 × 400차원</b></td></tr>
+</table></div>
+<p>3-1 ~ 3-3을 한 그림으로 보면 아래와 같다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 535" class="chart" role="img" aria-label="뉴스 인코더 네 단계: 단어, 단어 벡터, self-attention, additive attention">
+  <text x="20" y="24" class="head">① 단어로 자르기</text>
+  <g>
+    <rect x="200" y="38" width="96" height="30" rx="6" class="box"/><text x="248" y="58" class="lbl" text-anchor="middle">natascha</text>
+    <rect x="306" y="38" width="66" height="30" rx="6" class="box"/><text x="339" y="58" class="lbl" text-anchor="middle">var</text>
+    <rect x="382" y="38" width="66" height="30" rx="6" class="box"/><text x="415" y="58" class="lbl" text-anchor="middle">ikke</text>
+    <rect x="458" y="38" width="66" height="30" rx="6" class="box"/><text x="491" y="58" class="lbl" text-anchor="middle">den</text>
+    <rect x="534" y="38" width="86" height="30" rx="6" class="box"/><text x="577" y="58" class="lbl" text-anchor="middle">første</text>
+  </g>
+  <text x="20" y="58" class="lbl sm m">최대 30단어</text>
+
+  <text x="20" y="108" class="head">② 단어 사전에서 벡터 꺼내기</text>
+  <text x="20" y="128" class="lbl sm m">EB-NeRD: 덴마크어 fastText</text>
+  <text x="20" y="144" class="lbl sm m">MIND: 영어 GloVe (300차원)</text>
+  <g>
+    <rect x="236" y="96" width="24" height="56" rx="3" class="vec"/><rect x="327" y="96" width="24" height="56" rx="3" class="vec"/>
+    <rect x="403" y="96" width="24" height="56" rx="3" class="vec"/><rect x="479" y="96" width="24" height="56" rx="3" class="vec"/>
+    <rect x="565" y="96" width="24" height="56" rx="3" class="vec"/>
+  </g>
+  <text x="640" y="128" class="lbl sm m">단어마다 고정 벡터</text>
+  <text x="640" y="144" class="lbl sm m">(학습 중 같이 조정)</text>
+
+  <text x="20" y="196" class="head">③ self-attention: 단어끼리 서로 참고</text>
+  <text x="20" y="218" class="lbl sm m">각 단어가 다른 단어를 얼마나</text>
+  <text x="20" y="234" class="lbl sm m">참고할지 표를 만들고, 그 비율로</text>
+  <text x="20" y="250" class="lbl sm m">섞어 새 단어 벡터를 만든다</text>
+  <text x="20" y="274" class="lbl sm m">head 16개가 각자 다른 표</text>
+  <!-- attention table -->
+  <g transform="translate(250,192)">
+    <text x="58" y="12" class="lbl sm m" text-anchor="middle">nat</text><text x="100" y="12" class="lbl sm m" text-anchor="middle">var</text>
+    <text x="142" y="12" class="lbl sm m" text-anchor="middle">ikke</text><text x="184" y="12" class="lbl sm m" text-anchor="middle">den</text>
+    <text x="226" y="12" class="lbl sm m" text-anchor="middle">før</text><text x="282" y="12" class="lbl sm m b" text-anchor="middle">가로 합</text>
+    <text x="30" y="40" class="lbl sm m" text-anchor="end">nat</text><text x="30" y="70" class="lbl sm m" text-anchor="end">var</text>
+    <text x="30" y="100" class="lbl sm m" text-anchor="end">ikke</text><text x="30" y="130" class="lbl sm m" text-anchor="end">den</text>
+    <text x="30" y="160" class="lbl sm m" text-anchor="end">før</text>
+    <g class="lbl sm" text-anchor="middle">
+      <rect x="38" y="22" width="40" height="28" fill="#5d8fdc"/><text x="58" y="41" fill="#fff">.50</text>
+      <rect x="80" y="22" width="40" height="28" fill="#e6eefb"/><text x="100" y="41">.05</text>
+      <rect x="122" y="22" width="40" height="28" fill="#d3e1f8"/><text x="142" y="41">.10</text>
+      <rect x="164" y="22" width="40" height="28" fill="#e6eefb"/><text x="184" y="41">.05</text>
+      <rect x="206" y="22" width="40" height="28" fill="#9fbdec"/><text x="226" y="41">.30</text>
+      <rect x="38" y="52" width="40" height="28" fill="#9fbdec"/><text x="58" y="71">.30</text>
+      <rect x="80" y="52" width="40" height="28" fill="#d3e1f8"/><text x="100" y="71">.10</text>
+      <rect x="122" y="52" width="40" height="28" fill="#9fbdec"/><text x="142" y="71">.30</text>
+      <rect x="164" y="52" width="40" height="28" fill="#e6eefb"/><text x="184" y="71">.05</text>
+      <rect x="206" y="52" width="40" height="28" fill="#b9cff2"/><text x="226" y="71">.25</text>
+      <rect x="38" y="82" width="40" height="28" fill="#b9cff2"/><text x="58" y="101">.20</text>
+      <rect x="80" y="82" width="40" height="28" fill="#d3e1f8"/><text x="100" y="101">.10</text>
+      <rect x="122" y="82" width="40" height="28" fill="#d3e1f8"/><text x="142" y="101">.10</text>
+      <rect x="164" y="82" width="40" height="28" fill="#d3e1f8"/><text x="184" y="101">.10</text>
+      <rect x="206" y="82" width="40" height="28" fill="#5d8fdc"/><text x="226" y="101" fill="#fff">.50</text>
+      <rect x="38" y="112" width="40" height="28" fill="#b9cff2"/><text x="58" y="131">.20</text>
+      <rect x="80" y="112" width="40" height="28" fill="#e6eefb"/><text x="100" y="131">.05</text>
+      <rect x="122" y="112" width="40" height="28" fill="#d3e1f8"/><text x="142" y="131">.10</text>
+      <rect x="164" y="112" width="40" height="28" fill="#d3e1f8"/><text x="184" y="131">.10</text>
+      <rect x="206" y="112" width="40" height="28" fill="#5d8fdc"/><text x="226" y="131" fill="#fff">.55</text>
+      <rect x="38" y="142" width="40" height="28" fill="#9fbdec"/><text x="58" y="161">.35</text>
+      <rect x="80" y="142" width="40" height="28" fill="#e6eefb"/><text x="100" y="161">.05</text>
+      <rect x="122" y="142" width="40" height="28" fill="#d3e1f8"/><text x="142" y="161">.10</text>
+      <rect x="164" y="142" width="40" height="28" fill="#e6eefb"/><text x="184" y="161">.05</text>
+      <rect x="206" y="142" width="40" height="28" fill="#5d8fdc"/><text x="226" y="161" fill="#fff">.45</text>
+      <text x="282" y="41" class="b">1</text><text x="282" y="71" class="b">1</text><text x="282" y="101" class="b">1</text>
+      <text x="282" y="131" class="b">1</text><text x="282" y="161" class="b">1</text>
+    </g>
+  </g>
+  <text x="560" y="250" class="lbl sm m">예: natascha의 새 벡터</text>
+  <text x="560" y="268" class="lbl sm m">= .50·nat + .05·var + .10·ikke</text>
+  <text x="560" y="284" class="lbl sm m">  + .05·den + .30·før</text>
+  <text x="560" y="304" class="lbl sm m">(가로 한 줄 = 가중 평균)</text>
+
+  <text x="20" y="400" class="head">④ additive attention: 중요한 단어에 가중치</text>
+  <text x="20" y="432" class="lbl sm m">단어마다 "이 제목에서 얼마나</text>
+  <text x="20" y="448" class="lbl sm m">중요한가" 점수 (합 1)</text>
+  <g>
+    <rect x="236" y="414" width="24" height="56" rx="2" class="vec2"/><text x="248" y="488" class="lbl sm" text-anchor="middle">.40</text>
+    <rect x="327" y="463" width="24" height="7" rx="2" class="vec2"/><text x="339" y="488" class="lbl sm" text-anchor="middle">.05</text>
+    <rect x="403" y="449" width="24" height="21" rx="2" class="vec2"/><text x="415" y="488" class="lbl sm" text-anchor="middle">.15</text>
+    <rect x="479" y="463" width="24" height="7" rx="2" class="vec2"/><text x="491" y="488" class="lbl sm" text-anchor="middle">.05</text>
+    <rect x="565" y="421" width="24" height="49" rx="2" class="vec2"/><text x="577" y="488" class="lbl sm" text-anchor="middle">.35</text>
+  </g>
+  <path d="M620 448 H652" class="arr" marker-end="url(#ah)"/>
+  <rect x="658" y="426" width="102" height="44" rx="8" class="shared"/>
+  <text x="709" y="445" class="lbl b" text-anchor="middle">기사 벡터</text>
+  <text x="709" y="462" class="lbl sm m" text-anchor="middle">256차원</text>
+  <text x="20" y="520" class="lbl sm m">기사 벡터 = 단어 벡터들의 가중 합 (가중치 = 위 막대). 숫자는 설명을 위한 예시이다.</text>
+</svg>
+<p class="cap"><b>그림 8.</b> 뉴스 인코더의 네 단계. ①자르기 → ②사전 찾기 → ③단어끼리 참고(가로 합 1) → ④중요한 단어에 가중치 → 기사 벡터(400차원, 원 논문 설정이면 256). 숫자는 설명용 예시이다. 원 논문 설정에서는 ②와 ③ 뒤에 dropout 0.2가 들어간다(학습 때 일부 숫자를 무작위로 꺼서 외우기를 막는 장치).</p>
+</div>
+
+<h3>3-4. 사용자 위치 만들기 (사용자 인코더)</h3>
+<p>사용자 인코더는 3-2 · 3-3과 <b>같은 일을 단어 대신 기사로</b> 한다. 단어는 뉴스 인코더 안에서 모두 처리되고, 사용자 인코더에는 <b>기사 벡터</b>만 들어온다.</p>
+<ol>
+<li><b>⓪ 읽은 기사 → 기사 벡터:</b> history의 최근 50개 기사를 하나씩 뉴스 인코더에 넣어 기사마다 400차원 벡터 하나를 얻는다. 후보 기사에 쓰는 것과 <b>같은 뉴스 인코더</b>(같은 가중치)라서 읽은 기사와 후보가 같은 의미 공간에 놓인다. 50개보다 적게 읽은 사용자는 빈자리를 0으로 채운다(공개 코드 방식).</li>
+<li><b>① 기사끼리 self-attention:</b> 단어 때와 똑같은 계산(Q · K · V, head 20개, 400 → 20 → 이어 붙여 400)인데 단위가 기사이다. 각 기사가 다른 49개를 얼마나 참고할지 정해 섞는다. 비슷한 기사 여러 개는 서로를 강하게 참고해 "이 사람은 이 주제를 꾸준히 본다"는 신호가 커지고, 혼자인 기사는 주로 자기 자신을 본다.</li>
+<li><b>② additive attention:</b> 기사마다 중요도 점수 하나(사용자 인코더 <b>전용</b> W · q, 뉴스 인코더와 따로 학습) → softmax → 가중 평균 → <b>사용자 벡터 하나(400차원)</b>.</li>
+<li><b>③ 점수:</b> 후보 5개도 같은 뉴스 인코더로 400차원 벡터를 만들고, 사용자 벡터와 내적한다(3-5).</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 780 520" class="chart" role="img" aria-label="사용자 인코더: 읽은 기사 50개를 기사 벡터로 바꾸고 서로 참고한 뒤 가중 평균해 사용자 벡터를 만드는 과정">
+<text x="20" y="22" class="head">⓪ 읽은 기사 → 기사 벡터</text>
+<text x="330" y="22" class="head">① 기사끼리 참고</text>
+<text x="560" y="22" class="head">② 중요도 → 사용자 벡터</text>
+<rect x="20" y="40" width="170" height="34" rx="7" class="box"/><text x="30" y="62" class="lbl sm">축구팀 공격수 이적설</text>
+<path d="M192 57 H214" class="arr" marker-end="url(#ah)"/>
+<rect x="330" y="46" width="70" height="22" rx="5" class="vec"/><text x="365" y="62" class="lbl sm" text-anchor="middle">400</text>
+<path d="M282 57 H326" class="arr" marker-end="url(#ah)"/>
+<rect x="560" y="47" width="90" height="20" rx="3" class="vec2"/><text x="656" y="62" class="lbl sm b">0.30</text>
+<rect x="20" y="86" width="170" height="34" rx="7" class="box"/><text x="30" y="108" class="lbl sm">이적 시장 마감 소식</text>
+<path d="M192 103 H214" class="arr" marker-end="url(#ah)"/>
+<rect x="330" y="92" width="70" height="22" rx="5" class="vec"/><text x="365" y="108" class="lbl sm" text-anchor="middle">400</text>
+<path d="M282 103 H326" class="arr" marker-end="url(#ah)"/>
+<rect x="560" y="93" width="90" height="20" rx="3" class="vec2"/><text x="656" y="108" class="lbl sm b">0.30</text>
+<rect x="20" y="132" width="170" height="34" rx="7" class="box"/><text x="30" y="154" class="lbl sm">축구팀 새 감독 선임</text>
+<path d="M192 149 H214" class="arr" marker-end="url(#ah)"/>
+<rect x="330" y="138" width="70" height="22" rx="5" class="vec"/><text x="365" y="154" class="lbl sm" text-anchor="middle">400</text>
+<path d="M282 149 H326" class="arr" marker-end="url(#ah)"/>
+<rect x="560" y="139" width="75" height="20" rx="3" class="vec2"/><text x="641" y="154" class="lbl sm b">0.25</text>
+<rect x="20" y="178" width="170" height="34" rx="7" class="box"/><text x="30" y="200" class="lbl sm">주말 비 소식</text>
+<path d="M192 195 H214" class="arr" marker-end="url(#ah)"/>
+<rect x="330" y="184" width="70" height="22" rx="5" class="vec"/><text x="365" y="200" class="lbl sm" text-anchor="middle">400</text>
+<path d="M282 195 H326" class="arr" marker-end="url(#ah)"/>
+<rect x="560" y="185" width="15" height="20" rx="3" class="vec2"/><text x="581" y="200" class="lbl sm b">0.05</text>
+<rect x="20" y="224" width="170" height="34" rx="7" class="box"/><text x="30" y="246" class="lbl sm">총선 여론조사</text>
+<path d="M192 241 H214" class="arr" marker-end="url(#ah)"/>
+<rect x="330" y="230" width="70" height="22" rx="5" class="vec"/><text x="365" y="246" class="lbl sm" text-anchor="middle">400</text>
+<path d="M282 241 H326" class="arr" marker-end="url(#ah)"/>
+<rect x="560" y="231" width="30" height="20" rx="3" class="vec2"/><text x="596" y="246" class="lbl sm b">0.10</text>
+<rect x="218" y="40" width="62" height="218" rx="8" class="shared"/>
+<text x="249" y="140" class="lbl sm b" text-anchor="middle">뉴스</text><text x="249" y="158" class="lbl sm b" text-anchor="middle">인코더</text>
+<text x="249" y="176" class="lbl sm m" text-anchor="middle">(같은 것)</text>
+<path d="M402 57 Q460 80.0 402 103" stroke="#2a78d6" stroke-width="2" fill="none"/>
+<path d="M402 103 Q460 126.0 402 149" stroke="#2a78d6" stroke-width="2" fill="none"/>
+<path d="M402 57 Q470 103.0 402 149" stroke="#2a78d6" stroke-width="2" fill="none"/>
+<path d="M402 195 Q426 203 402 211" stroke="#9aa3b2" stroke-width="1.5" fill="none"/>
+<text x="440" y="114" class="lbl sm" fill="#2a78d6">축구 기사 3개가</text><text x="440" y="130" class="lbl sm" fill="#2a78d6">서로 강하게 참고</text>
+<text x="432" y="214" class="lbl sm m">혼자인 기사는</text><text x="432" y="230" class="lbl sm m">주로 자기 자신</text>
+<path d="M660 268 V292" class="arr" marker-end="url(#ah)"/>
+<rect x="560" y="296" width="200" height="44" rx="9" class="user"/><text x="660" y="316" class="lbl b" text-anchor="middle">사용자 벡터 400차원</text>
+<text x="660" y="333" class="lbl sm m" text-anchor="middle">= Σ 중요도 × 기사 벡터</text>
+<text x="20" y="290" class="lbl sm m">… 실제로는 최근 50개 (적으면 빈칸을 0으로 채움)</text>
+<text x="20" y="384" class="head">③ 점수: 후보 5개도 같은 뉴스 인코더로</text>
+<rect x="20" y="400" width="150" height="40" rx="8" class="box"/><text x="95" y="425" class="lbl sm" text-anchor="middle">후보 제목 5개</text>
+<path d="M172 420 H214" class="arr" marker-end="url(#ah)"/>
+<rect x="218" y="400" width="130" height="40" rx="8" class="shared"/><text x="283" y="425" class="lbl sm b" text-anchor="middle">같은 뉴스 인코더</text>
+<path d="M350 420 H392" class="arr" marker-end="url(#ah)"/>
+<rect x="396" y="400" width="130" height="40" rx="8" class="vec" fill-opacity="0.5"/><text x="461" y="425" class="lbl sm" text-anchor="middle">후보 벡터 5개 (400)</text>
+<path d="M528 420 H556" class="arr" marker-end="url(#ah)"/>
+<path d="M660 342 V396" class="arr" marker-end="url(#ah)"/>
+<rect x="560" y="400" width="200" height="40" rx="8" class="box"/><text x="660" y="417" class="lbl sm b" text-anchor="middle">점수 = 사용자 · 후보</text><text x="660" y="433" class="lbl sm m" text-anchor="middle">(내적, 후보 5개)</text>
+<text x="20" y="476" class="lbl sm m">뉴스 인코더는 읽은 기사와 후보에 같은 것을 쓰고(같은 의미 공간), 사용자 인코더의 ① · ② 가중치는 뉴스 인코더와 따로 학습한다.</text>
+<text x="20" y="496" class="lbl sm m">기사 제목과 중요도 숫자는 설명용 예시이다.</text>
+</svg>
+<p class="cap"><b>그림 9.</b> 사용자 인코더 자세히. 축구 이적 기사 3개는 서로 강하게 참고하고(①) 중요도도 커서(②) 사용자 벡터가 축구 이적 쪽에 놓인다. 그래서 축구 이적 후보와의 내적(③)이 크다.</p>
+</div>
+<div class="tbl"><table>
+<tr><th></th><th>뉴스 인코더</th><th>사용자 인코더</th></tr>
+<tr><td>입력 단위</td><td>제목 <b>단어</b> (최대 30개, 각 300차원)</td><td>읽은 <b>기사</b> (최대 50개, 각 400차원)</td></tr>
+<tr><td>① 서로 참고</td><td>단어끼리 self-attention</td><td>기사끼리 self-attention</td></tr>
+<tr><td>② 요약</td><td>중요한 단어에 가중치</td><td>중요한 기사에 가중치</td></tr>
+<tr><td>출력</td><td>기사 벡터 400차원</td><td>사용자 벡터 400차원</td></tr>
+<tr><td>가중치</td><td>읽은 기사 · 후보에 같은 것</td><td>뉴스 인코더와 별개로 학습</td></tr>
+</table></div>
+
+<h4>차원 한눈에 (지금 실행 설정)</h4>
+<div class="tbl"><table>
+<tr><th>단계</th><th class="n">모양</th></tr>
+<tr><td>제목 단어 → 단어 사전 (fastText)</td><td class="n">단어 30개 × 300</td></tr>
+<tr><td>단어끼리 self-attention (head 20 × 20)</td><td class="n">단어 30개 × 400</td></tr>
+<tr><td>additive attention → 기사 벡터</td><td class="n">기사 1개 × 400</td></tr>
+<tr><td>읽은 기사 50개 → 기사 벡터들</td><td class="n">기사 50개 × 400</td></tr>
+<tr><td>기사끼리 self-attention</td><td class="n">기사 50개 × 400</td></tr>
+<tr><td>additive attention → 사용자 벡터</td><td class="n">1 × 400</td></tr>
+<tr><td>점수 = 사용자 · 후보 (내적)</td><td class="n">후보 5개 × 숫자 1개</td></tr>
+</table></div>
+
+<h3>3-5. 점수 매기기: 얼마나 같은 쪽을 보고 있나 (내적)</h3>
+<p>후보 5개도 같은 뉴스 인코더로 위치를 만든다. 그리고 <b>사용자 위치와 후보 위치가 얼마나 같은 쪽인지</b>를 숫자 하나로 잰다. 이것이 <b>내적</b>이다: 같은 자리 숫자끼리 곱해서 모두 더한다.</p>
+<div class="tbl"><table>
+<tr><th>설명용 3칸짜리 위치</th><th class="n">축구 성향</th><th class="n">정치 성향</th><th class="n">날씨 성향</th><th class="n">내적 (점수)</th></tr>
+<tr><td>사용자</td><td class="n">0.9</td><td class="n">0.1</td><td class="n">0.0</td><td></td></tr>
+<tr class="hl"><td>후보 "공격수 영입 임박"</td><td class="n">0.8</td><td class="n">0.0</td><td class="n">0.1</td><td class="n">0.9×0.8 + 0.1×0.0 + 0.0×0.1 = <b>0.72</b></td></tr>
+<tr><td>후보 "주말 날씨"</td><td class="n">0.0</td><td class="n">0.1</td><td class="n">0.9</td><td class="n">0 + 0.01 + 0 = <b>0.01</b></td></tr>
+</table></div>
+<p>실제 위치는 256칸이고 칸마다 "축구 성향"처럼 이름이 붙어 있지는 않다. 학습이 알아서 칸의 의미를 정한다. 원리는 같다: <b>같은 쪽이면 점수가 크다</b>.</p>
+
+<h3>3-6. 점수를 확률로 바꾸기 (softmax)</h3>
+<p>후보 5개의 점수를 "각 후보를 누를 확률"로 바꾼다. 점수가 클수록 확률이 커지고, 5개 확률의 합은 100%이다.</p>
+<div class="tbl"><table>
+<tr><th>후보 (설명용)</th><th class="n">점수</th><th class="n">softmax 확률</th></tr>
+<tr class="hl"><td>공격수 영입 임박 (정답)</td><td class="n">8.1</td><td class="n">97.1%</td></tr>
+<tr><td>금리 동결</td><td class="n">2.0</td><td class="n">0.2%</td></tr>
+<tr><td>새 스마트폰 출시</td><td class="n">3.5</td><td class="n">1.0%</td></tr>
+<tr><td>주말 날씨</td><td class="n">1.2</td><td class="n">0.1%</td></tr>
+<tr><td>파스타 레시피</td><td class="n">4.0</td><td class="n">1.6%</td></tr>
+</table></div>
+<p><b>추천</b>할 때는 점수(확률)가 가장 높은 후보를 고른다. 우리 지표 Top-1은 "1등으로 고른 것이 정답인 비율"이다.</p>
+
+<h3>3-7. 학습: 처음엔 엉터리, 정답을 보며 조금씩 고친다</h3>
+<p>처음에는 참고 비율, 중요도 점수 등 NRMS 안의 숫자(수백만 개 이상)가 엉터리라 점수도 엉터리다. 학습은 이 숫자들을 정답에 맞게 조금씩 고치는 과정이다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 270" class="chart" role="img" aria-label="학습 과정: 문제 풀기, 틀린 정도 계산, 숫자 고치기를 반복하고 epoch마다 validation 확인">
+  <text x="20" y="22" class="head">연습 문제 하나를 풀 때마다</text>
+  <rect x="20" y="36" width="170" height="64" rx="9" class="box"/>
+  <text x="105" y="62" class="lbl b" text-anchor="middle">① 문제 하나</text>
+  <text x="105" y="82" class="lbl sm m" text-anchor="middle">1pos4neg 한 행</text>
+  <path d="M194 68 H214" class="arr" marker-end="url(#ah)"/>
+  <rect x="220" y="36" width="170" height="64" rx="9" class="shared"/>
+  <text x="305" y="62" class="lbl b" text-anchor="middle">② 점수 → 확률</text>
+  <text x="305" y="82" class="lbl sm m" text-anchor="middle">후보 5개 (3-5, 3-6)</text>
+  <path d="M394 68 H414" class="arr" marker-end="url(#ah)"/>
+  <rect x="420" y="36" width="170" height="64" rx="9" class="box"/>
+  <text x="505" y="62" class="lbl b" text-anchor="middle">③ 틀린 정도</text>
+  <text x="505" y="82" class="lbl sm m" text-anchor="middle">정답 확률이 낮을수록 큼</text>
+  <path d="M594 68 H614" class="arr" marker-end="url(#ah)"/>
+  <rect x="620" y="36" width="140" height="64" rx="9" class="user"/>
+  <text x="690" y="62" class="lbl b" text-anchor="middle">④ 숫자 고치기</text>
+  <text x="690" y="82" class="lbl sm m" text-anchor="middle">정답 쪽으로 조금</text>
+  <path d="M690 104 V124 H105 V106" class="arr" marker-end="url(#ah)"/>
+  <text x="400" y="140" class="lbl sm m" text-anchor="middle">다음 문제 (실제로는 batch 개씩 묶어서 함께 고침)</text>
+
+  <text x="20" y="180" class="head">전체 학습</text>
+  <g class="lbl sm" text-anchor="middle">
+    <rect x="20" y="194" width="110" height="40" rx="8" class="box"/><text x="75" y="219">epoch 1</text>
+    <rect x="144" y="194" width="110" height="40" rx="8" class="pos"/><text x="199" y="219">validation 확인</text>
+    <rect x="268" y="194" width="110" height="40" rx="8" class="box"/><text x="323" y="219">epoch 2</text>
+    <rect x="392" y="194" width="110" height="40" rx="8" class="pos"/><text x="447" y="219">validation 확인</text>
+    <text x="530" y="219">…</text>
+    <rect x="560" y="194" width="200" height="40" rx="8" class="shared"/><text x="660" y="219" class="b">가장 좋은 epoch → test 한 번</text>
+  </g>
+  <text x="20" y="258" class="lbl sm m">1 epoch = train 약 23만 문제를 한 번씩 다 풂 · validation Top-1이 5번 연속 안 오르면 멈춤 (최대 30)</text>
+</svg>
+<p class="cap"><b>그림 10.</b> train 행(약 23만 개) 하나하나가 연습 문제이다. 문제를 다 한 번 풀면 1 epoch. epoch마다 validation 절반으로 실력을 재고, 가장 잘한 epoch의 모델로 test를 한 번 푼다. 우리 Transformer와 같은 규칙이다.</p>
+</div>
+<div class="note"><b>새 기사도 다룰 수 있는 이유</b> — NRMS는 기사 번호를 외우지 않고 <b>제목을 읽어서</b> 위치를 만든다. 그래서 학습 때 못 본 새 기사도 제목만 있으면 점수를 매길 수 있다. 우리 test 정답의 98%가 학습 기간에 없던 새 기사라서 이 점이 중요하다. 우리 SID 모델도 새 기사에 SID를 붙여서 같은 문제를 푼다.</div>
+
+<h2>4. 우리 Transformer와 무엇이 다른가</h2>
+<div class="fig">
+<svg viewBox="0 0 780 250" class="chart" role="img" aria-label="우리 Transformer와 NRMS의 입력과 채점 방식 비교">
+  <text x="20" y="24" class="head">우리 Transformer: 기사를 SID 번호로 본다</text>
+  <rect x="20" y="40" width="210" height="50" rx="9" class="ours"/>
+  <text x="34" y="62" class="lbl b">history 50개의 SID</text>
+  <text x="34" y="80" class="lbl sm m">기사마다 (c1, c2, c3, c4)</text>
+  <path d="M234 65 H266" class="arr" marker-end="url(#ah)"/>
+  <rect x="272" y="40" width="200" height="50" rx="9" class="ours"/>
+  <text x="372" y="62" class="lbl b" text-anchor="middle">T5 인코더–디코더</text>
+  <text x="372" y="80" class="lbl sm m" text-anchor="middle">다음 SID를 생성</text>
+  <path d="M476 65 H508" class="arr" marker-end="url(#ah)"/>
+  <rect x="514" y="40" width="246" height="50" rx="9" class="ours"/>
+  <text x="528" y="62" class="lbl b">후보 점수 = log P(c1, c2, c3)</text>
+  <text x="528" y="80" class="lbl sm m">후보 SID가 나올 확률</text>
+
+  <text x="20" y="140" class="head">NRMS: 기사를 제목 글자로 본다</text>
+  <rect x="20" y="156" width="210" height="50" rx="9" class="shared"/>
+  <text x="34" y="178" class="lbl b">history 50개의 제목</text>
+  <text x="34" y="196" class="lbl sm m">단어 벡터 (fastText)</text>
+  <path d="M234 181 H266" class="arr" marker-end="url(#ah)"/>
+  <rect x="272" y="156" width="200" height="50" rx="9" class="shared"/>
+  <text x="372" y="178" class="lbl b" text-anchor="middle">뉴스 · 사용자 인코더</text>
+  <text x="372" y="196" class="lbl sm m" text-anchor="middle">사용자 벡터를 만듦</text>
+  <path d="M476 181 H508" class="arr" marker-end="url(#ah)"/>
+  <rect x="514" y="156" width="246" height="50" rx="9" class="shared"/>
+  <text x="528" y="178" class="lbl b">후보 점수 = 사용자 · 후보 벡터</text>
+  <text x="528" y="196" class="lbl sm m">비슷한 정도 (내적)</text>
+  <text x="20" y="238" class="lbl sm m">공통: 같은 1pos4neg 행, 정답 1 + 오답 4에 softmax로 학습, 후보 5개 중 점수 1등을 고름</text>
+</svg>
+<p class="cap"><b>그림 11.</b> 둘 다 "후보 5개에 점수를 매겨 1등을 고른다". 다른 점은 <b>기사를 무엇으로 보는지</b>(SID 번호 vs 제목 글자)와 <b>점수를 내는 방법</b>(다음 SID가 나올 확률 vs 사용자와 같은 쪽인 정도)이다.</p>
+</div>
+<div class="tbl"><table>
+<tr><th></th><th>우리 Transformer</th><th>NRMS</th></tr>
+<tr><td>기사를 보는 방법</td><td>SID 번호 (c1 카테고리, c2 사건, c3, c4)</td><td>제목의 단어들</td></tr>
+<tr><td>사용자를 보는 방법</td><td>읽은 기사 50개의 SID 나열</td><td>읽은 기사 50개의 제목 → 사용자 위치</td></tr>
+<tr><td>후보 점수</td><td>후보 SID가 생성될 확률 log P(c1, c2, c3)</td><td>사용자 위치 · 후보 위치 (내적)</td></tr>
+<tr><td>학습 문제</td><td colspan="2">같은 1pos4neg 행, 정답 1 + 오답 4 중 정답 맞히기</td></tr>
+</table></div>
+<p>그래서 비교 결과는 "기사를 <b>SID로 요약해서</b> 보는 방법이, <b>제목을 직접 읽는</b> 표준 방법과 비교해 어느 정도인가"를 보여 준다.</p>
+
+<h2>5. 우리 데이터로 NRMS를 돌리는 방법</h2>
+<p>공개 코드(Microsoft Recommenders NRMS)는 원래 MIND라는 영어 뉴스 데이터의 형식을 읽게 되어 있다. 그래서 <b>우리 데이터를 그 형식으로 바꿔 주는 변환만 새로 작성</b>하고, NRMS 모델 코드는 그대로 쓴다. TIGER를 공개 코드로 돌릴 때와 같은 방식이다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 420" class="chart" role="img" aria-label="우리 데이터를 변환해 공개 NRMS로 학습하고 같은 지표로 비교하는 흐름">
+  <text x="20" y="24" class="head">입력 (지금 있는 것)</text>
+  <rect x="20" y="40" width="230" height="64" rx="9" class="ours"/>
+  <text x="34" y="64" class="lbl b">우리 1pos4neg 행</text>
+  <text x="34" y="84" class="lbl sm m">train · validation 절반 · test</text>
+  <rect x="275" y="40" width="230" height="64" rx="9" class="box"/>
+  <text x="289" y="64" class="lbl b">기사 제목</text>
+  <text x="289" y="84" class="lbl sm m">EB-NeRD 원본 기사 표</text>
+  <rect x="530" y="40" width="230" height="64" rx="9" class="box"/>
+  <text x="544" y="64" class="lbl b">덴마크어 fastText</text>
+  <text x="544" y="84" class="lbl sm m">공개 단어 벡터 300차원</text>
+
+  <path d="M135 108 V140" class="arr" marker-end="url(#ah)"/><path d="M390 108 V140" class="arr" marker-end="url(#ah)"/><path d="M645 108 V140" class="arr" marker-end="url(#ah)"/>
+  <rect x="20" y="146" width="740" height="76" rx="10" fill="#fff6e6" stroke="#e9c27a" stroke-width="1.2"/>
+  <text x="36" y="170" class="lbl b">변환 (새로 작성하는 부분)</text>
+  <text x="36" y="192" class="lbl sm">행마다 노출 기록 한 줄: 사용자 · 시각 · history 기사들 · 후보 5개와 정답 표시</text>
+  <text x="36" y="210" class="lbl sm">기사 표 (기사 번호, 제목) · 단어 사전 · 단어 벡터 표 (fastText에서 꺼냄)</text>
+
+  <path d="M390 226 V256" class="arr" marker-end="url(#ah)"/>
+  <rect x="20" y="262" width="740" height="52" rx="10" class="shared"/>
+  <text x="36" y="285" class="lbl b">Microsoft Recommenders NRMS (공개 코드 그대로)</text>
+  <text x="36" y="303" class="lbl sm m">train으로 학습 · 매 epoch마다 validation 절반으로 확인 · 가장 좋은 epoch으로 test 후보 점수 계산</text>
+
+  <path d="M390 318 V346" class="arr" marker-end="url(#ah)"/>
+  <rect x="20" y="352" width="360" height="52" rx="10" class="box"/>
+  <text x="36" y="375" class="lbl b">우리 지표 코드로 계산</text>
+  <text x="36" y="393" class="lbl sm m">Top-1 (동점 기대값) · AUC · MRR · nDCG@5</text>
+  <path d="M384 378 H416" class="arr" marker-end="url(#ah)"/>
+  <rect x="422" y="352" width="338" height="52" rx="10" class="ours"/>
+  <text x="436" y="375" class="lbl b">같은 test 행에서 비교</text>
+  <text x="436" y="393" class="lbl sm m">우리 Transformer · 공개 TIGER · NRMS</text>
+</svg>
+<p class="cap"><b>그림 12.</b> 노란 상자(변환)만 새로 작성한다. 학습 · 채점은 공개 코드가 하고, 지표는 우리 보고서와 같은 코드로 계산한다.</p>
+</div>
+
+<h3>변환은 무엇을 하나 (형식만 바꾼다)</h3>
+<p>MIND 형식은 파일 두 개와 사전 두 개이다.</p>
+<div class="tbl"><table>
+<tr><th>MIND 형식</th><th>내용</th><th>우리 데이터에서 만드는 법</th></tr>
+<tr><td>노출 기록 (<code>behaviors.tsv</code>)</td><td>한 줄 = 노출 하나: 사용자, 시각, 읽은 기사들, 후보와 정답 표시</td><td>1pos4neg <b>한 행을 한 줄로</b> 그대로 옮김 (train · validation 절반 · test 따로)</td></tr>
+<tr><td>기사 표 (<code>news.tsv</code>)</td><td>한 줄 = 기사 하나: 기사 번호, 제목 등</td><td>EB-NeRD 원본 기사 표에서 기사 번호와 제목</td></tr>
+<tr><td>단어 사전 · 단어 벡터 표</td><td>단어 → 번호, 번호 → 숫자 300개</td><td>제목에 나오는 단어를 fastText에서 찾아 만듦</td></tr>
+</table></div>
+<p>예를 들어 impression 184583062(정답 기사 9788095)는 이렇게 한 줄이 된다.</p>
+<pre>우리 1pos4neg 행:  history = [ ... 읽은 기사 번호들 ... ]
+                    후보    = [ 오답, 9788095, 오답, 오답, 오답 ]
+                    정답 표시 = [ 0, 1, 0, 0, 0 ]
+
+MIND 형식 한 줄:    184583062  사용자  시각  읽은기사1 읽은기사2 …  오답-0 9788095-1 오답-0 오답-0 오답-0</pre>
+
+<h3>공개 코드가 이 줄을 어떻게 쓰나 (코드로 확인)</h3>
+<div class="tbl"><table>
+<tr><th>단계</th><th>공개 코드 동작</th><th>우리 데이터에서는</th></tr>
+<tr><td>history</td><td>마지막 <code>his_size</code>개만 쓰고, 모자라면 앞을 빈칸으로 채움</td><td>his_size 50 → 우리 Transformer와 같은 최근 50개</td></tr>
+<tr><td>제목</td><td>소문자로 바꾸고 단어 · 문장부호로 자름, 최대 <code>title_size</code>개</td><td>EB-NeRD 제목은 평균 6.7단어 → 30이면 충분</td></tr>
+<tr><td>학습 오답</td><td>노출의 오답 중 <code>npratio</code>개를 무작위로 뽑음</td><td>우리 행은 오답이 정확히 4개 → <b>4개가 모두 그대로 쓰임</b></td></tr>
+<tr><td>후보 순서</td><td>학습 때 정답을 맨 앞에 둠</td><td>NRMS 점수는 후보 위치와 상관없어 결과에 영향 없음</td></tr>
+<tr><td>validation · test</td><td>후보마다 점수를 따로 냄 (내적에 sigmoid)</td><td>점수를 꺼내 우리 지표 코드로 계산 (sigmoid는 순위를 바꾸지 않음)</td></tr>
+</table></div>
+
+<h2>6. 공개 구현 세 가지와 고른 이유</h2>
+<p>같은 NRMS가 세 곳에 공개되어 있다. 목적이 달라서 따로 만들어졌다: 논문 저자의 공개용 코드(①), Microsoft가 누구나 쓰게 정리한 라이브러리(②), EB-NeRD 제작사가 대회 참가자용으로 ②를 가져와 고친 것(③).</p>
+<div class="tbl"><table>
+<tr><th></th><th>① 저자 원본</th><th>② Microsoft Recommenders</th><th>③ EB-NeRD 공식</th></tr>
+<tr><td>누가 · 왜</td><td>논문 1저자, 논문 코드 공개용 노트북</td><td>Microsoft 추천 라이브러리 (MIND용)</td><td>EB-NeRD 제작사, 대회 기준선</td></tr>
+<tr><td>단어끼리 참고하는 계산</td><td>표 × 값</td><td>표 × 값 (①과 같음)</td><td><b>표를 뒤집어 × 값</b> (다름)</td></tr>
+<tr><td>사용자 인코더 뒤 dropout</td><td>있음</td><td>없음</td><td>없음</td></tr>
+<tr><td>단어 사전</td><td>없이 무작위로 시작</td><td>미리 학습된 사전을 불러옴</td><td>XLM-RoBERTa 토큰 사전</td></tr>
+<tr><td>지금 환경에서 실행</td><td>어려움 (옛날 Keras)</td><td>가능 (TensorFlow 2)</td><td>가능 (TensorFlow 2)</td></tr>
+<tr><td>MIND에도 쓸 수 있나</td><td>형식 변환 필요</td><td><b>그대로</b></td><td>어려움</td></tr>
+<tr class="hl"><td>판단</td><td></td><td><b>사용</b>: ①과 계산이 같고, MIND · EB-NeRD를 같은 코드로</td><td></td></tr>
+</table></div>
+
+<h3>③의 계산이 다르다는 것</h3>
+<p>3-2의 참고 비율표는 <b>가로 한 줄이 "이 단어가 누구를 얼마나 보나"</b>이고 합이 1이다. ③은 같은 표를 <b>세로 줄로</b> 읽어서 섞는다.</p>
+<div class="fig">
+<svg viewBox="0 0 780 230" class="chart" role="img" aria-label="원래 계산은 가로 줄, EB-NeRD 공식 코드는 세로 줄을 가중치로 씀">
+  <text x="20" y="24" class="head">①·② 원래: 가로 줄을 씀</text>
+  <text x="420" y="24" class="head">③ EB-NeRD 공식: 세로 줄을 씀</text>
+  <g class="lbl sm" text-anchor="middle">
+    <g transform="translate(60,40)">
+      <rect x="0" y="0" width="150" height="34" fill="#cfe0fa" stroke="#2a78d6" stroke-width="2"/>
+      <text x="25" y="22">.6</text><text x="75" y="22">.1</text><text x="125" y="22">.3</text>
+      <rect x="0" y="36" width="150" height="34" fill="#fff" stroke="#cfd5de"/>
+      <text x="25" y="58">.5</text><text x="75" y="58">.2</text><text x="125" y="58">.3</text>
+      <rect x="0" y="72" width="150" height="34" fill="#fff" stroke="#cfd5de"/>
+      <text x="25" y="94">.7</text><text x="75" y="94">.1</text><text x="125" y="94">.2</text>
+      <text x="190" y="22" class="b" fill="#2a78d6">합 1</text>
+    </g>
+    <g transform="translate(460,40)">
+      <rect x="0" y="0" width="150" height="106" fill="#fff" stroke="#cfd5de"/>
+      <rect x="0" y="0" width="50" height="106" fill="#fde4cf" stroke="#d9792b" stroke-width="2"/>
+      <text x="25" y="22">.6</text><text x="75" y="22">.1</text><text x="125" y="22">.3</text>
+      <text x="25" y="58">.5</text><text x="75" y="58">.2</text><text x="125" y="58">.3</text>
+      <text x="25" y="94">.7</text><text x="75" y="94">.1</text><text x="125" y="94">.2</text>
+      <text x="25" y="126" class="b" fill="#c26a1f">합 1.8</text>
+    </g>
+  </g>
+  <text x="20" y="188" class="lbl">첫 단어의 새 벡터 = .6·w1 + .1·w2 + .3·w3</text>
+  <text x="20" y="208" class="lbl sm m">"내가 누구를 보나", 가중 평균</text>
+  <text x="420" y="188" class="lbl">첫 단어의 새 벡터 = .6·w1 + .5·w2 + .7·w3</text>
+  <text x="420" y="208" class="lbl sm m">"누가 나를 보나", 합이 1이 아님</text>
+</svg>
+<p class="cap"><b>그림 13.</b> ③은 표를 뒤집어서 쓴다. 그러면 단어마다 섞이는 양이 달라지고(1.8배, 0.4배 …) 뜻도 "누가 나를 보나"로 바뀐다. 학습으로 어느 정도 맞춰질 수는 있지만 논문의 NRMS 계산은 아니다. 이 줄은 ③ 저장소의 첫 버전(2024-02)부터 있다.</p>
+</div>
+
+<h2>7. 설정 (교수님 결정, 11/26)</h2>
+<div class="box1"><b>교수님 말씀</b>
+<ol style="margin:6px 0 0 0">
+<li>단어 임베딩 · 데이터 · 평가는 계획대로(Recommenders NRMS, fastText, 우리 분할). <b>다만 인기도 · 최신성을 더한 정확도도 같이 확보</b>.</li>
+<li>NRMS는 Transformer와 다른 모델이라 하이퍼파라미터를 우리와 똑같이 맞출 필요는 없다. <b>공개 코드 기본값을 우선 따르고, 조금씩 바꿔 가며(그리드서치) 튜닝</b>.</li>
+</ol></div>
+<h3>그래서 이렇게 돌린다</h3>
+<div class="tbl"><table>
+<tr><th>항목</th><th>값</th></tr>
+<tr><td>공개 코드 기본값 (MIND 예제 설정)</td><td>head 20 × 20, additive attention 200, dropout 0.2, Adam lr 1e-4, batch 32, 5 epoch, history 50, 제목 30, 오답 4</td></tr>
+<tr class="hl"><td>그리드 (seed 42)</td><td>학습률 {5e-5, <b>1e-4</b>, 2e-4} × dropout {0.1, <b>0.2</b>, 0.3} = 9개 (굵은 값이 기본)</td></tr>
+<tr><td>고르는 기준</td><td>validation 절반 Top-1 (같으면 기본값에 가까운 쪽). 설정마다 5 epoch 중 validation 최고 epoch 사용. test 는 고르는 데 안 씀</td></tr>
+<tr><td>최종</td><td>고른 설정으로 seed 123 · 2026 추가 → 3-seed 평균</td></tr>
+<tr><td>인기도 · 최신성 추가</td><td>NRMS 점수 + λ·인기(직전 12시간 클릭) + μ·나이 를 validation 으로 고른 가중치로 (우리 모델과 같은 방식)</td></tr>
+</table></div>
+<details><summary>교수님께 여쭤봤던 선택지 (참고)</summary>
+<p>아래 셋 중 무엇으로 할지 여쭤본 상태다. 문의한 방향은 <b>C (TIGER 때처럼 우리 Transformer에 최대한 맞춤)</b>이다. 어느 쪽이든 데이터 분할 · 지표 · validation으로 가장 좋은 epoch 고르기는 우리 Transformer와 같다.</p>
+<div class="tbl"><table>
+<tr><th></th><th>head × 차원</th><th>optimizer · lr</th><th>batch</th><th>dropout</th><th>기타</th></tr>
+<tr><td>A. 원 논문</td><td>16 × 16</td><td>Adam · 1e-4 (논문에 없어 Recommenders 값)</td><td class="n">64</td><td class="n">0.2</td><td>중요도 계산 크기 200</td></tr>
+<tr><td>B. 구조만 원 논문</td><td>16 × 16</td><td>AdamW · 5e-5</td><td class="n">128</td><td class="n">0</td><td>wd 0, clip 1.0</td></tr>
+<tr class="hl"><td>C. Transformer에 맞춤</td><td>8 × 32 (= 256)</td><td>AdamW · 5e-5</td><td class="n">128</td><td class="n">0</td><td>wd 0, clip 1.0</td></tr>
+</table></div>
+<p>공통: history 50, 제목 30단어, 정답 1 + 오답 4, 최대 30 epoch, validation Top-1이 5번 연속 안 오르면 멈춤. 단어 사전(fastText 300)은 모든 경우에 같다.</p>
+<div class="note"><b>B · C를 고르면</b> 공개 코드의 optimizer는 Adam만 지원하고 gradient clipping이 없다. AdamW · clipping을 넣으려면 그 부분만 작게 고쳐야 하고, 고친 부분은 따로 적어 둔다.</div>
+</details>
+
+<h2>8. MIND 쪽</h2>
+<p>MIND 팀도 같은 ② 코드, 같은 설정으로 돌린다. MIND는 원래 형식이라 변환이 거의 필요 없고, 단어 사전은 원 논문대로 영어 GloVe를 쓴다. 다만 MIND 공식 dev 세트 대신 <b>MIND 쪽 우리 모델이 쓰는 train / validation / test</b>를 넣어야 같은 행에서 비교된다.</p>
+
+<h2>9. 진행 상황</h2>
+<ol>
+<li>✅ 교수님 결정 (공개 코드 기본값 + 그리드서치, 인기도 · 최신성 추가 결과도 확보)</li>
+<li>✅ 변환 · 학습 · 그리드 스크립트 작성, 같은 TensorFlow 2.15 + Recommenders 환경에서 작은 데이터로 끝까지 확인</li>
+<li>✅ AWS에 Python 3.11 + TensorFlow 2.15 환경을 따로 만듦 (GPU 확인), 덴마크어 fastText 받음</li>
+<li>🔄 AWS에서 H 행으로 변환 → 그리드 9개 → seed 3개 실행 중</li>
+<li>⏳ NRMS + 인기 + 나이 계산, 결과를 보고서 비교표에 추가, MIND 팀에 같은 방법 전달</li>
+</ol>
+<div class="note"><b>공개 코드를 쓰며 확인한 것</b> — (1) 평가용 반복자가 처음 읽은 노출 파일을 기억하므로 test 전에 새로 만든다. (2) TF1 세션 방식이라 가중치를 파일로 저장하는 함수가 안 돼 가장 좋은 epoch 의 가중치를 메모리에 두었다가 되돌린다(되돌린 뒤 validation 을 다시 계산해 같은지 확인). (3) 기사 표는 split 마다 나누지 않고 하나로 쓴다.</div>
+
+<h2 id="terms">용어 정리</h2>
+<div class="tbl"><table>
+<tr><th>용어</th><th>쉬운 뜻</th></tr>
+<tr><td>벡터 · 차원</td><td>숫자 목록. 의미 지도 위의 위치로 생각하면 된다. 숫자 개수가 차원이다 (단어 300차원, 기사 · 사용자 400차원, 원 논문 설정이면 256)</td></tr>
+<tr><td>단어 사전 (GloVe · fastText)</td><td>단어마다 위치를 미리 정해 둔 공개 표. GloVe는 영어, fastText는 덴마크어 등 여러 언어</td></tr>
+<tr><td>뉴스 인코더</td><td>제목 → 기사 위치로 바꾸는 부분</td></tr>
+<tr><td>사용자 인코더</td><td>읽은 기사 위치들 → 사용자 위치로 바꾸는 부분</td></tr>
+<tr><td>self-attention</td><td>서로 참고하기. 단어(또는 기사)마다 다른 것들을 얼마나 참고할지 비율을 정해 섞는다</td></tr>
+<tr><td>head</td><td>참고 비율표 하나. 여러 개(지금 20개, 원 논문 16개)를 따로 만들어 서로 다른 관계를 보고, 결과를 이어 붙인다</td></tr>
+<tr><td>Q · K · V</td><td>self-attention 에서 단어(기사)마다 만드는 질문 · 이름표 · 내용 벡터. Q와 K가 잘 맞을수록 그 V를 많이 가져온다</td></tr>
+<tr><td>additive attention</td><td>중요한 것 고르기. 각 단어(기사)의 중요도 점수로 가중 평균한다</td></tr>
+<tr><td>내적</td><td>두 위치가 얼마나 같은 쪽인지 재는 숫자. 같은 자리끼리 곱해서 더한다</td></tr>
+<tr><td>softmax</td><td>점수 여러 개를 합이 100%인 확률로 바꾸는 계산</td></tr>
+<tr><td>epoch</td><td>train 문제를 처음부터 끝까지 한 번 다 푼 것</td></tr>
+<tr><td>dropout</td><td>학습 때 일부 숫자를 무작위로 꺼서 문제를 외우지 못하게 하는 장치</td></tr>
+<tr><td>learning rate (lr)</td><td>한 번 틀릴 때 숫자를 얼마나 크게 고칠지</td></tr>
+<tr><td>batch</td><td>숫자를 한 번 고치기 전에 같이 푸는 문제 수</td></tr>
+</table></div>
+
+<h2>출처</h2>
+<ul>
+<li>Wu et al., "Neural News Recommendation with Multi-Head Self-Attention", EMNLP-IJCNLP 2019 — <a href="https://aclanthology.org/D19-1671/">aclanthology.org/D19-1671</a></li>
+<li>① 저자 원본 코드 — <a href="https://github.com/wuch15/EMNLP2019-NRMS">github.com/wuch15/EMNLP2019-NRMS</a> (확인 커밋 638dc1b)</li>
+<li>② Microsoft Recommenders — <a href="https://github.com/recommenders-team/recommenders">github.com/recommenders-team/recommenders</a> (확인 커밋 cc47866)</li>
+<li>③ EB-NeRD 공식 벤치마크 — <a href="https://github.com/ebanalyse/ebnerd-benchmark">github.com/ebanalyse/ebnerd-benchmark</a> (확인 커밋 5164e2c)</li>
+<li>fastText 덴마크어 단어 벡터 (Common Crawl + Wikipedia, 300차원) — <a href="https://fasttext.cc/docs/en/crawl-vectors.html">fasttext.cc/docs/en/crawl-vectors.html</a></li>
+</ul>
+</main></body></html>
